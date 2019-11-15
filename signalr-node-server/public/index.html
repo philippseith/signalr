@@ -1,0 +1,34 @@
+<html>
+
+<body>
+    <input type="text" id="message" />
+    <input type="button" value="Send" id="send" />
+    <ul id="messages">
+    </ul>
+
+    <script src="js/signalr.js"></script>
+    <script>
+        (async function () {
+            var connection = new signalR.HubConnectionBuilder()
+                .withUrl('/chat')
+                .build();
+
+            document.getElementById('send').addEventListener('click', () => {
+                var val = document.getElementById('message').value;
+                if (val) {
+                    connection.invoke('send', val);
+                }
+            });
+
+            connection.on('send', message => {
+                var li = document.createElement('li');
+                li.innerText = message;
+                document.getElementById('messages').appendChild(li);
+            });
+
+            await connection.start();
+        })();
+    </script>
+</body>
+
+</html>
