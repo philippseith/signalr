@@ -35,36 +35,33 @@ const TextMessageFormat = {
 class Connection {
     constructor(id, ws) {
         this.id = id;
-        this.ws = ws;
-        this.protocol = null;
+        this._ws = ws;
+        this._handshake = false;
+        this._protocol = null;
         this._timer = null;
         this._serializedPingMessage = null;
-    }
+        this._handshakeCompleteHandler = null;
+        this._messageHandler = null;
+        this._closeHandler = null;
 
-    setProtocol(protocol) {
-        this.protocol = protocol;
-        this._serializedPingMessage = protocol.writeMessage({ type: 6 });
-    }
+        this._handshakeTimeout = setTimeout(() => {
+            if (!this._handshake) {
+                this._ws.close();
+            }
+        }, handshakeTimeoutMs);
 
-    parseMessages(data) {
-        return this.protocol.parseMessages(data);
+        this._ws.on('message', (message) => this._onWsMessage(message));
+        this._ws.on('close', () => {
+            this._stop();
+            if (this._closeHandler) {
+                this._closeHandler.apply(this);
+            }
+        });
     }
 
     sendInvocation(target, args) {
         var obj = { type: 1, target: target, arguments: args };
-        this.ws.send(this.protocol.writeMessage(obj));
-    }
-
-    doHandshakeResponse(error) {
-        var obj = {};
-        if (error) {
-            obj['error'] = error;
-        }
-        this.ws.send(TextMessageFormat.write(JSON.stringify(obj)));
-    }
-
-    ping() {
-        this.ws.send(this._serializedPingMessage);
+        this._ws.send(this._protocol.writeMessage(obj));
     }
 
     completion(id, result, error) {
@@ -77,28 +74,95 @@ class Connection {
             obj['error'] = error;
         }
 
-        this.ws.send(this.protocol.writeMessage(obj));
+        this._ws.send(this._protocol.writeMessage(obj));
     }
 
-    start() {
+    onHandshakeComplete(handler) {
+        this._handshakeCompleteHandler = handler;
+    }
+
+    onMessage(handler) {
+        this._messageHandler = handler;
+    }
+
+    onClose(handler) {
+        this._closeHandler = handler;
+    }
+
+    _setProtocol(protocol) {
+        this._protocol = protocol;
+        this._serializedPingMessage = protocol.writeMessage({ type: 6 });
+    }
+
+    _parseMessages(data) {
+        return this._protocol.parseMessages(data);
+    }
+
+    _doHandshakeResponse(error) {
+        var obj = {};
+        if (error) {
+            obj['error'] = error;
+        }
+        this._ws.send(TextMessageFormat.write(JSON.stringify(obj)));
+    }
+
+    _ping() {
+        this._ws.send(this._serializedPingMessage);
+    }
+
+    _onWsMessage(message) {
+        if (!this._handshake) {
+            // TODO: This needs to handle partial data and multiple messages
+            var messages = TextMessageFormat.parse(message);
+
+            var handshakeMessage = JSON.parse(messages[0]);
+            var protocol = protocols[handshakeMessage.protocol];
+
+            // Cancel the timeout
+            clearInterval(this._handshakeTimeout);
+
+            if (!protocol) {
+                // Fail for anything but JSON right now
+                this._doHandshakeResponse(`Requested protocol '${handshakeMessage.protocol}' is not available.`);
+            }
+            else {
+                this._setProtocol(protocol);
+
+                // All good!
+                this._doHandshakeResponse();
+                this._handshake = true;
+
+                this._start();
+
+                if (this._handshakeCompleteHandler) {
+                    this._handshakeCompleteHandler.apply(this);
+                }
+            }
+        }
+        else {
+            var messages = this._parseMessages(message);
+
+            for (const message of messages) {
+                if (this._messageHandler) {
+                    this._messageHandler(message);
+                }
+            }
+        }
+    }
+
+    _start() {
         // This can't be efficient can it?
         this._timer = setInterval(() => {
-            this.ping();
-        },
-            pingIntervalMs);
+            this._ping();
+        }, pingIntervalMs);
     }
 
-    stop() {
+    _stop() {
         clearInterval(this._timer);
     }
 
-    on(name, handler) {
-        // TODO: Handle partial messages and buffering here, don't trigger the handler until we have a full message
-        this.ws.on(name, handler);
-    }
-
     close() {
-        this.ws.close();
+        this._ws.close();
     }
 }
 
@@ -109,68 +173,17 @@ class HubConnectionHandler {
     }
 
     onSocketConnect(connection) {
-        var handshake = false;
-
-        var handshakeTimeout = setTimeout(() => {
-            if (!handshake) {
-                connection.close();
-            }
-        }, handshakeTimeoutMs);
-
-        connection.on('message', (message) => {
-            if (!handshake) {
-                // TODO: This needs to handle partial data and multiple messages
-                var messages = TextMessageFormat.parse(message);
-
-                var handshakeMessage = JSON.parse(messages[0]);
-                var protocol = protocols[handshakeMessage.protocol];
-
-                // Cancel the timeout
-                clearInterval(handshakeTimeout);
-
-                if (!protocol) {
-                    // Fail for anything but JSON right now
-                    connection.doHandshakeResponse(`Requested protocol '${handshakeMessage.protocol}' is not available.`);
-                }
-                else {
-                    connection.setProtocol(protocol);
-
-                    // All good!
-                    connection.doHandshakeResponse();
-                    handshake = true;
-
-                    connection.start();
-
-                    // Now we're connected
-                    this._lifetimeManager.onConnect(connection);
-                    this._dispatcher._onConnect(connection.id);
-                }
-            }
-            else {
-                var messages = connection.parseMessages(message);
-
-                for (const message of messages) {
-                    switch (message.type) {
-                        case signalr.MessageType.Close:
-                            console.debug("Close message received from server.");
-
-                            // We don't want to wait on the stop itself.
-                            // this.stopPromise = this.stopInternal(message.error ? new Error("Server returned an error on close: " + message.error) : undefined);
-                            // connection.close();
-                            break;
-                        default:
-                            this._dispatcher._dispatch(connection, message);
-                            break;
-                    }
-                }
-            }
-
-            // console.debug(message);
+        connection.onHandshakeComplete(() => {
+            // Now we're connected
+            this._lifetimeManager.onConnect(connection);
+            this._dispatcher._onConnect(connection.id);
         });
 
-        connection.on('close', () => {
-            connection.stop();
+        connection.onMessage(message => {
+            this._dispatcher._dispatch(connection, message);
+        });
 
+        connection.onClose(() => {
             this._lifetimeManager.onDisconnect(connection);
             this._dispatcher._onDisconnect(connection.id);
         });
@@ -306,7 +319,6 @@ function matches(req, method, parsedUrl, path) {
     return req.method == method && path === normalize(parsedUrl.pathname.substr(0, path.length));
 }
 
-// TODO: de-couple from express
 function mapHub(hub, server, path) {
     var listeners = server.listeners('request').slice(0);
     server.removeAllListeners('request');
