@@ -1,8 +1,5 @@
-const ws = require('ws');
-const crypto = require('crypto');
 const signalr = require('@microsoft/signalr');
-const url = require('url');
-
+const signalrHttp = require("./signalr-http");
 
 // TODO: Make configurable
 const handshakeTimeoutMs = 5000;
@@ -10,8 +7,6 @@ const pingIntervalMs = 5000;
 const protocols = {
     json: new signalr.JsonHubProtocol()
 };
-
-const wss = new ws.Server({ noServer: true });
 
 // TODO: SignalR should expose HandshakeProtocol
 const TextMessageFormat = {
@@ -32,10 +27,9 @@ const TextMessageFormat = {
     }
 }
 
-class Connection {
-    constructor(id, ws) {
-        this.id = id;
-        this._ws = ws;
+class HubConnection {
+    constructor(connection) {
+        this._connection = connection;
         this._handshake = false;
         this._protocol = null;
         this._timer = null;
@@ -46,12 +40,12 @@ class Connection {
 
         this._handshakeTimeout = setTimeout(() => {
             if (!this._handshake) {
-                this._ws.close();
+                this.connection.close();
             }
         }, handshakeTimeoutMs);
 
-        this._ws.on('message', (message) => this._onWsMessage(message));
-        this._ws.on('close', () => {
+        this._connection.onmessage((message) => this._onMessage(message));
+        this._connection.onclose(() => {
             this._stop();
             if (this._closeHandler) {
                 this._closeHandler.apply(this);
@@ -59,8 +53,12 @@ class Connection {
         });
     }
 
+    get id() {
+        return this._connection.id;
+    }
+
     sendInvocation(target, args) {
-        this._ws.send(this.getInvocation(target, args));
+        this._connection.send(this.getInvocation(target, args));
     }
 
     getInvocation(target, args) {
@@ -69,7 +67,7 @@ class Connection {
     }
 
     sendRawMessage(raw) {
-        this._ws.send(raw);
+        this._connection.send(raw);
     }
 
     completion(id, result, error) {
@@ -82,7 +80,7 @@ class Connection {
             obj['error'] = error;
         }
 
-        this._ws.send(this._protocol.writeMessage(obj));
+        this._connection.send(this._protocol.writeMessage(obj));
     }
 
     onHandshakeComplete(handler) {
@@ -98,7 +96,7 @@ class Connection {
     }
 
     close() {
-        this._ws.close();
+        this._connection.close();
     }
 
     _setProtocol(protocol) {
@@ -115,14 +113,14 @@ class Connection {
         if (error) {
             obj['error'] = error;
         }
-        this._ws.send(TextMessageFormat.write(JSON.stringify(obj)));
+        this._connection.send(TextMessageFormat.write(JSON.stringify(obj)));
     }
 
     _ping() {
-        this._ws.send(this._serializedPingMessage);
+        this._connection.send(this._serializedPingMessage);
     }
 
-    _onWsMessage(message) {
+    _onMessage(message) {
         if (!this._handshake) {
             // TODO: This needs to handle partial data and multiple messages
             var messages = TextMessageFormat.parse(message);
@@ -180,20 +178,23 @@ class HubConnectionHandler {
         this._dispatcher = dispatcher;
     }
 
-    onSocketConnect(connection) {
-        connection.onHandshakeComplete(() => {
+    onConnect(connection) {
+        // What's the lifetime of this thing...
+        var hubConnection = new HubConnection(connection);
+
+        hubConnection.onHandshakeComplete(() => {
             // Now we're connected
-            this._lifetimeManager.onConnect(connection);
-            this._dispatcher._onConnect(connection.id);
+            this._lifetimeManager.onConnect(hubConnection);
+            this._dispatcher._onConnect(hubConnection.id);
         });
 
-        connection.onMessage(message => {
-            this._dispatcher._onMessage(connection, message);
+        hubConnection.onMessage(message => {
+            this._dispatcher._onMessage(hubConnection, message);
         });
 
-        connection.onClose(() => {
-            this._lifetimeManager.onDisconnect(connection);
-            this._dispatcher._onDisconnect(connection.id);
+        hubConnection.onClose(() => {
+            this._lifetimeManager.onDisconnect(hubConnection);
+            this._dispatcher._onDisconnect(hubConnection.id);
         });
     }
 }
@@ -315,77 +316,39 @@ class Hub {
     }
 }
 
-function normalize(path) {
-    if (path[path.length - 1] != '/') {
-        path += '/';
-    }
-    return path;
-}
-
-function matches(req, method, parsedUrl, path) {
-    return req.method == method && path === normalize(parsedUrl.pathname.substr(0, path.length));
-}
-
-function mapHub(hub, server, path, lifetimeManager) {
-    var connectionHandler = new HubConnectionHandler(hub, lifetimeManager);
-    hub.clients = new HubClients(lifetimeManager);
-
-    var listeners = server.listeners('request').slice(0);
-    server.removeAllListeners('request');
-
-    path = normalize(path);
-    var negotiatePath = `${path}negotiate/`;
-
-    server.on('request', (req, res) => {
-        var parsedUrl = url.parse(req.url, true);
-
-        if (matches(req, 'POST', parsedUrl, negotiatePath)) {
-            var bytes = crypto.randomBytes(16);
-            var connectionId = bytes.toString('base64');
-
-            // Only websockets
-            res.end(JSON.stringify({
-                connectionId: connectionId,
-                availableTransports: [
-                    {
-                        transport: "WebSockets",
-                        transferFormats: ["Text", "Binary"]
-                    }
-                ]
-            }));
-        }
-        else if (matches(req, 'GET', parsedUrl, path)) {
-            if (req.headers["connection"] != "Upgrade") {
-                res.sendStatus(400);
-                return;
-            }
-
-            var id = parsedUrl.query.id;
-
-            // Check for upgrade
-            wss.handleUpgrade(req, req.socket, Buffer.alloc(0), (ws) => {
-                connectionHandler.onSocketConnect(new Connection(id, ws));
-            });
-        }
-        else {
-            for (var i = 0, l = listeners.length; i < l; i++) {
-                listeners[i].call(server, req, res);
-            }
-        }
-    });
-}
-
 var hubs = new Map();
-// TODO: This should be pluggable
-var lifetimeManager = new HubLifetimeManager();
+var defaultLifetimeManager = new HubLifetimeManager();
 
 module.exports = function name(httpServer) {
     return {
-        mapHub: (path) => {
+        // Any transport
+        hub: (options) => {
+            hub = new Hub();
+            // Resolve the lifetime manager
+            var lifetimeManager = options.lifetimeManager || defaultLifetimeManager;
+            var transport = options.transport;
+
+            var connectionHandler = new HubConnectionHandler(hub, lifetimeManager);
+            hub.clients = new HubClients(lifetimeManager);
+
+            transport.start(connectionHandler);
+
+            return hub;
+        },
+        // Http
+        mapHub: (path, options) => {
+            options = options || {};
             var hub = hubs[path];
             if (!hub) {
                 hub = new Hub();
-                mapHub(hub, httpServer, path, lifetimeManager);
+                // Resolve the lifetime manager
+                var lifetimeManager = options.lifetimeManager || defaultLifetimeManager;
+                var transport = new signalrHttp.HttpTransport(path, httpServer);
+
+                var connectionHandler = new HubConnectionHandler(hub, lifetimeManager);
+                hub.clients = new HubClients(lifetimeManager);
+
+                transport.start(connectionHandler);
             }
             return hub;
         }
