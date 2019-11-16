@@ -259,10 +259,10 @@ class HubClients {
 class Hub {
     _methods = new Map();
 
-    constructor(lifetimeManager) {
+    constructor() {
         this._connectCallback = null;
         this._disconnectCallback = null;
-        this.clients = new HubClients(lifetimeManager);
+        this.clients = null;
     }
 
     on(method, handler) {
@@ -328,6 +328,7 @@ function matches(req, method, parsedUrl, path) {
 
 function mapHub(hub, server, path, lifetimeManager) {
     var connectionHandler = new HubConnectionHandler(hub, lifetimeManager);
+    hub.clients = new HubClients(lifetimeManager);
 
     var listeners = server.listeners('request').slice(0);
     server.removeAllListeners('request');
@@ -378,13 +379,13 @@ var hubs = new Map();
 // TODO: This should be pluggable
 var lifetimeManager = new HubLifetimeManager();
 
-module.exports = function name(app) {
+module.exports = function name(httpServer) {
     return {
         mapHub: (path) => {
             var hub = hubs[path];
             if (!hub) {
-                hub = new Hub(lifetimeManager);
-                mapHub(hub, app, path, lifetimeManager);
+                hub = new Hub();
+                mapHub(hub, httpServer, path, lifetimeManager);
             }
             return hub;
         }
