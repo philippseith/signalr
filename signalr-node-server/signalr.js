@@ -272,7 +272,9 @@ class Hub {
         else if (method === 'disconnect') {
             this._disconnectCallback = handler;
         }
-        this._methods[method] = handler;
+        else {
+            this._methods[method] = handler;
+        }
     }
 
     _onConnect(id) {
