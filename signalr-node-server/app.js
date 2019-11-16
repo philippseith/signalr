@@ -7,6 +7,7 @@ const port = 3000;
 const chat = signalR.mapHub('/chat');
 
 chat.on('connect', (id) => {
+    chat.groups.addToGroup(id, "MyGroup");
     console.log(`${id} connected`);
 });
 
@@ -15,7 +16,7 @@ chat.on('disconnect', (id) => {
 });
 
 chat.on('send', (message) => {
-    chat.clients.all.send('send', message);
+    chat.clients.group("MyGroup").send('send', message);
 });
 
 app.use(express.static('public'));

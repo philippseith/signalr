@@ -202,28 +202,82 @@ class HubConnectionHandler {
 class HubLifetimeManager {
     constructor() {
         this._clients = new Map();
+        this._groups = new Map();
     }
 
     onConnect(connection) {
-        this._clients[connection.id] = connection;
+        this._clients[connection.id] = {
+            connection: connection,
+            groups: []
+        };
     }
 
     invokeAll(target, args) {
         for (const key in this._clients) {
-            var connection = this._clients[key];
-            connection.sendInvocation(target, args);
+            var client = this._clients[key];
+            client.connection.sendInvocation(target, args);
         }
     }
 
     invokeClient(id, target, args) {
-        var connection = this._clients[id];
-        if (connection) {
-            connection.sendInvocation(target, args);
+        var client = this._clients[id];
+        if (client) {
+            client.connection.sendInvocation(target, args);
+        }
+    }
+
+    invokeGroup(groupName, target, args) {
+        var group = this._groups[groupName];
+
+        if (!group) {
+            return;
+        }
+
+        for (const key in group) {
+            var client = group[key];
+            client.connection.sendInvocation(target, args);
+        }
+    }
+
+    addToGroup(id, groupName) {
+        var client = this._clients[id];
+        if (!client) {
+            return;
+        }
+        var group = this._groups[groupName];
+        if (!group) {
+            group = new Map();
+            this._groups[groupName] = group;
+        }
+
+        // Store the group name
+        client.groups.push(groupName);
+
+        group[id] = client;
+    }
+
+    removeFromGroup(id, groupName) {
+        var group = this._groups[groupName];
+        if (!group) {
+            return;
+        }
+
+        delete group[id];
+
+        if (group.size === 0) {
+            delete this._groups[groupName];
         }
     }
 
     onDisconnect(connection) {
+        var client = this._clients[connection.id];
         delete this._clients[connection.id];
+        
+        // Clean up groups
+        for (const group of client.groups) {
+            // REVIEW: Performance..
+            this.removeFromGroup(connection.id, group);
+        }
     }
 }
 
@@ -248,12 +302,48 @@ class SingleClientProxy {
     }
 }
 
+class GroupClientProxy {
+    constructor(groupName, lifetimeManager) {
+        this._groupName = groupName;
+        this._lifetimeManager = lifetimeManager;
+    }
+
+    send(name, ...args) {
+        this._lifetimeManager.invokeGroup(this._groupName, name, args);
+    }
+}
+
 class HubClients {
     constructor(lifetimeManager) {
+        this._lifetimeManager = lifetimeManager;
         this.all = new AllClientProxy(lifetimeManager);
     }
     client(id) {
-        return new SingleClientProxy(id);
+        return new SingleClientProxy(id, this._lifetimeManager);
+    }
+    group(groupName) {
+        return new GroupClientProxy(groupName, this._lifetimeManager);
+    }
+}
+
+class HubGroupManager {
+    constructor(lifetimeManager) {
+        this._lifetimeManager = lifetimeManager;
+    }
+
+    addToGroup(id, group) {
+        this._lifetimeManager.addToGroup(id, group);
+    }
+
+    removeFromGroup(id, group) {
+        this._lifetimeManager.removeFromGroup(id, group);
+    }
+}
+
+class HubContext {
+    constructor(lifetimeManager) {
+        this.clients = new HubClients(lifetimeManager);
+        this.groups = new HubGroupManager(lifetimeManager);
     }
 }
 
@@ -264,6 +354,7 @@ class Hub {
         this._connectCallback = null;
         this._disconnectCallback = null;
         this.clients = null;
+        this.groups = null;
     }
 
     on(method, handler) {
@@ -323,13 +414,16 @@ module.exports = function name(httpServer) {
     return {
         // Any transport
         hub: (options) => {
+            options = options || {};
             hub = new Hub();
             // Resolve the lifetime manager
             var lifetimeManager = options.lifetimeManager || defaultLifetimeManager;
             var transport = options.transport;
 
             var connectionHandler = new HubConnectionHandler(hub, lifetimeManager);
-            hub.clients = new HubClients(lifetimeManager);
+            var hubContext = new HubContext(lifetimeManager);
+            hub.clients = hubContext.clients;
+            hub.groups = hubContext.groups;
 
             transport.start(connectionHandler);
 
@@ -346,7 +440,9 @@ module.exports = function name(httpServer) {
                 var transport = new signalrHttp.HttpTransport(path, httpServer);
 
                 var connectionHandler = new HubConnectionHandler(hub, lifetimeManager);
-                hub.clients = new HubClients(lifetimeManager);
+                var hubContext = new HubContext(lifetimeManager);
+                hub.clients = hubContext.clients;
+                hub.groups = hubContext.groups;
 
                 transport.start(connectionHandler);
             }
