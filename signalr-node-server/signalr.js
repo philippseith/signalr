@@ -60,8 +60,16 @@ class Connection {
     }
 
     sendInvocation(target, args) {
+        this._ws.send(this.getInvocation(target, args));
+    }
+
+    getInvocation(target, args) {
         var obj = { type: 1, target: target, arguments: args };
-        this._ws.send(this._protocol.writeMessage(obj));
+        return this._protocol.writeMessage(obj);
+    }
+
+    sendRawMessage(raw) {
+        this._ws.send(raw);
     }
 
     completion(id, result, error) {
@@ -87,6 +95,10 @@ class Connection {
 
     onClose(handler) {
         this._closeHandler = handler;
+    }
+
+    close() {
+        this._ws.close();
     }
 
     _setProtocol(protocol) {
@@ -160,10 +172,6 @@ class Connection {
     _stop() {
         clearInterval(this._timer);
     }
-
-    close() {
-        this._ws.close();
-    }
 }
 
 class HubConnectionHandler {
@@ -180,7 +188,7 @@ class HubConnectionHandler {
         });
 
         connection.onMessage(message => {
-            this._dispatcher._dispatch(connection, message);
+            this._dispatcher._onMessage(connection, message);
         });
 
         connection.onClose(() => {
@@ -249,15 +257,12 @@ class HubClients {
 }
 
 class Hub {
-    _map = new Map();
-    _lifetimeManager = new HubLifetimeManager();
-    _connectionHandler = null;
+    _methods = new Map();
 
-    constructor() {
+    constructor(lifetimeManager) {
         this._connectCallback = null;
         this._disconnectCallback = null;
-        this._connectionHandler = new HubConnectionHandler(this, this._lifetimeManager);
-        this.clients = new HubClients(this._lifetimeManager);
+        this.clients = new HubClients(lifetimeManager);
     }
 
     on(method, handler) {
@@ -267,7 +272,7 @@ class Hub {
         else if (method === 'disconnect') {
             this._disconnectCallback = handler;
         }
-        this._map[method] = handler;
+        this._methods[method] = handler;
     }
 
     _onConnect(id) {
@@ -283,12 +288,12 @@ class Hub {
     }
 
     // Dispatcher should be decoupled from the hub but there are layering issues
-    _dispatch(connection, message) {
+    _onMessage(connection, message) {
         switch (message.type) {
             case signalr.MessageType.Invocation:
                 // TODO: Handle async methods?
                 try {
-                    var method = this._map[message.target.toLowerCase()];
+                    var method = this._methods[message.target.toLowerCase()];
                     var result = method.apply(this, message.arguments);
                     connection.completion(message.invocationId, result);
                 }
@@ -319,7 +324,9 @@ function matches(req, method, parsedUrl, path) {
     return req.method == method && path === normalize(parsedUrl.pathname.substr(0, path.length));
 }
 
-function mapHub(hub, server, path) {
+function mapHub(hub, server, path, lifetimeManager) {
+    var connectionHandler = new HubConnectionHandler(hub, lifetimeManager);
+
     var listeners = server.listeners('request').slice(0);
     server.removeAllListeners('request');
 
@@ -354,7 +361,7 @@ function mapHub(hub, server, path) {
 
             // Check for upgrade
             wss.handleUpgrade(req, req.socket, Buffer.alloc(0), (ws) => {
-                hub._connectionHandler.onSocketConnect(new Connection(id, ws));
+                connectionHandler.onSocketConnect(new Connection(id, ws));
             });
         }
         else {
@@ -366,14 +373,16 @@ function mapHub(hub, server, path) {
 }
 
 var hubs = new Map();
+// TODO: This should be pluggable
+var lifetimeManager = new HubLifetimeManager();
 
 module.exports = function name(app) {
     return {
         mapHub: (path) => {
             var hub = hubs[path];
             if (!hub) {
-                hub = new Hub(app, path);
-                mapHub(hub, app, path);
+                hub = new Hub(lifetimeManager);
+                mapHub(hub, app, path, lifetimeManager);
             }
             return hub;
         }
