@@ -382,13 +382,12 @@ class Hub {
     }
 
     // Dispatcher should be decoupled from the hub but there are layering issues
-    _onMessage(connection, message) {
+    async _onMessage(connection, message) {
         switch (message.type) {
             case signalr.MessageType.Invocation:
-                // TODO: Handle async methods?
                 try {
                     var method = this._methods[message.target.toLowerCase()];
-                    var result = method.apply(this, message.arguments);
+                    var result = await method.apply(this, message.arguments);
                     connection.completion(message.invocationId, result);
                 }
                 catch (e) {

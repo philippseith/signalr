@@ -17,6 +17,7 @@ chat.on('disconnect', (id) => {
 
 chat.on('send', (message) => {
     chat.clients.group("MyGroup").send('send', message);
+    return "Hello World";
 });
 
 app.use(express.static('public'));
