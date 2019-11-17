@@ -18,13 +18,22 @@ type Chat struct {
 	Clients HubClients
 }
 
+// Hub interface impl (the framework will use this to setup the hub)
+func (c Chat) Initialize(clients HubClients) {
+	c.Clients = clients
+}
+
 func (c Chat) Send(message string) {
 	c.Clients.All.send("send", message)
 }
 
 // Framework
 
-func MapHub(path string, hub interface{}) {
+type Hub interface {
+	Initialize(clients HubClients)
+}
+
+func MapHub(path string, hub Hub) {
 	http.HandleFunc(fmt.Sprintf("%s/negotiate", path), negotiateHandler)
 	http.Handle(path, websocket.Handler(func(ws *websocket.Conn) {
 		hubConnectionHandler(ws, hub)
@@ -47,7 +56,7 @@ type HandshakeRequest struct {
 	Version  int    `json:"version"`
 }
 
-func hubConnectionHandler(ws *websocket.Conn, hub interface{}) {
+func hubConnectionHandler(ws *websocket.Conn, hub Hub) {
 	finished := make(chan bool)
 
 	go handleReads(finished, ws, hub)
@@ -65,7 +74,7 @@ type HubInvocationMessage struct {
 	Arguments []json.RawMessage `json:"arguments"`
 }
 
-func handleReads(finished chan bool, ws *websocket.Conn, hub interface{}) {
+func handleReads(finished chan bool, ws *websocket.Conn, hub Hub) {
 	var err error
 	var data []byte
 	handshake := false
@@ -119,8 +128,9 @@ func handleReads(finished chan bool, ws *websocket.Conn, hub interface{}) {
 				fmt.Println("method type num in:", method.Type().NumIn())
 				for i := 0; i < method.Type().NumIn(); i++ {
 					t := method.Type().In(i)
-					fmt.Println(i, "->", t)
-					in[i] = reflect.Zero(t)
+					arg := reflect.New(t)
+					json.Unmarshal(invocation.Arguments[i], arg.Interface())
+					in[i] = arg.Elem()
 				}
 
 				method.Call(in)
