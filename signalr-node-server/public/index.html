@@ -1,6 +1,7 @@
 <html>
 
 <body>
+    Server Time: <span id="date"></span><br />
     <input type="text" id="message" />
     <input type="button" value="Send" id="send" />
     <ul id="messages">
@@ -12,6 +13,14 @@
             var connection = new signalR.HubConnectionBuilder()
                 .withUrl('/chat')
                 .build();
+
+            var clock = new signalR.HubConnectionBuilder()
+                .withUrl('/clock')
+                .build();
+
+            clock.on('tick', (date) => {
+                document.getElementById('date').innerText = new Date(date);
+            });
 
             document.getElementById('send').addEventListener('click', () => {
                 var val = document.getElementById('message').value;
@@ -26,6 +35,7 @@
                 document.getElementById('messages').appendChild(li);
             });
 
+            await clock.start();
             await connection.start();
         })();
     </script>

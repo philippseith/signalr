@@ -5,9 +5,13 @@ const signalR = require('./signalr')(http);
 const port = 3000;
 
 const chat = signalR.mapHub('/chat');
+const clock = signalR.mapHub('/clock');
+
+setInterval(() => {
+    clock.clients.all.send('tick', Date.now());
+}, 1000);
 
 chat.on('connect', (id) => {
-    chat.groups.addToGroup(id, "MyGroup");
     console.log(`${id} connected`);
 });
 
@@ -16,8 +20,7 @@ chat.on('disconnect', (id) => {
 });
 
 chat.on('send', (message) => {
-    chat.clients.group("MyGroup").send('send', message);
-    return "Hello World";
+    chat.clients.all.send('send', message);
 });
 
 app.use(express.static('public'));
