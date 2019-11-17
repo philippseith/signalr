@@ -7,19 +7,50 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"reflect"
+	"strings"
 
 	"golang.org/x/net/websocket"
 )
+
+// User code
+type Chat struct {
+	Clients HubClients
+}
+
+func (c Chat) Send(message string) {
+	c.Clients.All.send("send", message)
+}
+
+// Framework
+
+func MapHub(path string, hub interface{}) {
+	http.HandleFunc(fmt.Sprintf("%s/negotiate", path), negotiateHandler)
+	http.Handle(path, websocket.Handler(func(ws *websocket.Conn) {
+		hubConnectionHandler(ws, hub)
+	}))
+}
+
+type AllClientProxy struct {
+}
+
+func (a AllClientProxy) send(method string, args ...interface{}) {
+
+}
+
+type HubClients struct {
+	All AllClientProxy
+}
 
 type HandshakeRequest struct {
 	Protocol string `json:"protocol"`
 	Version  int    `json:"version"`
 }
 
-func hubConnectionHandler(ws *websocket.Conn) {
+func hubConnectionHandler(ws *websocket.Conn, hub interface{}) {
 	finished := make(chan bool)
 
-	go handleReads(finished, ws)
+	go handleReads(finished, ws, hub)
 	// go handleWrites(ws)
 	<-finished
 }
@@ -34,7 +65,7 @@ type HubInvocationMessage struct {
 	Arguments []json.RawMessage `json:"arguments"`
 }
 
-func handleReads(finished chan bool, ws *websocket.Conn) {
+func handleReads(finished chan bool, ws *websocket.Conn, hub interface{}) {
 	var err error
 	var data []byte
 	handshake := false
@@ -53,6 +84,8 @@ func handleReads(finished chan bool, ws *websocket.Conn) {
 				return
 			}
 
+			fmt.Println("Handshake received")
+
 			request := HandshakeRequest{}
 			json.Unmarshal(rawHandshake, &request)
 
@@ -64,6 +97,8 @@ func handleReads(finished chan bool, ws *websocket.Conn) {
 			handshake = true
 			continue
 		}
+
+		fmt.Println("Message received " + string(data))
 
 		for {
 			message, remainder := parseTextMessageFormat(data)
@@ -77,6 +112,18 @@ func handleReads(finished chan bool, ws *websocket.Conn) {
 				json.Unmarshal(message, &invocation)
 
 				// Dispatch invocation here
+				normalized := strings.ToUpper(string(invocation.Target[0:1])) + invocation.Target[1:]
+				method := reflect.ValueOf(hub).MethodByName(normalized)
+				in := make([]reflect.Value, method.Type().NumIn())
+
+				fmt.Println("method type num in:", method.Type().NumIn())
+				for i := 0; i < method.Type().NumIn(); i++ {
+					t := method.Type().In(i)
+					fmt.Println(i, "->", t)
+					in[i] = reflect.Zero(t)
+				}
+
+				method.Call(in)
 
 				break
 			case 6:
@@ -145,9 +192,7 @@ func negotiateHandler(w http.ResponseWriter, req *http.Request) {
 func main() {
 	http.Handle("/", http.FileServer(http.Dir("public")))
 
-	// SignalR protocol
-	http.HandleFunc("/chat/negotiate", negotiateHandler)
-	http.Handle("/chat", websocket.Handler(hubConnectionHandler))
+	MapHub("/chat", &Chat{})
 
 	if err := http.ListenAndServe("localhost:8086", nil); err != nil {
 		log.Fatal("ListenAndServe:", err)
