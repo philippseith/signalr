@@ -12,33 +12,25 @@ import (
 	"golang.org/x/net/websocket"
 )
 
+// Protocol
+type HubMessage struct {
+	Type int `json:"type"`
+}
+
+type HubInvocationMessage struct {
+	Type      int               `json:"type"`
+	Target    string            `json:"target"`
+	Arguments []json.RawMessage `json:"arguments"`
+}
+
+// Hub
 type Hub interface {
 	Initialize(clients HubClients)
 }
 
 type HubInfo struct {
-	Hub     *Hub
-	Methods map[string]reflect.Value
-}
-
-func MapHub(path string, hub Hub) {
-	hubInfo := HubInfo{
-		Hub:     &hub,
-		Methods: make(map[string]reflect.Value),
-	}
-
-	hubType := reflect.TypeOf(hub)
-	hubValue := reflect.ValueOf(hub)
-
-	for i := 0; i < hubType.NumMethod(); i++ {
-		m := hubType.Method(i)
-		hubInfo.Methods[strings.ToLower(m.Name)] = hubValue.Method(i)
-	}
-
-	http.HandleFunc(fmt.Sprintf("%s/negotiate", path), negotiateHandler)
-	http.Handle(path, websocket.Handler(func(ws *websocket.Conn) {
-		hubConnectionHandler(ws, &hubInfo)
-	}))
+	hub     *Hub
+	methods map[string]reflect.Value
 }
 
 type AllClientProxy struct {
@@ -63,16 +55,6 @@ func hubConnectionHandler(ws *websocket.Conn, hubInfo *HubInfo) {
 	go handleReads(finished, ws, hubInfo)
 	// go handleWrites(ws)
 	<-finished
-}
-
-type HubMessage struct {
-	Type int `json:"type"`
-}
-
-type HubInvocationMessage struct {
-	Type      int               `json:"type"`
-	Target    string            `json:"target"`
-	Arguments []json.RawMessage `json:"arguments"`
 }
 
 func handleReads(finished chan bool, ws *websocket.Conn, hubInfo *HubInfo) {
@@ -123,7 +105,7 @@ func handleReads(finished chan bool, ws *websocket.Conn, hubInfo *HubInfo) {
 
 				// Dispatch invocation here
 				normalized := strings.ToLower(invocation.Target)
-				method := hubInfo.Methods[normalized]
+				method := hubInfo.methods[normalized]
 				in := make([]reflect.Value, method.Type().NumIn())
 
 				for i := 0; i < method.Type().NumIn(); i++ {
@@ -198,4 +180,24 @@ func negotiateHandler(w http.ResponseWriter, req *http.Request) {
 	}
 
 	json.NewEncoder(w).Encode(response)
+}
+
+func MapHub(path string, hub Hub) {
+	hubInfo := HubInfo{
+		hub:     &hub,
+		methods: make(map[string]reflect.Value),
+	}
+
+	hubType := reflect.TypeOf(hub)
+	hubValue := reflect.ValueOf(hub)
+
+	for i := 0; i < hubType.NumMethod(); i++ {
+		m := hubType.Method(i)
+		hubInfo.methods[strings.ToLower(m.Name)] = hubValue.Method(i)
+	}
+
+	http.HandleFunc(fmt.Sprintf("%s/negotiate", path), negotiateHandler)
+	http.Handle(path, websocket.Handler(func(ws *websocket.Conn) {
+		hubConnectionHandler(ws, &hubInfo)
+	}))
 }
