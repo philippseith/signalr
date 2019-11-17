@@ -59,9 +59,6 @@ class HttpTransport {
                 var bytes = crypto.randomBytes(16);
                 var connectionId = bytes.toString('base64');
 
-                // TODO: Support long polling
-
-                // Only websockets
                 res.end(JSON.stringify({
                     connectionId: connectionId,
                     availableTransports: [
@@ -72,6 +69,7 @@ class HttpTransport {
                     ]
                 }));
             }
+            
             else if (this._matches(req, 'GET', parsedUrl, path)) {
                 if (req.headers["connection"] != "Upgrade") {
                     res.sendStatus(400);
