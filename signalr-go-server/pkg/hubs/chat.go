@@ -1,6 +1,8 @@
-package main
+package hubs
 
-import "./signalr"
+import (
+	"../signalr"
+)
 
 type Chat interface {
 	Send(message string)

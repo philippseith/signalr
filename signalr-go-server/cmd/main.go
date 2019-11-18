@@ -4,13 +4,14 @@ import (
 	"log"
 	"net/http"
 
-	"./signalr"
+	"../pkg/hubs"
+	"../pkg/signalr"
 )
 
 func main() {
 	http.Handle("/", http.FileServer(http.Dir("public")))
 
-	signalr.MapHub("/chat", NewChat())
+	signalr.MapHub("/chat", hubs.NewChat())
 
 	if err := http.ListenAndServe("localhost:8086", nil); err != nil {
 		log.Fatal("ListenAndServe:", err)
