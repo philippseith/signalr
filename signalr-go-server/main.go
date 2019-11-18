@@ -7,21 +7,17 @@ import (
 	"./signalr"
 )
 
-// User code
 type Chat struct {
 	Clients signalr.HubClients
 }
 
-// Hub interface impl (the framework will use this to setup the hub)
-func (c Chat) Initialize(clients signalr.HubClients) {
+func (c *Chat) Initialize(clients signalr.HubClients) {
 	c.Clients = clients
 }
 
-func (c Chat) Send(message string) {
+func (c *Chat) Send(message string) {
 	c.Clients.All.Send("send", message)
 }
-
-// Framework
 
 func main() {
 	http.Handle("/", http.FileServer(http.Dir("public")))

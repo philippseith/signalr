@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"reflect"
 	"strings"
+	"sync"
 
 	"golang.org/x/net/websocket"
 )
@@ -18,9 +19,23 @@ type HubMessage struct {
 }
 
 type HubInvocationMessage struct {
+	Type         int               `json:"type"`
+	Target       string            `json:"target"`
+	InvocationId string            `json:"invocationId"`
+	Arguments    []json.RawMessage `json:"arguments"`
+}
+
+type SendOnlyHubInvocationMessage struct {
 	Type      int               `json:"type"`
 	Target    string            `json:"target"`
 	Arguments []json.RawMessage `json:"arguments"`
+}
+
+type CompletionMessage struct {
+	Type         int         `json:"type"`
+	InvocationId string      `json:"invocationId"`
+	Result       interface{} `json:"result"`
+	Error        string      `json:"error"`
 }
 
 // Hub
@@ -28,20 +43,59 @@ type Hub interface {
 	Initialize(clients HubClients)
 }
 
+type HubLifetimeManager interface {
+	OnConnected(conn HubConnection)
+	OnDisconnected(conn HubConnection)
+	InvokeAll(target string, args []interface{})
+}
+
+// Implementation
+
+type DefaultHubLifetimeManager struct {
+	mu      sync.Mutex
+	clients map[string]HubConnection
+}
+
+func (self *DefaultHubLifetimeManager) OnConnected(conn HubConnection) {
+	self.mu.Lock()
+	self.clients[conn.getConnectionId()] = conn
+	self.mu.Unlock()
+}
+
+func (self *DefaultHubLifetimeManager) OnDisconnected(conn HubConnection) {
+	self.mu.Lock()
+	delete(self.clients, conn.getConnectionId())
+	self.mu.Unlock()
+}
+
+func (self *DefaultHubLifetimeManager) InvokeAll(target string, args []interface{}) {
+	self.mu.Lock()
+	for _, v := range self.clients {
+		v.sendInvocation(target, args)
+	}
+	self.mu.Unlock()
+}
+
 type HubInfo struct {
-	hub     *Hub
-	methods map[string]reflect.Value
+	hub             *Hub
+	lifetimeManager HubLifetimeManager
+	methods         map[string]reflect.Value
 }
 
 type AllClientProxy struct {
+	lifetimeManager HubLifetimeManager
 }
 
-func (a AllClientProxy) Send(method string, args ...interface{}) {
-
+func (a *AllClientProxy) Send(target string, args ...interface{}) {
+	a.lifetimeManager.InvokeAll(target, args)
 }
 
 type HubClients struct {
 	All AllClientProxy
+}
+
+func newHubClients(lifetimeManager HubLifetimeManager) HubClients {
+	return HubClients{All: AllClientProxy{lifetimeManager: lifetimeManager}}
 }
 
 type HandshakeRequest struct {
@@ -49,18 +103,54 @@ type HandshakeRequest struct {
 	Version  int    `json:"version"`
 }
 
-func hubConnectionHandler(ws *websocket.Conn, hubInfo *HubInfo) {
-	finished := make(chan bool)
-
-	go handleReads(finished, ws, hubInfo)
-	// go handleWrites(ws)
-	<-finished
+type HubConnection interface {
+	getConnectionId() string
+	sendInvocation(target string, args []interface{})
+	completion(id string, result interface{}, error string)
 }
 
-func handleReads(finished chan bool, ws *websocket.Conn, hubInfo *HubInfo) {
+type WebSocketHubConnection struct {
+	ws           *websocket.Conn
+	connectionId string
+}
+
+func (w *WebSocketHubConnection) getConnectionId() string {
+	return w.connectionId
+}
+
+func (w *WebSocketHubConnection) sendInvocation(target string, args []interface{}) {
+	var values = make([]json.RawMessage, len(args))
+	for i := 0; i < len(args); i++ {
+		values[i], _ = json.Marshal(args[i])
+	}
+	var invocationMessage = SendOnlyHubInvocationMessage{
+		Type:      1,
+		Target:    target,
+		Arguments: values,
+	}
+
+	var payload, _ = json.Marshal(&invocationMessage)
+	websocket.Message.Send(w.ws, string(payload)+"\u001e")
+}
+
+func (w *WebSocketHubConnection) completion(id string, result interface{}, error string) {
+	var completionMessage = CompletionMessage{
+		InvocationId: id,
+		Result:       result,
+		Error:        error,
+	}
+
+	var payload, _ = json.Marshal(&completionMessage)
+	websocket.Message.Send(w.ws, string(payload)+"\u001e")
+}
+
+func hubConnectionHandler(ws *websocket.Conn, hubInfo *HubInfo) {
 	var err error
 	var data []byte
 	handshake := false
+
+	id := ws.Request().URL.Query().Get("id")
+	conn := WebSocketHubConnection{connectionId: id, ws: ws}
 
 	for {
 		if err = websocket.Message.Receive(ws, &data); err != nil {
@@ -81,10 +171,12 @@ func handleReads(finished chan bool, ws *websocket.Conn, hubInfo *HubInfo) {
 			request := HandshakeRequest{}
 			json.Unmarshal(rawHandshake, &request)
 
-			var handshakeResponse = []byte{'{', '}', 30}
+			var handshakeResponse = "{}\u001e"
 
 			// Send the handshake response (it's a string so it sends text back)
-			websocket.Message.Send(ws, string(handshakeResponse))
+			websocket.Message.Send(ws, handshakeResponse)
+
+			hubInfo.lifetimeManager.OnConnected(&conn)
 
 			handshake = true
 			continue
@@ -105,6 +197,8 @@ func handleReads(finished chan bool, ws *websocket.Conn, hubInfo *HubInfo) {
 
 				// Dispatch invocation here
 				normalized := strings.ToLower(invocation.Target)
+
+				// TODO: Handle unknown methods
 				method := hubInfo.methods[normalized]
 				in := make([]reflect.Value, method.Type().NumIn())
 
@@ -115,7 +209,10 @@ func handleReads(finished chan bool, ws *websocket.Conn, hubInfo *HubInfo) {
 					in[i] = arg.Elem()
 				}
 
+				// TODO: Handle return values
 				method.Call(in)
+
+				conn.completion(invocation.Target, nil, "")
 
 				break
 			case 6:
@@ -132,7 +229,7 @@ func handleReads(finished chan bool, ws *websocket.Conn, hubInfo *HubInfo) {
 		}
 	}
 
-	finished <- true
+	hubInfo.lifetimeManager.OnDisconnected(&conn)
 }
 
 func parseTextMessageFormat(data []byte) ([]byte, []byte) {
@@ -145,13 +242,6 @@ func parseTextMessageFormat(data []byte) ([]byte, []byte) {
 		i++
 	}
 	return data[0:i], data[i+1:]
-}
-
-func handleWrites(ws *websocket.Conn) {
-	// TODO: Use channels here
-	for {
-
-	}
 }
 
 type AvailableTransport struct {
@@ -183,10 +273,18 @@ func negotiateHandler(w http.ResponseWriter, req *http.Request) {
 }
 
 func MapHub(path string, hub Hub) {
-	hubInfo := HubInfo{
-		hub:     &hub,
-		methods: make(map[string]reflect.Value),
+	lifetimeManager := DefaultHubLifetimeManager{
+		clients: make(map[string]HubConnection),
 	}
+	hubClients := newHubClients(&lifetimeManager)
+
+	hubInfo := HubInfo{
+		hub:             &hub,
+		lifetimeManager: &lifetimeManager,
+		methods:         make(map[string]reflect.Value),
+	}
+
+	hub.Initialize(hubClients)
 
 	hubType := reflect.TypeOf(hub)
 	hubValue := reflect.ValueOf(hub)
