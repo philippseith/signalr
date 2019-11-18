@@ -47,7 +47,7 @@ type PingMessage struct {
 
 // Hub
 type Hub interface {
-	Initialize(clients HubClients)
+	Initialize(clients *HubClients)
 }
 
 type hubLifetimeManager interface {
@@ -113,7 +113,7 @@ func (a *singleClientProxy) Send(target string, args ...interface{}) {
 
 type HubClients struct {
 	lifetimeManager hubLifetimeManager
-	All             allClientProxy
+	all             allClientProxy
 }
 
 func (c *HubClients) Client(id string) singleClientProxy {
@@ -343,7 +343,7 @@ func MapHub(path string, hub Hub) {
 	lifetimeManager := defaultHubLifetimeManager{}
 	hubClients := HubClients{
 		lifetimeManager: &lifetimeManager,
-		All:             allClientProxy{lifetimeManager: &lifetimeManager},
+		all:             allClientProxy{lifetimeManager: &lifetimeManager},
 	}
 
 	hubInfo := hubInfo{
@@ -352,7 +352,7 @@ func MapHub(path string, hub Hub) {
 		methods:         make(map[string]reflect.Value),
 	}
 
-	hub.Initialize(hubClients)
+	hub.Initialize(&hubClients)
 
 	hubType := reflect.TypeOf(hub)
 	hubValue := reflect.ValueOf(hub)

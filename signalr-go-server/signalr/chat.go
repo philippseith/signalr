@@ -18,5 +18,5 @@ func (c *chat) Initialize(clients HubClients) {
 }
 
 func (c *chat) Send(message string) {
-	c.clients.All.Send("send", message)
+	c.clients.all.Send("send", message)
 }
