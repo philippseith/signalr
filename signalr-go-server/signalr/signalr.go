@@ -53,6 +53,7 @@ type HubLifetimeManager interface {
 	OnConnected(conn HubConnection)
 	OnDisconnected(conn HubConnection)
 	InvokeAll(target string, args []interface{})
+	InvokeClient(connectionId string, target string, args []interface{})
 }
 
 // Implementation
@@ -82,6 +83,19 @@ func (self *DefaultHubLifetimeManager) InvokeAll(target string, args []interface
 	self.mu.Unlock()
 }
 
+func (self *DefaultHubLifetimeManager) InvokeClient(connectionId string, target string, args []interface{}) {
+	self.mu.Lock()
+	client, ok := self.clients[connectionId]
+
+	if !ok {
+		return
+	}
+
+	client.sendInvocation(target, args)
+
+	self.mu.Unlock()
+}
+
 type HubInfo struct {
 	hub             *Hub
 	lifetimeManager HubLifetimeManager
@@ -96,8 +110,22 @@ func (a *AllClientProxy) Send(target string, args ...interface{}) {
 	a.lifetimeManager.InvokeAll(target, args)
 }
 
+type SingleClientProxy struct {
+	id              string
+	lifetimeManager HubLifetimeManager
+}
+
+func (a *SingleClientProxy) Send(target string, args ...interface{}) {
+	a.lifetimeManager.InvokeClient(a.id, target, args)
+}
+
 type HubClients struct {
-	All AllClientProxy
+	lifetimeManager HubLifetimeManager
+	All             AllClientProxy
+}
+
+func (c *HubClients) Client(id string) SingleClientProxy {
+	return SingleClientProxy{id: id, lifetimeManager: c.lifetimeManager}
 }
 
 type HandshakeRequest struct {
@@ -230,8 +258,14 @@ func hubConnectionHandler(ws *websocket.Conn, hubInfo *HubInfo) {
 				// Dispatch invocation here
 				normalized := strings.ToLower(invocation.Target)
 
-				// TODO: Handle unknown methods
-				method := hubInfo.methods[normalized]
+				method, ok := hubInfo.methods[normalized]
+
+				if !ok {
+					// Unable to find the method
+					conn.completion(invocation.InvocationId, nil, fmt.Sprintf("Unknown method %s", invocation.Target))
+					break
+				}
+
 				in := make([]reflect.Value, method.Type().NumIn())
 
 				for i := 0; i < method.Type().NumIn(); i++ {
@@ -244,7 +278,7 @@ func hubConnectionHandler(ws *websocket.Conn, hubInfo *HubInfo) {
 				// TODO: Handle return values
 				method.Call(in)
 
-				conn.completion(invocation.Target, nil, "")
+				conn.completion(invocation.InvocationId, nil, "")
 
 				break
 			case 6:
@@ -321,7 +355,10 @@ func MapHub(path string, hub Hub) {
 	lifetimeManager := DefaultHubLifetimeManager{
 		clients: make(map[string]HubConnection),
 	}
-	hubClients := HubClients{All: AllClientProxy{lifetimeManager: &lifetimeManager}}
+	hubClients := HubClients{
+		lifetimeManager: &lifetimeManager,
+		All:             AllClientProxy{lifetimeManager: &lifetimeManager},
+	}
 
 	hubInfo := HubInfo{
 		hub:             &hub,
