@@ -1,6 +1,7 @@
 package signalr
 
 import (
+	"bytes"
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
@@ -312,15 +313,11 @@ func pingLoop(waitGroup *sync.WaitGroup, conn HubConnection) {
 }
 
 func parseTextMessageFormat(data []byte) ([]byte, []byte) {
-	i := 0
-	for i < len(data) {
-		// Record separator
-		if data[i] == 30 {
-			break
-		}
-		i++
-	}
-	return data[0:i], data[i+1:]
+	index := bytes.Index(data, []byte{30})
+
+	// TODO: Handle -1
+
+	return data[0:index], data[index+1:]
 }
 
 type AvailableTransport struct {
