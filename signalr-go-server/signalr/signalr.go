@@ -94,6 +94,10 @@ type HubInfo struct {
 	methods         map[string]reflect.Value
 }
 
+type ClientProxy interface {
+	Send(target string, args ...interface{})
+}
+
 type AllClientProxy struct {
 	lifetimeManager HubLifetimeManager
 }
@@ -111,13 +115,22 @@ func (a *SingleClientProxy) Send(target string, args ...interface{}) {
 	a.lifetimeManager.InvokeClient(a.id, target, args)
 }
 
-type HubClients struct {
-	lifetimeManager HubLifetimeManager
-	All             AllClientProxy
+type HubClients interface {
+	All() ClientProxy
+	Client(id string) ClientProxy
 }
 
-func (c *HubClients) Client(id string) SingleClientProxy {
-	return SingleClientProxy{id: id, lifetimeManager: c.lifetimeManager}
+type DefaultHubClients struct {
+	lifetimeManager HubLifetimeManager
+	allCache        AllClientProxy
+}
+
+func (c *DefaultHubClients) All() ClientProxy {
+	return &c.allCache
+}
+
+func (c *DefaultHubClients) Client(id string) ClientProxy {
+	return &SingleClientProxy{id: id, lifetimeManager: c.lifetimeManager}
 }
 
 type HandshakeRequest struct {
@@ -341,9 +354,9 @@ func negotiateHandler(w http.ResponseWriter, req *http.Request) {
 
 func MapHub(path string, hub Hub) {
 	lifetimeManager := DefaultHubLifetimeManager{}
-	hubClients := HubClients{
+	hubClients := DefaultHubClients{
 		lifetimeManager: &lifetimeManager,
-		All:             AllClientProxy{lifetimeManager: &lifetimeManager},
+		allCache:        AllClientProxy{lifetimeManager: &lifetimeManager},
 	}
 
 	hubInfo := HubInfo{
@@ -352,7 +365,7 @@ func MapHub(path string, hub Hub) {
 		methods:         make(map[string]reflect.Value),
 	}
 
-	hub.Initialize(hubClients)
+	hub.Initialize(&hubClients)
 
 	hubType := reflect.TypeOf(hub)
 	hubValue := reflect.ValueOf(hub)

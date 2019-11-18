@@ -16,7 +16,7 @@ func (c *Chat) Initialize(clients signalr.HubClients) {
 }
 
 func (c *Chat) Send(message string) {
-	c.Clients.All.Send("send", message)
+	c.Clients.All().Send("send", message)
 }
 
 func main() {
