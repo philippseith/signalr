@@ -9,6 +9,8 @@ import (
 	"reflect"
 	"strings"
 	"sync"
+	"sync/atomic"
+	"time"
 
 	"golang.org/x/net/websocket"
 )
@@ -36,6 +38,10 @@ type CompletionMessage struct {
 	InvocationId string      `json:"invocationId"`
 	Result       interface{} `json:"result"`
 	Error        string      `json:"error"`
+}
+
+type PingMessage struct {
+	Type int `json:"type"`
 }
 
 // Hub
@@ -104,14 +110,25 @@ type HandshakeRequest struct {
 }
 
 type HubConnection interface {
+	IsConnected() bool
 	getConnectionId() string
 	sendInvocation(target string, args []interface{})
 	completion(id string, result interface{}, error string)
+	ping()
 }
 
 type WebSocketHubConnection struct {
 	ws           *websocket.Conn
 	connectionId string
+	connected    int32
+}
+
+func (w *WebSocketHubConnection) start() {
+	atomic.CompareAndSwapInt32(&w.connected, 0, 1)
+}
+
+func (w *WebSocketHubConnection) IsConnected() bool {
+	return atomic.LoadInt32(&w.connected) == 1
 }
 
 func (w *WebSocketHubConnection) getConnectionId() string {
@@ -135,6 +152,7 @@ func (w *WebSocketHubConnection) sendInvocation(target string, args []interface{
 
 func (w *WebSocketHubConnection) completion(id string, result interface{}, error string) {
 	var completionMessage = CompletionMessage{
+		Type:         3,
 		InvocationId: id,
 		Result:       result,
 		Error:        error,
@@ -142,6 +160,18 @@ func (w *WebSocketHubConnection) completion(id string, result interface{}, error
 
 	var payload, _ = json.Marshal(&completionMessage)
 	websocket.Message.Send(w.ws, string(payload)+"\u001e")
+}
+
+func (w *WebSocketHubConnection) ping() {
+	var pingMessage = PingMessage{
+		Type: 6,
+	}
+	var payload, _ = json.Marshal(&pingMessage)
+	websocket.Message.Send(w.ws, string(payload)+"\u001e")
+}
+
+func (w *WebSocketHubConnection) close() {
+	atomic.StoreInt32(&w.connected, 0)
 }
 
 func hubConnectionHandler(ws *websocket.Conn, hubInfo *HubInfo) {
@@ -154,7 +184,7 @@ func hubConnectionHandler(ws *websocket.Conn, hubInfo *HubInfo) {
 
 	for {
 		if err = websocket.Message.Receive(ws, &data); err != nil {
-			fmt.Println("Can't receive")
+			fmt.Println(err)
 			break
 		}
 
@@ -176,7 +206,11 @@ func hubConnectionHandler(ws *websocket.Conn, hubInfo *HubInfo) {
 			// Send the handshake response (it's a string so it sends text back)
 			websocket.Message.Send(ws, handshakeResponse)
 
+			conn.start()
 			hubInfo.lifetimeManager.OnConnected(&conn)
+
+			// Start sending pings to the client
+			go pingLoop(&conn)
 
 			handshake = true
 			continue
@@ -230,6 +264,16 @@ func hubConnectionHandler(ws *websocket.Conn, hubInfo *HubInfo) {
 	}
 
 	hubInfo.lifetimeManager.OnDisconnected(&conn)
+	conn.close()
+
+	// TODO: Wait for pingLoop to complete
+}
+
+func pingLoop(conn HubConnection) {
+	for conn.IsConnected() {
+		conn.ping()
+		time.Sleep(5 * time.Second)
+	}
 }
 
 func parseTextMessageFormat(data []byte) ([]byte, []byte) {
