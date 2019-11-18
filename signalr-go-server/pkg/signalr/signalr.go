@@ -308,8 +308,9 @@ func hubConnectionHandler(ws *websocket.Conn, hubInfo *hubInfo) {
 
 	id := ws.Request().URL.Query().Get("id")
 	conn := webSocketHubConnection{connectionID: id, ws: ws}
+	conn.start()
 
-	for {
+	for conn.isConnected() {
 		if err = websocket.Message.Receive(ws, &data); err != nil {
 			fmt.Println(err)
 			break
@@ -333,7 +334,6 @@ func hubConnectionHandler(ws *websocket.Conn, hubInfo *hubInfo) {
 			// Send the handshake response (it's a string so it sends text back)
 			websocket.Message.Send(ws, handshakeResponse)
 
-			conn.start()
 			hubInfo.lifetimeManager.OnConnected(&conn)
 
 			if hasEvents {
