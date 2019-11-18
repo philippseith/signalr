@@ -272,7 +272,7 @@ class HubLifetimeManager {
     onDisconnect(connection) {
         var client = this._clients[connection.id];
         delete this._clients[connection.id];
-        
+
         // Clean up groups
         for (const group of client.groups) {
             // REVIEW: Performance..
@@ -316,8 +316,13 @@ class GroupClientProxy {
 class HubClients {
     constructor(lifetimeManager) {
         this._lifetimeManager = lifetimeManager;
-        this.all = new AllClientProxy(lifetimeManager);
+        this._all = new AllClientProxy(lifetimeManager);
     }
+
+    get all() {
+        return this._all
+    }
+
     client(id) {
         return new SingleClientProxy(id, this._lifetimeManager);
     }
