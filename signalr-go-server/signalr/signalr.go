@@ -47,10 +47,10 @@ type PingMessage struct {
 
 // Hub
 type Hub interface {
-	Initialize(clients *HubClients)
+	Initialize(clients HubClients)
 }
 
-type hubLifetimeManager interface {
+type HubLifetimeManager interface {
 	OnConnected(conn hubConnection)
 	OnDisconnected(conn hubConnection)
 	InvokeAll(target string, args []interface{})
@@ -90,12 +90,16 @@ func (d *defaultHubLifetimeManager) InvokeClient(connectionID string, target str
 
 type hubInfo struct {
 	hub             *Hub
-	lifetimeManager hubLifetimeManager
+	lifetimeManager HubLifetimeManager
 	methods         map[string]reflect.Value
 }
 
+type ClientProxy interface {
+	Send(target string, args ...interface{})
+}
+
 type allClientProxy struct {
-	lifetimeManager hubLifetimeManager
+	lifetimeManager HubLifetimeManager
 }
 
 func (a *allClientProxy) Send(target string, args ...interface{}) {
@@ -104,20 +108,29 @@ func (a *allClientProxy) Send(target string, args ...interface{}) {
 
 type singleClientProxy struct {
 	id              string
-	lifetimeManager hubLifetimeManager
+	lifetimeManager HubLifetimeManager
 }
 
 func (a *singleClientProxy) Send(target string, args ...interface{}) {
 	a.lifetimeManager.InvokeClient(a.id, target, args)
 }
 
-type HubClients struct {
-	lifetimeManager hubLifetimeManager
-	all             allClientProxy
+type HubClients interface {
+	All() ClientProxy
+	Client(id string) ClientProxy
 }
 
-func (c *HubClients) Client(id string) singleClientProxy {
-	return singleClientProxy{id: id, lifetimeManager: c.lifetimeManager}
+type defaultHubClients struct {
+	lifetimeManager HubLifetimeManager
+	allCache        allClientProxy
+}
+
+func (c *defaultHubClients) All() ClientProxy {
+	return &c.allCache
+}
+
+func (c *defaultHubClients) Client(id string) ClientProxy {
+	return &singleClientProxy{id: id, lifetimeManager: c.lifetimeManager}
 }
 
 type handshakeRequest struct {
@@ -341,9 +354,9 @@ func negotiateHandler(w http.ResponseWriter, req *http.Request) {
 
 func MapHub(path string, hub Hub) {
 	lifetimeManager := defaultHubLifetimeManager{}
-	hubClients := HubClients{
+	hubClients := defaultHubClients{
 		lifetimeManager: &lifetimeManager,
-		all:             allClientProxy{lifetimeManager: &lifetimeManager},
+		allCache:        allClientProxy{lifetimeManager: &lifetimeManager},
 	}
 
 	hubInfo := hubInfo{
