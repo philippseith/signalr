@@ -57,6 +57,15 @@ type HubLifetimeManager interface {
 	InvokeClient(connectionID string, target string, args []interface{})
 }
 
+type ClientProxy interface {
+	Send(target string, args ...interface{})
+}
+
+type HubClients interface {
+	All() ClientProxy
+	Client(id string) ClientProxy
+}
+
 // Implementation
 
 type defaultHubLifetimeManager struct {
@@ -94,10 +103,6 @@ type hubInfo struct {
 	methods         map[string]reflect.Value
 }
 
-type ClientProxy interface {
-	Send(target string, args ...interface{})
-}
-
 type allClientProxy struct {
 	lifetimeManager HubLifetimeManager
 }
@@ -113,11 +118,6 @@ type singleClientProxy struct {
 
 func (a *singleClientProxy) Send(target string, args ...interface{}) {
 	a.lifetimeManager.InvokeClient(a.id, target, args)
-}
-
-type HubClients interface {
-	All() ClientProxy
-	Client(id string) ClientProxy
 }
 
 type defaultHubClients struct {
