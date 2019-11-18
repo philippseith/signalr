@@ -16,35 +16,6 @@ import (
 	"golang.org/x/net/websocket"
 )
 
-// Protocol
-type HubMessage struct {
-	Type int `json:"type"`
-}
-
-type HubInvocationMessage struct {
-	Type         int               `json:"type"`
-	Target       string            `json:"target"`
-	InvocationID string            `json:"invocationId"`
-	Arguments    []json.RawMessage `json:"arguments"`
-}
-
-type SendOnlyHubInvocationMessage struct {
-	Type      int               `json:"type"`
-	Target    string            `json:"target"`
-	Arguments []json.RawMessage `json:"arguments"`
-}
-
-type CompletionMessage struct {
-	Type         int         `json:"type"`
-	InvocationID string      `json:"invocationId"`
-	Result       interface{} `json:"result"`
-	Error        string      `json:"error"`
-}
-
-type PingMessage struct {
-	Type int `json:"type"`
-}
-
 // Hub
 type Hub interface {
 	Initialize(hubContext HubContext)
@@ -228,6 +199,35 @@ func (c *defaultHubClients) Group(groupName string) ClientProxy {
 	return &groupClientProxy{groupName: groupName, lifetimeManager: c.lifetimeManager}
 }
 
+// Protocol
+type hubMessage struct {
+	Type int `json:"type"`
+}
+
+type hubInvocationMessage struct {
+	Type         int               `json:"type"`
+	Target       string            `json:"target"`
+	InvocationID string            `json:"invocationId"`
+	Arguments    []json.RawMessage `json:"arguments"`
+}
+
+type sendOnlyHubInvocationMessage struct {
+	Type      int               `json:"type"`
+	Target    string            `json:"target"`
+	Arguments []json.RawMessage `json:"arguments"`
+}
+
+type completionMessage struct {
+	Type         int         `json:"type"`
+	InvocationID string      `json:"invocationId"`
+	Result       interface{} `json:"result"`
+	Error        string      `json:"error"`
+}
+
+type pingMessage struct {
+	Type int `json:"type"`
+}
+
 type handshakeRequest struct {
 	Protocol string `json:"protocol"`
 	Version  int    `json:"version"`
@@ -264,7 +264,7 @@ func (w *webSocketHubConnection) sendInvocation(target string, args []interface{
 	for i := 0; i < len(args); i++ {
 		values[i], _ = json.Marshal(args[i])
 	}
-	var invocationMessage = SendOnlyHubInvocationMessage{
+	var invocationMessage = sendOnlyHubInvocationMessage{
 		Type:      1,
 		Target:    target,
 		Arguments: values,
@@ -275,7 +275,7 @@ func (w *webSocketHubConnection) sendInvocation(target string, args []interface{
 }
 
 func (w *webSocketHubConnection) completion(id string, result interface{}, error string) {
-	var completionMessage = CompletionMessage{
+	var completionMessage = completionMessage{
 		Type:         3,
 		InvocationID: id,
 		Result:       result,
@@ -287,7 +287,7 @@ func (w *webSocketHubConnection) completion(id string, result interface{}, error
 }
 
 func (w *webSocketHubConnection) ping() {
-	var pingMessage = PingMessage{
+	var pingMessage = pingMessage{
 		Type: 6,
 	}
 	var payload, _ = json.Marshal(&pingMessage)
@@ -353,12 +353,12 @@ func hubConnectionHandler(ws *websocket.Conn, hubInfo *hubInfo) {
 		for {
 			message, remainder := parseTextMessageFormat(data)
 
-			hubMessage := HubMessage{}
+			hubMessage := hubMessage{}
 			json.Unmarshal(message, &hubMessage)
 
 			switch hubMessage.Type {
 			case 1:
-				invocation := HubInvocationMessage{}
+				invocation := hubInvocationMessage{}
 				json.Unmarshal(message, &invocation)
 
 				// Dispatch invocation here
