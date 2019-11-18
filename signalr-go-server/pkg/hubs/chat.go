@@ -1,26 +1,42 @@
 package hubs
 
 import (
+	"fmt"
+
 	"../signalr"
 )
 
 type Chat interface {
+	OnConnected(id string)
+	OnDisconnected(id string)
 	Send(message string)
-	Initialize(clients signalr.HubClients)
+	Initialize(clients signalr.HubContext)
 }
 
 type chat struct {
-	clients signalr.HubClients
+	context signalr.HubContext
 }
 
 func NewChat() Chat {
 	return &chat{}
 }
 
-func (c *chat) Initialize(clients signalr.HubClients) {
-	c.clients = clients
+func (c *chat) Initialize(ctx signalr.HubContext) {
+	c.context = ctx
+}
+
+func (c *chat) OnConnected(id string) {
+	fmt.Printf("%s connected\n", id)
+
+	c.context.Groups().AddToGroup("group", id)
+}
+
+func (c *chat) OnDisconnected(id string) {
+	fmt.Printf("%s disconnected\n", id)
+
+	c.context.Groups().RemoveFromGroup("group", id)
 }
 
 func (c *chat) Send(message string) {
-	c.clients.All().Send("send", message)
+	c.context.Clients().Group("group").Send("send", message)
 }

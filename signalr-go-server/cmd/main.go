@@ -9,7 +9,7 @@ import (
 )
 
 func main() {
-	http.Handle("/", http.FileServer(http.Dir("public")))
+	http.Handle("/", http.FileServer(http.Dir("../public")))
 
 	signalr.MapHub("/chat", hubs.NewChat())
 

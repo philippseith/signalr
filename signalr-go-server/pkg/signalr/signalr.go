@@ -47,7 +47,7 @@ type PingMessage struct {
 
 // Hub
 type Hub interface {
-	Initialize(clients HubClients)
+	Initialize(hubContext HubContext)
 }
 
 type HubLifetimeManager interface {
@@ -55,6 +55,9 @@ type HubLifetimeManager interface {
 	OnDisconnected(conn hubConnection)
 	InvokeAll(target string, args []interface{})
 	InvokeClient(connectionID string, target string, args []interface{})
+	InvokeGroup(groupName string, target string, args []interface{})
+	AddToGroup(groupName, connectionID string)
+	RemoveFromGroup(groupName, connectionID string)
 }
 
 type ClientProxy interface {
@@ -64,12 +67,43 @@ type ClientProxy interface {
 type HubClients interface {
 	All() ClientProxy
 	Client(id string) ClientProxy
+	Group(groupName string) ClientProxy
+}
+
+type GroupManager interface {
+	AddToGroup(groupName string, connectionID string)
+	RemoveFromGroup(groupName string, connectionID string)
+}
+
+type HubContext interface {
+	Clients() HubClients
+	Groups() GroupManager
 }
 
 // Implementation
 
+// If the hub has these methods, we'll call them with the connection information
+type hubEventHandler interface {
+	OnConnected(id string)
+	OnDisconnected(id string)
+}
+
+type defaultHubContext struct {
+	clients HubClients
+	groups  GroupManager
+}
+
+func (d *defaultHubContext) Clients() HubClients {
+	return d.clients
+}
+
+func (d *defaultHubContext) Groups() GroupManager {
+	return d.groups
+}
+
 type defaultHubLifetimeManager struct {
 	clients sync.Map
+	groups  sync.Map
 }
 
 func (d *defaultHubLifetimeManager) OnConnected(conn hubConnection) {
@@ -97,8 +131,56 @@ func (d *defaultHubLifetimeManager) InvokeClient(connectionID string, target str
 	client.(hubConnection).sendInvocation(target, args)
 }
 
+func (d *defaultHubLifetimeManager) InvokeGroup(groupName string, target string, args []interface{}) {
+	groups, ok := d.groups.Load(groupName)
+
+	if !ok {
+		// No such group
+		return
+	}
+
+	for _, v := range groups.(map[string]hubConnection) {
+		v.sendInvocation(target, args)
+	}
+}
+
+func (d *defaultHubLifetimeManager) AddToGroup(groupName string, connectionID string) {
+	client, ok := d.clients.Load(connectionID)
+
+	if !ok {
+		// No such client
+		return
+	}
+
+	groups, _ := d.groups.LoadOrStore(groupName, make(map[string]hubConnection))
+
+	groups.(map[string]hubConnection)[connectionID] = client.(hubConnection)
+}
+
+func (d *defaultHubLifetimeManager) RemoveFromGroup(groupName string, connectionID string) {
+	groups, ok := d.groups.Load(groupName)
+
+	if !ok {
+		return
+	}
+
+	delete(groups.(map[string]hubConnection), connectionID)
+}
+
+type defaultGroupManager struct {
+	lifetimeManager HubLifetimeManager
+}
+
+func (d *defaultGroupManager) AddToGroup(groupName string, connectionID string) {
+	d.lifetimeManager.AddToGroup(groupName, connectionID)
+}
+
+func (d *defaultGroupManager) RemoveFromGroup(groupName string, connectionID string) {
+	d.lifetimeManager.RemoveFromGroup(groupName, connectionID)
+}
+
 type hubInfo struct {
-	hub             *Hub
+	hub             Hub
 	lifetimeManager HubLifetimeManager
 	methods         map[string]reflect.Value
 }
@@ -120,6 +202,15 @@ func (a *singleClientProxy) Send(target string, args ...interface{}) {
 	a.lifetimeManager.InvokeClient(a.id, target, args)
 }
 
+type groupClientProxy struct {
+	groupName       string
+	lifetimeManager HubLifetimeManager
+}
+
+func (g *groupClientProxy) Send(target string, args ...interface{}) {
+	g.lifetimeManager.InvokeGroup(g.groupName, target, args)
+}
+
 type defaultHubClients struct {
 	lifetimeManager HubLifetimeManager
 	allCache        allClientProxy
@@ -131,6 +222,10 @@ func (c *defaultHubClients) All() ClientProxy {
 
 func (c *defaultHubClients) Client(id string) ClientProxy {
 	return &singleClientProxy{id: id, lifetimeManager: c.lifetimeManager}
+}
+
+func (c *defaultHubClients) Group(groupName string) ClientProxy {
+	return &groupClientProxy{groupName: groupName, lifetimeManager: c.lifetimeManager}
 }
 
 type handshakeRequest struct {
@@ -209,6 +304,8 @@ func hubConnectionHandler(ws *websocket.Conn, hubInfo *hubInfo) {
 	handshake := false
 	var waitgroup sync.WaitGroup
 
+	hubEventHandler, hasEvents := hubInfo.hub.(hubEventHandler)
+
 	id := ws.Request().URL.Query().Get("id")
 	conn := webSocketHubConnection{connectionID: id, ws: ws}
 
@@ -238,6 +335,10 @@ func hubConnectionHandler(ws *websocket.Conn, hubInfo *hubInfo) {
 
 			conn.start()
 			hubInfo.lifetimeManager.OnConnected(&conn)
+
+			if hasEvents {
+				hubEventHandler.OnConnected(id)
+			}
 
 			// Start sending pings to the client
 			waitgroup.Add(1)
@@ -303,6 +404,10 @@ func hubConnectionHandler(ws *websocket.Conn, hubInfo *hubInfo) {
 	hubInfo.lifetimeManager.OnDisconnected(&conn)
 	conn.close()
 
+	if hasEvents {
+		hubEventHandler.OnDisconnected(id)
+	}
+
 	// Wait for pings to complete
 	waitgroup.Wait()
 }
@@ -359,13 +464,22 @@ func MapHub(path string, hub Hub) {
 		allCache:        allClientProxy{lifetimeManager: &lifetimeManager},
 	}
 
+	groupManager := defaultGroupManager{
+		lifetimeManager: &lifetimeManager,
+	}
+
+	hubContext := defaultHubContext{
+		clients: &hubClients,
+		groups:  &groupManager,
+	}
+
 	hubInfo := hubInfo{
-		hub:             &hub,
+		hub:             hub,
 		lifetimeManager: &lifetimeManager,
 		methods:         make(map[string]reflect.Value),
 	}
 
-	hub.Initialize(&hubClients)
+	hub.Initialize(&hubContext)
 
 	hubType := reflect.TypeOf(hub)
 	hubValue := reflect.ValueOf(hub)
