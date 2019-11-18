@@ -100,17 +100,13 @@ type HubClients struct {
 	All AllClientProxy
 }
 
-func newHubClients(lifetimeManager HubLifetimeManager) HubClients {
-	return HubClients{All: AllClientProxy{lifetimeManager: lifetimeManager}}
-}
-
 type HandshakeRequest struct {
 	Protocol string `json:"protocol"`
 	Version  int    `json:"version"`
 }
 
 type HubConnection interface {
-	IsConnected() bool
+	isConnected() bool
 	getConnectionId() string
 	sendInvocation(target string, args []interface{})
 	completion(id string, result interface{}, error string)
@@ -127,7 +123,7 @@ func (w *WebSocketHubConnection) start() {
 	atomic.CompareAndSwapInt32(&w.connected, 0, 1)
 }
 
-func (w *WebSocketHubConnection) IsConnected() bool {
+func (w *WebSocketHubConnection) isConnected() bool {
 	return atomic.LoadInt32(&w.connected) == 1
 }
 
@@ -178,6 +174,7 @@ func hubConnectionHandler(ws *websocket.Conn, hubInfo *HubInfo) {
 	var err error
 	var data []byte
 	handshake := false
+	var waitgroup sync.WaitGroup
 
 	id := ws.Request().URL.Query().Get("id")
 	conn := WebSocketHubConnection{connectionId: id, ws: ws}
@@ -210,7 +207,8 @@ func hubConnectionHandler(ws *websocket.Conn, hubInfo *HubInfo) {
 			hubInfo.lifetimeManager.OnConnected(&conn)
 
 			// Start sending pings to the client
-			go pingLoop(&conn)
+			waitgroup.Add(1)
+			go pingLoop(&waitgroup, &conn)
 
 			handshake = true
 			continue
@@ -266,14 +264,17 @@ func hubConnectionHandler(ws *websocket.Conn, hubInfo *HubInfo) {
 	hubInfo.lifetimeManager.OnDisconnected(&conn)
 	conn.close()
 
-	// TODO: Wait for pingLoop to complete
+	// Wait for pings to complete
+	waitgroup.Wait()
 }
 
-func pingLoop(conn HubConnection) {
-	for conn.IsConnected() {
+func pingLoop(waitGroup *sync.WaitGroup, conn HubConnection) {
+	for conn.isConnected() {
 		conn.ping()
 		time.Sleep(5 * time.Second)
 	}
+
+	waitGroup.Done()
 }
 
 func parseTextMessageFormat(data []byte) ([]byte, []byte) {
@@ -320,7 +321,7 @@ func MapHub(path string, hub Hub) {
 	lifetimeManager := DefaultHubLifetimeManager{
 		clients: make(map[string]HubConnection),
 	}
-	hubClients := newHubClients(&lifetimeManager)
+	hubClients := HubClients{All: AllClientProxy{lifetimeManager: &lifetimeManager}}
 
 	hubInfo := HubInfo{
 		hub:             &hub,
