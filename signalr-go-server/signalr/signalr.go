@@ -60,41 +60,32 @@ type HubLifetimeManager interface {
 // Implementation
 
 type DefaultHubLifetimeManager struct {
-	mu      sync.Mutex
-	clients map[string]HubConnection
+	clients sync.Map
 }
 
 func (self *DefaultHubLifetimeManager) OnConnected(conn HubConnection) {
-	self.mu.Lock()
-	self.clients[conn.getConnectionId()] = conn
-	self.mu.Unlock()
+	self.clients.Store(conn.getConnectionId(), conn)
 }
 
 func (self *DefaultHubLifetimeManager) OnDisconnected(conn HubConnection) {
-	self.mu.Lock()
-	delete(self.clients, conn.getConnectionId())
-	self.mu.Unlock()
+	self.clients.Delete(conn.getConnectionId())
 }
 
 func (self *DefaultHubLifetimeManager) InvokeAll(target string, args []interface{}) {
-	self.mu.Lock()
-	for _, v := range self.clients {
-		v.sendInvocation(target, args)
-	}
-	self.mu.Unlock()
+	self.clients.Range(func(key, value interface{}) bool {
+		value.(HubConnection).sendInvocation(target, args)
+		return true
+	})
 }
 
 func (self *DefaultHubLifetimeManager) InvokeClient(connectionId string, target string, args []interface{}) {
-	self.mu.Lock()
-	client, ok := self.clients[connectionId]
+	client, ok := self.clients.Load(connectionId)
 
 	if !ok {
 		return
 	}
 
-	client.sendInvocation(target, args)
-
-	self.mu.Unlock()
+	client.(HubConnection).sendInvocation(target, args)
 }
 
 type HubInfo struct {
@@ -349,9 +340,7 @@ func negotiateHandler(w http.ResponseWriter, req *http.Request) {
 }
 
 func MapHub(path string, hub Hub) {
-	lifetimeManager := DefaultHubLifetimeManager{
-		clients: make(map[string]HubConnection),
-	}
+	lifetimeManager := DefaultHubLifetimeManager{}
 	hubClients := HubClients{
 		lifetimeManager: &lifetimeManager,
 		All:             AllClientProxy{lifetimeManager: &lifetimeManager},
