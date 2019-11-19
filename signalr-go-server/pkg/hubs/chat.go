@@ -9,7 +9,7 @@ import (
 type Chat interface {
 	OnConnected(id string)
 	OnDisconnected(id string)
-	Send(message string)
+	Send(message string) string
 	Initialize(clients signalr.HubContext)
 }
 
@@ -37,6 +37,8 @@ func (c *chat) OnDisconnected(id string) {
 	c.context.Groups().RemoveFromGroup("group", id)
 }
 
-func (c *chat) Send(message string) {
+func (c *chat) Send(message string) string {
 	c.context.Clients().Group("group").Send("send", message)
+
+	return "Hello World"
 }

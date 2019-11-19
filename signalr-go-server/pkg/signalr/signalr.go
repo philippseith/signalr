@@ -381,10 +381,14 @@ func hubConnectionHandler(ws *websocket.Conn, hubInfo *hubInfo) {
 					in[i] = arg.Elem()
 				}
 
-				// TODO: Handle return values
-				method.Call(in)
+				result := method.Call(in)
 
-				conn.completion(invocation.InvocationID, nil, "")
+				if len(result) > 0 {
+					// REVIEW: When is this ever > 1
+					conn.completion(invocation.InvocationID, result[0].Interface(), "")
+				} else {
+					conn.completion(invocation.InvocationID, nil, "")
+				}
 
 				break
 			case 6:
