@@ -51,7 +51,39 @@ type HubContext interface {
 	Groups() GroupManager
 }
 
+type HubProtocol interface {
+	ReadMessage(buf *bytes.Buffer) (interface{}, error)
+	// WriteMessage(interface{}) error
+}
+
 // Implementation
+
+type jsonHubProtocol struct {
+}
+
+func (j *jsonHubProtocol) ReadMessage(buf *bytes.Buffer) (interface{}, error) {
+	data, err := parseTextMessageFormat(buf)
+	if err != nil {
+		return nil, err
+	}
+
+	message := hubMessage{}
+	json.Unmarshal(data, &message)
+
+	switch message.Type {
+	case 1:
+		invocation := hubInvocationMessage{}
+		json.Unmarshal(data, &invocation)
+		return invocation, nil
+	default:
+		return message, nil
+	}
+}
+
+// TODO
+// func (j *jsonHubProtocol) WriteMessage(interface{}) (interface{}, error) {
+// 	return nil, errors.New("f")
+// }
 
 // If the hub has these methods, we'll call them with the connection information
 type hubEventHandler interface {
@@ -308,11 +340,13 @@ func (w *webSocketHubConnection) close(error string) {
 	websocket.Message.Send(w.ws, string(payload)+"\u001e")
 }
 
-func processHandshake(ws *websocket.Conn, buf *bytes.Buffer) (handshakeRequest, error) {
+func processHandshake(ws *websocket.Conn, buf *bytes.Buffer) (HubProtocol, error) {
 	var err error
 	var data []byte
-	request := handshakeRequest{}
+	var protocol HubProtocol
+	var ok bool
 	const handshakeResponse = "{}\u001e"
+	const errorHandshakeResponse = "{\"error\":\"%s\"}\u001e"
 
 	ready := make(chan bool, 1)
 
@@ -333,10 +367,19 @@ func processHandshake(ws *websocket.Conn, buf *bytes.Buffer) (handshakeRequest, 
 
 			fmt.Println("Handshake received")
 
+			request := handshakeRequest{}
 			json.Unmarshal(rawHandshake, &request)
 
-			// Send the handshake response
-			websocket.Message.Send(ws, handshakeResponse)
+			protocol, ok = protocolMap[request.Protocol]
+
+			if !ok {
+				// Protocol not supported
+				fmt.Printf("'%s' is the only supported protocol\n", request.Protocol)
+				err = websocket.Message.Send(ws, fmt.Sprintf(errorHandshakeResponse, fmt.Sprintf("Protocol \"%s\" not supported", request.Protocol)))
+			} else {
+				// Send the handshake response
+				err = websocket.Message.Send(ws, handshakeResponse)
+			}
 			break
 		}
 
@@ -346,9 +389,9 @@ func processHandshake(ws *websocket.Conn, buf *bytes.Buffer) (handshakeRequest, 
 	// Race the timer and the timeout
 	select {
 	case <-time.After(5 * time.Second):
-		return request, fmt.Errorf("Handshake was canceled.")
+		return nil, fmt.Errorf("Handshake was canceled.")
 	case <-ready:
-		return request, err
+		return protocol, err
 	}
 }
 
@@ -363,15 +406,10 @@ func hubConnectionHandler(connectionID string, ws *websocket.Conn, hubInfo *hubI
 	conn := webSocketHubConnection{connectionID: connectionID, ws: ws}
 	conn.start()
 
-	handshake, err := processHandshake(ws, &buf)
+	protocol, err := processHandshake(ws, &buf)
 
 	if err != nil {
 		fmt.Println(err)
-		return
-	}
-
-	if handshake.Protocol != "json" {
-		fmt.Println("JSON is the only supported protocol")
 		return
 	}
 
@@ -387,20 +425,16 @@ func hubConnectionHandler(connectionID string, ws *websocket.Conn, hubInfo *hubI
 
 	for conn.isConnected() {
 		for {
-			message, err := parseTextMessageFormat(&buf)
+			message, err := protocol.ReadMessage(&buf)
 
 			if err != nil {
 				// Partial message, need more data
 				break
 			}
 
-			hubMessage := hubMessage{}
-			json.Unmarshal(message, &hubMessage)
-
-			switch hubMessage.Type {
-			case 1:
-				invocation := hubInvocationMessage{}
-				json.Unmarshal(message, &invocation)
+			switch message.(type) {
+			case hubInvocationMessage:
+				invocation := message.(hubInvocationMessage)
 
 				// Dispatch invocation here
 				normalized := strings.ToLower(invocation.Target)
@@ -432,7 +466,7 @@ func hubConnectionHandler(connectionID string, ws *websocket.Conn, hubInfo *hubI
 				}
 
 				break
-			case 6:
+			case hubMessage:
 				// Ping
 				break
 			}
@@ -512,7 +546,15 @@ func getConnectionID() string {
 	return base64.StdEncoding.EncodeToString(bytes)
 }
 
+var protocolMap map[string]HubProtocol = make(map[string]HubProtocol)
+var once sync.Once
+
 func MapHub(mux *http.ServeMux, path string, hub Hub) {
+
+	once.Do(func() {
+		protocolMap["json"] = &jsonHubProtocol{}
+	})
+
 	lifetimeManager := defaultHubLifetimeManager{}
 	hubClients := defaultHubClients{
 		lifetimeManager: &lifetimeManager,
