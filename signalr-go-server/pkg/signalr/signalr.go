@@ -298,11 +298,45 @@ func (w *webSocketHubConnection) close() {
 	atomic.StoreInt32(&w.connected, 0)
 }
 
+func processHandshake(ws *websocket.Conn, buf *bytes.Buffer) (handshakeRequest, error) {
+	var err error
+	var data []byte
+	request := handshakeRequest{}
+	const handshakeResponse = "{}\u001e"
+
+	// TODO: Timeout the handshake after 5 seconds of waiting (make configurable)
+
+	for {
+		if err = websocket.Message.Receive(ws, &data); err != nil {
+			break
+		}
+
+		buf.Write(data)
+
+		rawHandshake, err := parseTextMessageFormat(buf)
+
+		if err != nil {
+			// Partial message, read more data
+			continue
+		}
+
+		fmt.Println("Handshake received")
+
+		json.Unmarshal(rawHandshake, &request)
+
+		// Send the handshake response
+		websocket.Message.Send(ws, handshakeResponse)
+		break
+	}
+
+	return request, err
+}
+
 func hubConnectionHandler(ws *websocket.Conn, hubInfo *hubInfo) {
 	var err error
 	var data []byte
-	handshake := false
 	var waitgroup sync.WaitGroup
+	var buf bytes.Buffer
 
 	hubEventHandler, hasEvents := hubInfo.hub.(hubEventHandler)
 
@@ -310,48 +344,46 @@ func hubConnectionHandler(ws *websocket.Conn, hubInfo *hubInfo) {
 	conn := webSocketHubConnection{connectionID: id, ws: ws}
 	conn.start()
 
+	handshake, err := processHandshake(ws, &buf)
+
+	if err != nil {
+		fmt.Println("Unable to process the handshake")
+		return
+	}
+
+	if handshake.Protocol != "json" {
+		fmt.Println("JSON is the only supported protocol")
+		return
+	}
+
+	hubInfo.lifetimeManager.OnConnected(&conn)
+
+	if hasEvents {
+		hubEventHandler.OnConnected(id)
+	}
+
+	// Start sending pings to the client
+	waitgroup.Add(1)
+	go pingLoop(&waitgroup, &conn)
+
 	for conn.isConnected() {
 		if err = websocket.Message.Receive(ws, &data); err != nil {
 			fmt.Println(err)
 			break
 		}
 
-		if !handshake {
-			rawHandshake, remainder := parseTextMessageFormat(data)
-
-			if len(remainder) > 0 {
-				fmt.Println("Can't handle partial messages yet...I'm lazy")
-				return
-			}
-
-			fmt.Println("Handshake received")
-
-			request := handshakeRequest{}
-			json.Unmarshal(rawHandshake, &request)
-
-			var handshakeResponse = "{}\u001e"
-
-			// Send the handshake response (it's a string so it sends text back)
-			websocket.Message.Send(ws, handshakeResponse)
-
-			hubInfo.lifetimeManager.OnConnected(&conn)
-
-			if hasEvents {
-				hubEventHandler.OnConnected(id)
-			}
-
-			// Start sending pings to the client
-			waitgroup.Add(1)
-			go pingLoop(&waitgroup, &conn)
-
-			handshake = true
-			continue
-		}
-
+		// Main message loop
 		fmt.Println("Message received " + string(data))
 
+		buf.Write(data)
+
 		for {
-			message, remainder := parseTextMessageFormat(data)
+			message, err := parseTextMessageFormat(&buf)
+
+			if err != nil {
+				// Partial message
+				break
+			}
 
 			hubMessage := hubMessage{}
 			json.Unmarshal(message, &hubMessage)
@@ -395,13 +427,6 @@ func hubConnectionHandler(ws *websocket.Conn, hubInfo *hubInfo) {
 				// Ping
 				break
 			}
-
-			// TODO: Fix partial messages
-			if len(remainder) == 0 {
-				break
-			}
-
-			data = remainder
 		}
 	}
 
@@ -416,6 +441,16 @@ func hubConnectionHandler(ws *websocket.Conn, hubInfo *hubInfo) {
 	waitgroup.Wait()
 }
 
+func parseTextMessageFormat(buf *bytes.Buffer) ([]byte, error) {
+	// 30 = ASCII record separator
+	data, err := buf.ReadBytes(30)
+
+	if err != nil {
+		return data, err
+	}
+	return data[0 : len(data)-1], err
+}
+
 func pingLoop(waitGroup *sync.WaitGroup, conn hubConnection) {
 	for conn.isConnected() {
 		conn.ping()
@@ -423,14 +458,6 @@ func pingLoop(waitGroup *sync.WaitGroup, conn hubConnection) {
 	}
 
 	waitGroup.Done()
-}
-
-func parseTextMessageFormat(data []byte) ([]byte, []byte) {
-	index := bytes.Index(data, []byte{30})
-
-	// TODO: Handle -1
-
-	return data[0:index], data[index+1:]
 }
 
 type availableTransport struct {
