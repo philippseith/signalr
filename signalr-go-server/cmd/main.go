@@ -9,11 +9,12 @@ import (
 )
 
 func main() {
-	http.Handle("/", http.FileServer(http.Dir("../public")))
+	router := http.NewServeMux()
+	router.Handle("/", http.FileServer(http.Dir("../public")))
 
-	signalr.MapHub(http.DefaultServeMux, "/chat", hubs.NewChat())
+	signalr.MapHub(router, "/chat", hubs.NewChat())
 
-	if err := http.ListenAndServe("localhost:8086", nil); err != nil {
+	if err := http.ListenAndServe("localhost:8086", router); err != nil {
 		log.Fatal("ListenAndServe:", err)
 	}
 }
