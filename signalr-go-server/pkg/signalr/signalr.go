@@ -332,7 +332,7 @@ func processHandshake(ws *websocket.Conn, buf *bytes.Buffer) (handshakeRequest, 
 	return request, err
 }
 
-func hubConnectionHandler(ws *websocket.Conn, hubInfo *hubInfo) {
+func hubConnectionHandler(connectionID string, ws *websocket.Conn, hubInfo *hubInfo) {
 	var err error
 	var data []byte
 	var waitgroup sync.WaitGroup
@@ -340,8 +340,7 @@ func hubConnectionHandler(ws *websocket.Conn, hubInfo *hubInfo) {
 
 	hubEventHandler, hasEvents := hubInfo.hub.(hubEventHandler)
 
-	id := ws.Request().URL.Query().Get("id")
-	conn := webSocketHubConnection{connectionID: id, ws: ws}
+	conn := webSocketHubConnection{connectionID: connectionID, ws: ws}
 	conn.start()
 
 	handshake, err := processHandshake(ws, &buf)
@@ -359,7 +358,7 @@ func hubConnectionHandler(ws *websocket.Conn, hubInfo *hubInfo) {
 	hubInfo.lifetimeManager.OnConnected(&conn)
 
 	if hasEvents {
-		hubEventHandler.OnConnected(id)
+		hubEventHandler.OnConnected(connectionID)
 	}
 
 	// Start sending pings to the client
@@ -367,21 +366,11 @@ func hubConnectionHandler(ws *websocket.Conn, hubInfo *hubInfo) {
 	go pingLoop(&waitgroup, &conn)
 
 	for conn.isConnected() {
-		if err = websocket.Message.Receive(ws, &data); err != nil {
-			fmt.Println(err)
-			break
-		}
-
-		// Main message loop
-		fmt.Println("Message received " + string(data))
-
-		buf.Write(data)
-
 		for {
 			message, err := parseTextMessageFormat(&buf)
 
 			if err != nil {
-				// Partial message
+				// Partial message, need more data
 				break
 			}
 
@@ -428,13 +417,23 @@ func hubConnectionHandler(ws *websocket.Conn, hubInfo *hubInfo) {
 				break
 			}
 		}
+
+		if err = websocket.Message.Receive(ws, &data); err != nil {
+			fmt.Println(err)
+			break
+		}
+
+		// Main message loop
+		fmt.Println("Message received " + string(data))
+
+		buf.Write(data)
 	}
 
 	hubInfo.lifetimeManager.OnDisconnected(&conn)
 	conn.close()
 
 	if hasEvents {
-		hubEventHandler.OnDisconnected(id)
+		hubEventHandler.OnDisconnected(connectionID)
 	}
 
 	// Wait for pings to complete
@@ -448,6 +447,7 @@ func parseTextMessageFormat(buf *bytes.Buffer) ([]byte, error) {
 	if err != nil {
 		return data, err
 	}
+	// Remove the delimeter
 	return data[0 : len(data)-1], err
 }
 
@@ -471,9 +471,7 @@ type negotiateResponse struct {
 }
 
 func negotiateHandler(w http.ResponseWriter, req *http.Request) {
-	bytes := make([]byte, 16)
-	rand.Read(bytes)
-	connectionID := base64.StdEncoding.EncodeToString(bytes)
+	connectionID := getConnectionID()
 
 	response := negotiateResponse{
 		ConnectionID: connectionID,
@@ -486,6 +484,12 @@ func negotiateHandler(w http.ResponseWriter, req *http.Request) {
 	}
 
 	json.NewEncoder(w).Encode(response)
+}
+
+func getConnectionID() string {
+	bytes := make([]byte, 16)
+	rand.Read(bytes)
+	return base64.StdEncoding.EncodeToString(bytes)
 }
 
 func MapHub(path string, hub Hub) {
@@ -522,6 +526,13 @@ func MapHub(path string, hub Hub) {
 
 	http.HandleFunc(fmt.Sprintf("%s/negotiate", path), negotiateHandler)
 	http.Handle(path, websocket.Handler(func(ws *websocket.Conn) {
-		hubConnectionHandler(ws, &hubInfo)
+		connectionID := ws.Request().URL.Query().Get("id")
+
+		if len(connectionID) == 0 {
+			// Support websocket connection without negotiate
+			connectionID = getConnectionID()
+		}
+
+		hubConnectionHandler(connectionID, ws, &hubInfo)
 	}))
 }
