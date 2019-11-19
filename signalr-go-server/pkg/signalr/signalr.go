@@ -224,8 +224,10 @@ type completionMessage struct {
 	Error        string      `json:"error"`
 }
 
-type pingMessage struct {
-	Type int `json:"type"`
+type closeMessage struct {
+	Type           int    `json:"type"`
+	Error          string `json:"error"`
+	AllowReconnect bool   `json:"allowReconnect"`
 }
 
 type handshakeRequest struct {
@@ -287,15 +289,23 @@ func (w *webSocketHubConnection) completion(id string, result interface{}, error
 }
 
 func (w *webSocketHubConnection) ping() {
-	var pingMessage = pingMessage{
+	var pingMessage = hubMessage{
 		Type: 6,
 	}
 	var payload, _ = json.Marshal(&pingMessage)
 	websocket.Message.Send(w.ws, string(payload)+"\u001e")
 }
 
-func (w *webSocketHubConnection) close() {
+func (w *webSocketHubConnection) close(error string) {
 	atomic.StoreInt32(&w.connected, 0)
+
+	var closeMessage = closeMessage{
+		Type:           6,
+		Error:          error,
+		AllowReconnect: true,
+	}
+	var payload, _ = json.Marshal(&closeMessage)
+	websocket.Message.Send(w.ws, string(payload)+"\u001e")
 }
 
 func processHandshake(ws *websocket.Conn, buf *bytes.Buffer) (handshakeRequest, error) {
@@ -429,12 +439,12 @@ func hubConnectionHandler(connectionID string, ws *websocket.Conn, hubInfo *hubI
 		buf.Write(data)
 	}
 
-	hubInfo.lifetimeManager.OnDisconnected(&conn)
-	conn.close()
-
 	if hasEvents {
 		hubEventHandler.OnDisconnected(connectionID)
 	}
+
+	hubInfo.lifetimeManager.OnDisconnected(&conn)
+	conn.close("")
 
 	// Wait for pings to complete
 	waitgroup.Wait()
