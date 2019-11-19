@@ -11,7 +11,7 @@ import (
 func main() {
 	http.Handle("/", http.FileServer(http.Dir("../public")))
 
-	signalr.MapHub("/chat", hubs.NewChat())
+	signalr.MapHub(http.DefaultServeMux, "/chat", hubs.NewChat())
 
 	if err := http.ListenAndServe("localhost:8086", nil); err != nil {
 		log.Fatal("ListenAndServe:", err)

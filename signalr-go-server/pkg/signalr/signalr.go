@@ -502,7 +502,7 @@ func getConnectionID() string {
 	return base64.StdEncoding.EncodeToString(bytes)
 }
 
-func MapHub(path string, hub Hub) {
+func MapHub(mux *http.ServeMux, path string, hub Hub) {
 	lifetimeManager := defaultHubLifetimeManager{}
 	hubClients := defaultHubClients{
 		lifetimeManager: &lifetimeManager,
@@ -534,8 +534,8 @@ func MapHub(path string, hub Hub) {
 		hubInfo.methods[strings.ToLower(m.Name)] = hubValue.Method(i)
 	}
 
-	http.HandleFunc(fmt.Sprintf("%s/negotiate", path), negotiateHandler)
-	http.Handle(path, websocket.Handler(func(ws *websocket.Conn) {
+	mux.HandleFunc(fmt.Sprintf("%s/negotiate", path), negotiateHandler)
+	mux.Handle(path, websocket.Handler(func(ws *websocket.Conn) {
 		connectionID := ws.Request().URL.Query().Get("id")
 
 		if len(connectionID) == 0 {
