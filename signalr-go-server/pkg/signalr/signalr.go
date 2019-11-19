@@ -314,32 +314,42 @@ func processHandshake(ws *websocket.Conn, buf *bytes.Buffer) (handshakeRequest, 
 	request := handshakeRequest{}
 	const handshakeResponse = "{}\u001e"
 
-	// TODO: Timeout the handshake after 5 seconds of waiting (make configurable)
+	ready := make(chan bool, 1)
 
-	for {
-		if err = websocket.Message.Receive(ws, &data); err != nil {
+	go func() {
+		for {
+			if err = websocket.Message.Receive(ws, &data); err != nil {
+				break
+			}
+
+			buf.Write(data)
+
+			rawHandshake, err := parseTextMessageFormat(buf)
+
+			if err != nil {
+				// Partial message, read more data
+				continue
+			}
+
+			fmt.Println("Handshake received")
+
+			json.Unmarshal(rawHandshake, &request)
+
+			// Send the handshake response
+			websocket.Message.Send(ws, handshakeResponse)
 			break
 		}
 
-		buf.Write(data)
+		ready <- true
+	}()
 
-		rawHandshake, err := parseTextMessageFormat(buf)
-
-		if err != nil {
-			// Partial message, read more data
-			continue
-		}
-
-		fmt.Println("Handshake received")
-
-		json.Unmarshal(rawHandshake, &request)
-
-		// Send the handshake response
-		websocket.Message.Send(ws, handshakeResponse)
-		break
+	// Race the timer and the timeout
+	select {
+	case <-time.After(5 * time.Second):
+		return request, fmt.Errorf("Handshake was canceled.")
+	case <-ready:
+		return request, err
 	}
-
-	return request, err
 }
 
 func hubConnectionHandler(connectionID string, ws *websocket.Conn, hubInfo *hubInfo) {
@@ -356,7 +366,7 @@ func hubConnectionHandler(connectionID string, ws *websocket.Conn, hubInfo *hubI
 	handshake, err := processHandshake(ws, &buf)
 
 	if err != nil {
-		fmt.Println("Unable to process the handshake")
+		fmt.Println(err)
 		return
 	}
 
