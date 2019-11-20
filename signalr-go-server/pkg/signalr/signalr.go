@@ -68,13 +68,17 @@ func (j *jsonHubProtocol) ReadMessage(buf *bytes.Buffer) (interface{}, error) {
 	}
 
 	message := hubMessage{}
-	json.Unmarshal(data, &message)
+	err = json.Unmarshal(data, &message)
+
+	if err != nil {
+		return nil, err
+	}
 
 	switch message.Type {
 	case 1:
 		invocation := hubInvocationMessage{}
-		json.Unmarshal(data, &invocation)
-		return invocation, nil
+		err = json.Unmarshal(data, &invocation)
+		return invocation, err
 	default:
 		return message, nil
 	}
