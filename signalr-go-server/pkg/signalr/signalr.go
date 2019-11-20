@@ -368,17 +368,22 @@ func processHandshake(ws *websocket.Conn, buf *bytes.Buffer) (HubProtocol, error
 			fmt.Println("Handshake received")
 
 			request := handshakeRequest{}
-			json.Unmarshal(rawHandshake, &request)
+			err = json.Unmarshal(rawHandshake, &request)
+
+			if err != nil {
+				// Malformed handshake
+				break
+			}
 
 			protocol, ok = protocolMap[request.Protocol]
 
-			if !ok {
-				// Protocol not supported
-				fmt.Printf("'%s' is the only supported protocol\n", request.Protocol)
-				err = websocket.Message.Send(ws, fmt.Sprintf(errorHandshakeResponse, fmt.Sprintf("Protocol \"%s\" not supported", request.Protocol)))
-			} else {
+			if ok {
 				// Send the handshake response
 				err = websocket.Message.Send(ws, handshakeResponse)
+			} else {
+				// Protocol not supported
+				fmt.Printf("\"%s\" is the only supported protocol\n", request.Protocol)
+				err = websocket.Message.Send(ws, fmt.Sprintf(errorHandshakeResponse, fmt.Sprintf("Protocol \"%s\" not supported", request.Protocol)))
 			}
 			break
 		}
@@ -386,7 +391,7 @@ func processHandshake(ws *websocket.Conn, buf *bytes.Buffer) (HubProtocol, error
 		ready <- true
 	}()
 
-	// Race the timer and the timeout
+	// Race the the timeout and the handshake processing
 	select {
 	case <-time.After(5 * time.Second):
 		return nil, fmt.Errorf("Handshake was canceled.")
@@ -506,12 +511,12 @@ func parseTextMessageFormat(buf *bytes.Buffer) ([]byte, error) {
 }
 
 func pingLoop(waitGroup *sync.WaitGroup, conn hubConnection) {
+	defer waitGroup.Done()
+
 	for conn.isConnected() {
 		conn.ping()
 		time.Sleep(5 * time.Second)
 	}
-
-	waitGroup.Done()
 }
 
 type availableTransport struct {
