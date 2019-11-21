@@ -16,7 +16,6 @@ import (
 	"golang.org/x/net/websocket"
 )
 
-// Hub
 type Hub interface {
 	Initialize(hubContext HubContext)
 }
@@ -398,7 +397,7 @@ func processHandshake(ws *websocket.Conn, buf *bytes.Buffer) (HubProtocol, error
 	// Race the the timeout and the handshake processing
 	select {
 	case <-time.After(5 * time.Second):
-		return nil, fmt.Errorf("Handshake was canceled.")
+		return nil, fmt.Errorf("Handshake was canceled")
 	case <-ready:
 		return protocol, err
 	}
@@ -534,6 +533,11 @@ type negotiateResponse struct {
 }
 
 func negotiateHandler(w http.ResponseWriter, req *http.Request) {
+	if req.Method != "POST" {
+		w.WriteHeader(400)
+		return
+	}
+
 	connectionID := getConnectionID()
 
 	response := negotiateResponse{
@@ -558,6 +562,7 @@ func getConnectionID() string {
 var protocolMap map[string]HubProtocol = make(map[string]HubProtocol)
 var once sync.Once
 
+// MapHub used to register a SignalR Hub with the specified ServeMux
 func MapHub(mux *http.ServeMux, path string, hub Hub) {
 
 	once.Do(func() {
