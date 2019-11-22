@@ -351,56 +351,50 @@ func processHandshake(ws *websocket.Conn, buf *bytes.Buffer) (HubProtocol, error
 	const handshakeResponse = "{}\u001e"
 	const errorHandshakeResponse = "{\"error\":\"%s\"}\u001e"
 
-	ready := make(chan bool, 1)
+	// 5 seconds to process the handshake
+	ws.SetReadDeadline(time.Now().Add(5 * time.Second))
 
-	go func() {
-		for {
-			if err = websocket.Message.Receive(ws, &data); err != nil {
-				break
-			}
-
-			buf.Write(data)
-
-			rawHandshake, err := parseTextMessageFormat(buf)
-
-			if err != nil {
-				// Partial message, read more data
-				continue
-			}
-
-			fmt.Println("Handshake received")
-
-			request := handshakeRequest{}
-			err = json.Unmarshal(rawHandshake, &request)
-
-			if err != nil {
-				// Malformed handshake
-				break
-			}
-
-			protocol, ok = protocolMap[request.Protocol]
-
-			if ok {
-				// Send the handshake response
-				err = websocket.Message.Send(ws, handshakeResponse)
-			} else {
-				// Protocol not supported
-				fmt.Printf("\"%s\" is the only supported protocol\n", request.Protocol)
-				err = websocket.Message.Send(ws, fmt.Sprintf(errorHandshakeResponse, fmt.Sprintf("Protocol \"%s\" not supported", request.Protocol)))
-			}
+	for {
+		if err = websocket.Message.Receive(ws, &data); err != nil {
 			break
 		}
 
-		ready <- true
-	}()
+		buf.Write(data)
 
-	// Race the the timeout and the handshake processing
-	select {
-	case <-time.After(5 * time.Second):
-		return nil, fmt.Errorf("Handshake was canceled")
-	case <-ready:
-		return protocol, err
+		rawHandshake, err := parseTextMessageFormat(buf)
+
+		if err != nil {
+			// Partial message, read more data
+			continue
+		}
+
+		fmt.Println("Handshake received")
+
+		request := handshakeRequest{}
+		err = json.Unmarshal(rawHandshake, &request)
+
+		if err != nil {
+			// Malformed handshake
+			break
+		}
+
+		protocol, ok = protocolMap[request.Protocol]
+
+		if ok {
+			// Send the handshake response
+			err = websocket.Message.Send(ws, handshakeResponse)
+		} else {
+			// Protocol not supported
+			fmt.Printf("\"%s\" is the only supported protocol\n", request.Protocol)
+			err = websocket.Message.Send(ws, fmt.Sprintf(errorHandshakeResponse, fmt.Sprintf("Protocol \"%s\" not supported", request.Protocol)))
+		}
+		break
 	}
+
+	// Disable the timeout (either we already timeout out or)
+	ws.SetReadDeadline(time.Time{})
+
+	return protocol, err
 }
 
 func hubConnectionHandler(connectionID string, ws *websocket.Conn, hubInfo *hubInfo) {
