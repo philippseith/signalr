@@ -36,7 +36,7 @@ type ClientProxy interface {
 
 type HubClients interface {
 	All() ClientProxy
-	Client(id string) ClientProxy
+	Client(connectionID string) ClientProxy
 	Group(groupName string) ClientProxy
 }
 
@@ -90,8 +90,8 @@ func (j *jsonHubProtocol) ReadMessage(buf *bytes.Buffer) (interface{}, error) {
 
 // If the hub has these methods, we'll call them with the connection information
 type hubEventHandler interface {
-	OnConnected(id string)
-	OnDisconnected(id string)
+	OnConnected(connectionID string)
+	OnDisconnected(connectionID string)
 }
 
 type defaultHubContext struct {
@@ -200,12 +200,12 @@ func (a *allClientProxy) Send(target string, args ...interface{}) {
 }
 
 type singleClientProxy struct {
-	id              string
+	connectionID    string
 	lifetimeManager HubLifetimeManager
 }
 
 func (a *singleClientProxy) Send(target string, args ...interface{}) {
-	a.lifetimeManager.InvokeClient(a.id, target, args)
+	a.lifetimeManager.InvokeClient(a.connectionID, target, args)
 }
 
 type groupClientProxy struct {
@@ -226,8 +226,8 @@ func (c *defaultHubClients) All() ClientProxy {
 	return &c.allCache
 }
 
-func (c *defaultHubClients) Client(id string) ClientProxy {
-	return &singleClientProxy{id: id, lifetimeManager: c.lifetimeManager}
+func (c *defaultHubClients) Client(connectionID string) ClientProxy {
+	return &singleClientProxy{connectionID: connectionID, lifetimeManager: c.lifetimeManager}
 }
 
 func (c *defaultHubClients) Group(groupName string) ClientProxy {

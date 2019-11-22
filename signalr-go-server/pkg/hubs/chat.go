@@ -7,8 +7,8 @@ import (
 )
 
 type Chat interface {
-	OnConnected(id string)
-	OnDisconnected(id string)
+	OnConnected(connectionID string)
+	OnDisconnected(connectionID string)
 	Send(message string) string
 	Initialize(clients signalr.HubContext)
 }
@@ -25,16 +25,16 @@ func (c *chat) Initialize(ctx signalr.HubContext) {
 	c.context = ctx
 }
 
-func (c *chat) OnConnected(id string) {
-	fmt.Printf("%s connected\n", id)
+func (c *chat) OnConnected(connectionID string) {
+	fmt.Printf("%s connected\n", connectionID)
 
-	c.context.Groups().AddToGroup("group", id)
+	c.context.Groups().AddToGroup("group", connectionID)
 }
 
-func (c *chat) OnDisconnected(id string) {
-	fmt.Printf("%s disconnected\n", id)
+func (c *chat) OnDisconnected(connectionID string) {
+	fmt.Printf("%s disconnected\n", connectionID)
 
-	c.context.Groups().RemoveFromGroup("group", id)
+	c.context.Groups().RemoveFromGroup("group", connectionID)
 }
 
 func (c *chat) Send(message string) string {
