@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"reflect"
 	"strings"
@@ -50,9 +51,10 @@ type HubContext interface {
 	Groups() GroupManager
 }
 
+// HubProtocol interface
 type HubProtocol interface {
 	ReadMessage(buf *bytes.Buffer) (interface{}, error)
-	// WriteMessage(interface{}) error
+	WriteMessage(message interface{}, writer io.Writer) error
 }
 
 // Implementation
@@ -83,10 +85,24 @@ func (j *jsonHubProtocol) ReadMessage(buf *bytes.Buffer) (interface{}, error) {
 	}
 }
 
-// TODO
-// func (j *jsonHubProtocol) WriteMessage(interface{}) (interface{}, error) {
-// 	return nil, errors.New("f")
-// }
+func (j *jsonHubProtocol) WriteMessage(message interface{}, writer io.Writer) error {
+
+	// TODO: Reduce the amount of copies
+
+	// We're copying because we want to write complete messages to the underlying writer
+	buf := bytes.Buffer{}
+
+	if err := json.NewEncoder(&buf).Encode(message); err != nil {
+		return err
+	}
+
+	if err := buf.WriteByte(30); err != nil {
+		return err
+	}
+
+	_, err := writer.Write(buf.Bytes())
+	return err
+}
 
 // If the hub has these methods, we'll call them with the connection information
 type hubEventHandler interface {
@@ -247,9 +263,9 @@ type hubInvocationMessage struct {
 }
 
 type sendOnlyHubInvocationMessage struct {
-	Type      int               `json:"type"`
-	Target    string            `json:"target"`
-	Arguments []json.RawMessage `json:"arguments"`
+	Type      int           `json:"type"`
+	Target    string        `json:"target"`
+	Arguments []interface{} `json:"arguments"`
 }
 
 type completionMessage struct {
@@ -280,6 +296,7 @@ type hubConnection interface {
 
 type webSocketHubConnection struct {
 	ws           *websocket.Conn
+	protocol     HubProtocol
 	connectionID string
 	connected    int32
 }
@@ -297,18 +314,13 @@ func (w *webSocketHubConnection) getConnectionID() string {
 }
 
 func (w *webSocketHubConnection) sendInvocation(target string, args []interface{}) {
-	var values = make([]json.RawMessage, len(args))
-	for i := 0; i < len(args); i++ {
-		values[i], _ = json.Marshal(args[i])
-	}
 	var invocationMessage = sendOnlyHubInvocationMessage{
 		Type:      1,
 		Target:    target,
-		Arguments: values,
+		Arguments: args,
 	}
 
-	var payload, _ = json.Marshal(&invocationMessage)
-	websocket.Message.Send(w.ws, string(payload)+"\u001e")
+	w.protocol.WriteMessage(invocationMessage, w.ws)
 }
 
 func (w *webSocketHubConnection) completion(id string, result interface{}, error string) {
@@ -319,16 +331,15 @@ func (w *webSocketHubConnection) completion(id string, result interface{}, error
 		Error:        error,
 	}
 
-	var payload, _ = json.Marshal(&completionMessage)
-	websocket.Message.Send(w.ws, string(payload)+"\u001e")
+	w.protocol.WriteMessage(completionMessage, w.ws)
 }
 
 func (w *webSocketHubConnection) ping() {
 	var pingMessage = hubMessage{
 		Type: 6,
 	}
-	var payload, _ = json.Marshal(&pingMessage)
-	websocket.Message.Send(w.ws, string(payload)+"\u001e")
+
+	w.protocol.WriteMessage(pingMessage, w.ws)
 }
 
 func (w *webSocketHubConnection) close(error string) {
@@ -339,8 +350,8 @@ func (w *webSocketHubConnection) close(error string) {
 		Error:          error,
 		AllowReconnect: true,
 	}
-	var payload, _ = json.Marshal(&closeMessage)
-	websocket.Message.Send(w.ws, string(payload)+"\u001e")
+
+	w.protocol.WriteMessage(closeMessage, w.ws)
 }
 
 func processHandshake(ws *websocket.Conn, buf *bytes.Buffer) (HubProtocol, error) {
@@ -405,15 +416,15 @@ func hubConnectionHandler(connectionID string, ws *websocket.Conn, hubInfo *hubI
 
 	hubEventHandler, hasEvents := hubInfo.hub.(hubEventHandler)
 
-	conn := webSocketHubConnection{connectionID: connectionID, ws: ws}
-	conn.start()
-
 	protocol, err := processHandshake(ws, &buf)
 
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
+
+	conn := webSocketHubConnection{protocol: protocol, connectionID: connectionID, ws: ws}
+	conn.start()
 
 	hubInfo.lifetimeManager.OnConnected(&conn)
 
