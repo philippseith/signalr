@@ -21,20 +21,29 @@ type Hub struct {
 	context HubContext
 }
 
-func (c *Hub) Initialize(ctx HubContext) {
-	c.context = ctx
+func (h *Hub) Initialize(ctx HubContext) {
+	h.context = ctx
 }
 
-func (c *Hub) Clients() HubClients {
-	return c.context.Clients()
+func (h *Hub) Clients() HubClients {
+	return h.context.Clients()
 }
 
-func (c *Hub) Groups() GroupManager {
-	return c.context.Groups()
+func (h *Hub) Groups() GroupManager {
+	return h.context.Groups()
+}
+
+func (h *Hub) OnConnected(connectionID string) {
+
+}
+func (h *Hub) OnDisconnected(connectionID string) {
+
 }
 
 type HubInterface interface {
 	Initialize(hubContext HubContext)
+	OnConnected(connectionID string)
+	OnDisconnected(connectionID string)
 }
 
 type HubLifetimeManager interface {
@@ -118,12 +127,6 @@ func (j *jsonHubProtocol) WriteMessage(message interface{}, writer io.Writer) er
 
 	_, err := writer.Write(buf.Bytes())
 	return err
-}
-
-// If the hub has these methods, we'll call them with the connection information
-type hubEventHandler interface {
-	OnConnected(connectionID string)
-	OnDisconnected(connectionID string)
 }
 
 type defaultHubContext struct {
@@ -430,8 +433,6 @@ func hubConnectionHandler(connectionID string, ws *websocket.Conn, hubInfo *hubI
 	var waitgroup sync.WaitGroup
 	var buf bytes.Buffer
 
-	hubEventHandler, hasEvents := hubInfo.hub.(hubEventHandler)
-
 	protocol, err := processHandshake(ws, &buf)
 
 	if err != nil {
@@ -443,10 +444,7 @@ func hubConnectionHandler(connectionID string, ws *websocket.Conn, hubInfo *hubI
 	conn.start()
 
 	hubInfo.lifetimeManager.OnConnected(&conn)
-
-	if hasEvents {
-		hubEventHandler.OnConnected(connectionID)
-	}
+	hubInfo.hub.OnConnected(connectionID)
 
 	// Start sending pings to the client
 	waitgroup.Add(1)
@@ -512,10 +510,7 @@ func hubConnectionHandler(connectionID string, ws *websocket.Conn, hubInfo *hubI
 		buf.Write(data)
 	}
 
-	if hasEvents {
-		hubEventHandler.OnDisconnected(connectionID)
-	}
-
+	hubInfo.hub.OnDisconnected(connectionID)
 	hubInfo.lifetimeManager.OnDisconnected(&conn)
 	conn.close("")
 
