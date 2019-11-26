@@ -6,39 +6,28 @@ import (
 	"../signalr"
 )
 
-type Chat interface {
+type Chat struct {
 	signalr.Hub // Implements Hub
-	OnConnected(connectionID string)
-	OnDisconnected(connectionID string)
-	Send(message string) string
 }
 
-type chat struct {
-	context signalr.HubContext
+func NewChat() *Chat {
+	return &Chat{}
 }
 
-func NewChat() Chat {
-	return &chat{}
-}
-
-func (c *chat) Initialize(ctx signalr.HubContext) {
-	c.context = ctx
-}
-
-func (c *chat) OnConnected(connectionID string) {
+func (c *Chat) OnConnected(connectionID string) {
 	fmt.Printf("%s connected\n", connectionID)
 
-	c.context.Groups().AddToGroup("group", connectionID)
+	c.Groups().AddToGroup("group", connectionID)
 }
 
-func (c *chat) OnDisconnected(connectionID string) {
+func (c *Chat) OnDisconnected(connectionID string) {
 	fmt.Printf("%s disconnected\n", connectionID)
 
-	c.context.Groups().RemoveFromGroup("group", connectionID)
+	c.Groups().RemoveFromGroup("group", connectionID)
 }
 
-func (c *chat) Send(message string) string {
-	c.context.Clients().Group("group").Send("send", message)
+func (c *Chat) Send(message string) string {
+	c.Clients().Group("group").Send("send", message)
 
 	return "Hello World"
 }

@@ -17,7 +17,23 @@ import (
 	"golang.org/x/net/websocket"
 )
 
-type Hub interface {
+type Hub struct {
+	context HubContext
+}
+
+func (c *Hub) Initialize(ctx HubContext) {
+	c.context = ctx
+}
+
+func (c *Hub) Clients() HubClients {
+	return c.context.Clients()
+}
+
+func (c *Hub) Groups() GroupManager {
+	return c.context.Groups()
+}
+
+type HubInterface interface {
 	Initialize(hubContext HubContext)
 }
 
@@ -202,7 +218,7 @@ func (d *defaultGroupManager) RemoveFromGroup(groupName string, connectionID str
 }
 
 type hubInfo struct {
-	hub             Hub
+	hub             HubInterface
 	lifetimeManager HubLifetimeManager
 	methods         map[string]reflect.Value
 }
@@ -568,7 +584,7 @@ var protocolMap map[string]HubProtocol = make(map[string]HubProtocol)
 var once sync.Once
 
 // MapHub used to register a SignalR Hub with the specified ServeMux
-func MapHub(mux *http.ServeMux, path string, hub Hub) {
+func MapHub(mux *http.ServeMux, path string, hub HubInterface) {
 
 	once.Do(func() {
 		protocolMap["json"] = &jsonHubProtocol{}
