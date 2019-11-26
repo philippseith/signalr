@@ -7,10 +7,10 @@ import (
 )
 
 type Chat interface {
+	signalr.Hub // Implements Hub
 	OnConnected(connectionID string)
 	OnDisconnected(connectionID string)
 	Send(message string) string
-	Initialize(clients signalr.HubContext)
 }
 
 type chat struct {
