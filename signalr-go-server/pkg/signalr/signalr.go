@@ -575,16 +575,12 @@ func getConnectionID() string {
 	return base64.StdEncoding.EncodeToString(bytes)
 }
 
-var protocolMap map[string]HubProtocol = make(map[string]HubProtocol)
-var once sync.Once
+var protocolMap map[string]HubProtocol = map[string]HubProtocol{
+	"json": &jsonHubProtocol{},
+}
 
 // MapHub used to register a SignalR Hub with the specified ServeMux
 func MapHub(mux *http.ServeMux, path string, hub HubInterface) {
-
-	once.Do(func() {
-		protocolMap["json"] = &jsonHubProtocol{}
-	})
-
 	lifetimeManager := defaultHubLifetimeManager{}
 	hubClients := defaultHubClients{
 		lifetimeManager: &lifetimeManager,
