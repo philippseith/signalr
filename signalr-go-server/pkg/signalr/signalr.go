@@ -120,6 +120,7 @@ func (j *jsonHubProtocol) WriteMessage(message interface{}, writer io.Writer) er
 	if err := json.NewEncoder(&buf).Encode(message); err != nil {
 		return err
 	}
+	fmt.Printf("Message sent %v", string(buf.Bytes()))
 
 	if err := buf.WriteByte(30); err != nil {
 		return err
@@ -485,11 +486,15 @@ func hubConnectionHandler(connectionID string, ws *websocket.Conn, hubInfo *hubI
 
 				result := method.Call(in)
 
-				if len(result) > 0 {
-					// REVIEW: When is this ever > 1
-					conn.completion(invocation.InvocationID, result[0].Interface(), "")
+				// if the hub method returns a chan, it should be considered asynchronous
+				if len(result) == 1 && result[0].Kind() == reflect.Chan {
+					go func() {
+						if chanResult, ok := result[0].Recv(); ok {
+							doCompletion(conn, invocation, []reflect.Value{chanResult})
+						}
+					}()
 				} else {
-					conn.completion(invocation.InvocationID, nil, "")
+					doCompletion(conn, invocation, result)
 				}
 
 				break
@@ -516,6 +521,20 @@ func hubConnectionHandler(connectionID string, ws *websocket.Conn, hubInfo *hubI
 
 	// Wait for pings to complete
 	waitgroup.Wait()
+}
+
+func doCompletion(conn webSocketHubConnection, invocation hubInvocationMessage, result []reflect.Value) {
+	if len(result) > 0 {
+		// REVIEW: When is this ever > 1
+		values := make([]interface{}, 0, len(result))
+		for _, rv := range result {
+			values = append(values, rv.Interface())
+		}
+		conn.completion(invocation.InvocationID, values, "")
+		//conn.completion(invocation.InvocationID, result[0].Interface(), "")
+	} else {
+		conn.completion(invocation.InvocationID, nil, "")
+	}
 }
 
 func parseTextMessageFormat(buf *bytes.Buffer) ([]byte, error) {

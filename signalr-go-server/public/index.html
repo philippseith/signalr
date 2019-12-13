@@ -3,6 +3,7 @@
 <body>
     <input type="text" id="message" />
     <input type="button" value="Send" id="send" />
+    <input type="button" value="RequestAsync" id="requestasync" />
     <ul id="messages">
     </ul>
 
@@ -20,9 +21,20 @@
                 }
             });
 
+            document.getElementById('requestasync').addEventListener('click', () => {
+                var val = document.getElementById('message').value;
+                if (val) {
+                    connection.invoke('requestasync', val).then(val => {
+                        var li = document.createElement('li');
+                        li.innerText = 'received ' + JSON.stringify(val);
+                        document.getElementById('messages').appendChild(li);
+                    })
+                }
+            });
+
             connection.on('send', message => {
                 var li = document.createElement('li');
-                li.innerText = message;
+                li.innerText = 'sent ' + message;
                 document.getElementById('messages').appendChild(li);
             });
 
