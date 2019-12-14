@@ -526,12 +526,11 @@ func hubConnectionHandler(connectionID string, ws *websocket.Conn, hubInfo *hubI
 func doCompletion(conn webSocketHubConnection, invocation hubInvocationMessage, result []reflect.Value) {
 	if len(result) > 0 {
 		// REVIEW: When is this ever > 1
-		values := make([]interface{}, 0, len(result))
-		for _, rv := range result {
-			values = append(values, rv.Interface())
+		values := make([]interface{}, len(result), len(result))
+		for i, rv := range result {
+			values[i] = rv.Interface()
 		}
 		conn.completion(invocation.InvocationID, values, "")
-		//conn.completion(invocation.InvocationID, result[0].Interface(), "")
 	} else {
 		conn.completion(invocation.InvocationID, nil, "")
 	}
