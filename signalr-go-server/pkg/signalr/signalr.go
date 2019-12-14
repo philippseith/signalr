@@ -101,7 +101,7 @@ func (j *jsonHubProtocol) ReadMessage(buf *bytes.Buffer) (interface{}, error) {
 	}
 
 	switch message.Type {
-	case 1:
+	case 1, 4:
 		invocation := hubInvocationMessage{}
 		err = json.Unmarshal(data, &invocation)
 		return invocation, err
@@ -280,6 +280,7 @@ type hubInvocationMessage struct {
 	Target       string            `json:"target"`
 	InvocationID string            `json:"invocationId"`
 	Arguments    []json.RawMessage `json:"arguments"`
+	StreamIds    []string          `json:"streamIds,omitempty"`
 }
 
 type sendOnlyHubInvocationMessage struct {
@@ -293,6 +294,12 @@ type completionMessage struct {
 	InvocationID string      `json:"invocationId"`
 	Result       interface{} `json:"result"`
 	Error        string      `json:"error"`
+}
+
+type streamItemMessage struct {
+	Type         int         `json:"type"`
+	InvocationID string      `json:"invocationId"`
+	Item       interface{} `json:"item"`
 }
 
 type closeMessage struct {
@@ -352,6 +359,16 @@ func (w *webSocketHubConnection) completion(id string, result interface{}, error
 	}
 
 	w.protocol.WriteMessage(completionMessage, w.ws)
+}
+
+func (w *webSocketHubConnection) streamItem(id string, item interface{}) {
+	var streamItemMessage = streamItemMessage{
+		Type:         3,
+		InvocationID: id,
+		Item:       item,
+	}
+
+	w.protocol.WriteMessage(streamItemMessage, w.ws)
 }
 
 func (w *webSocketHubConnection) ping() {
@@ -486,15 +503,34 @@ func hubConnectionHandler(connectionID string, ws *websocket.Conn, hubInfo *hubI
 
 				result := method.Call(in)
 
-				// if the hub method returns a chan, it should be considered asynchronous
+				// if the hub method returns a chan, it should be considered asynchronous or source for a stream
 				if len(result) == 1 && result[0].Kind() == reflect.Chan {
-					go func() {
-						if chanResult, ok := result[0].Recv(); ok {
-							doCompletion(conn, invocation, []reflect.Value{chanResult})
-						}
-					}()
+					switch invocation.Type {
+					// Simple invocation
+					case 1:
+						go func() {
+							if chanResult, ok := result[0].Recv(); ok {
+								simpleInvocationCompletion(conn, invocation, []reflect.Value{chanResult})
+							} else {
+								conn.completion(invocation.InvocationID, nil, "go channel closed")
+							}
+						}()
+					// StreamInvocation
+					case 4:
+						go func() {
+							for {
+								if chanResult, ok := result[0].Recv(); ok {
+									conn.streamItem(invocation.InvocationID, chanResult.Interface())
+								} else {
+									conn.completion(invocation.InvocationID, nil, "")
+									break
+								}
+							}
+						}()
+					}
 				} else {
-					doCompletion(conn, invocation, result)
+					simpleInvocationCompletion(conn, invocation, result)
+					// TODO StreamInvocation
 				}
 
 				break
@@ -523,9 +559,8 @@ func hubConnectionHandler(connectionID string, ws *websocket.Conn, hubInfo *hubI
 	waitgroup.Wait()
 }
 
-func doCompletion(conn webSocketHubConnection, invocation hubInvocationMessage, result []reflect.Value) {
+func simpleInvocationCompletion(conn webSocketHubConnection, invocation hubInvocationMessage, result []reflect.Value) {
 	if len(result) > 0 {
-		// REVIEW: When is this ever > 1
 		values := make([]interface{}, len(result), len(result))
 		for i, rv := range result {
 			values[i] = rv.Interface()
