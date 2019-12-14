@@ -3,6 +3,7 @@
 <body>
     <input type="text" id="message" />
     <input type="button" value="Send" id="send" />
+    <input type="button" value="RequestTuple" id="requesttuple" />
     <input type="button" value="RequestAsync" id="requestasync" />
     <ul id="messages">
     </ul>
@@ -25,6 +26,17 @@
                 var val = document.getElementById('message').value;
                 if (val) {
                     connection.invoke('requestasync', val).then(val => {
+                        var li = document.createElement('li');
+                        li.innerText = 'received finally ' + JSON.stringify(val);
+                        document.getElementById('messages').appendChild(li);
+                    })
+                }
+            });
+
+            document.getElementById('requesttuple').addEventListener('click', () => {
+                var val = document.getElementById('message').value;
+                if (val) {
+                    connection.invoke('requesttuple', val).then(val => {
                         var li = document.createElement('li');
                         li.innerText = 'received ' + JSON.stringify(val);
                         document.getElementById('messages').appendChild(li);

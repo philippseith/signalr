@@ -530,7 +530,11 @@ func doCompletion(conn webSocketHubConnection, invocation hubInvocationMessage, 
 		for i, rv := range result {
 			values[i] = rv.Interface()
 		}
-		conn.completion(invocation.InvocationID, values, "")
+		if len(values) == 1 {
+			conn.completion(invocation.InvocationID, values[0], "")
+		} else {
+			conn.completion(invocation.InvocationID, values, "")
+		}
 	} else {
 		conn.completion(invocation.InvocationID, nil, "")
 	}

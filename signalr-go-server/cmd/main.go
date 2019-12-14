@@ -42,6 +42,10 @@ func (c *chat) RequestAsync(message string) <-chan map[string]string {
 	return r
 }
 
+func (c *chat) RequestTuple(message string) (string, string, int) {
+	return strings.ToUpper(message), strings.ToLower(message), len(message)
+}
+
 func main() {
 	router := http.NewServeMux()
 	router.Handle("/", http.FileServer(http.Dir("../public")))
