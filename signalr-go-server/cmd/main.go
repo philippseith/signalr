@@ -57,7 +57,7 @@ func (c *chat) DateStream() <-chan string {
 	r := make(chan string)
 	go func() {
 		defer close(r)
-		for i := 0;  i < 5; i++ {
+		for i := 0;  i < 50; i++ {
 			r <- fmt.Sprint(time.Now().Clock())
 			time.Sleep(time.Second)
 		}

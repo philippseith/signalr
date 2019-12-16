@@ -8,12 +8,14 @@
     <input type="button" value="RequestTuple" id="requesttuple" />
     <input type="button" value="RequestAsync" id="requestasync" />
     <input type="button" value="Stream" id="stream" />
+    <input type="button" value="Stop Stream" id="stopstream" />
     <ul id="messages">
     </ul>
 
     <script src="js/signalr.js"></script>
     <script>
         (async function () {
+            var subscription
             var connection = new signalR.HubConnectionBuilder()
                 .withUrl('/chat')
                 .build();
@@ -60,7 +62,7 @@
                 }
             });
             document.getElementById('stream').addEventListener('click', () => {
-                connection.stream('datestream').subscribe({
+                subscription = connection.stream('datestream').subscribe({
                     next: (item) => {
                         var li = document.createElement('li');
                         li.innerText = 'item ' + item;
@@ -72,6 +74,11 @@
                         document.getElementById('messages').appendChild(li);
                     }
                 })
+            });
+            document.getElementById('stopstream').addEventListener('click', () => {
+                if (subscription) {
+                    subscription.dispose()
+                }
             });
 
             connection.on('send', message => {

@@ -81,6 +81,7 @@ func hubConnectionHandler(connectionID string, ws *websocket.Conn, hubInfo *hubI
 	var data []byte
 	var waitgroup sync.WaitGroup
 	var buf bytes.Buffer
+	var streamCancels = make(map[string]chan bool)
 
 	protocol, err := processHandshake(ws, &buf)
 
@@ -155,8 +156,15 @@ func hubConnectionHandler(connectionID string, ws *websocket.Conn, hubInfo *hubI
 						}()
 					// StreamInvocation
 					case 4:
-						go func() {
+						cancelChan := make(chan bool)
+						streamCancels[invocation.InvocationID] = cancelChan
+						go func(cancelChan chan bool) {
 							for {
+								select {
+								case <-cancelChan:
+									return
+								default:
+								}
 								if chanResult, ok := result[0].Recv(); ok {
 									conn.streamItem(invocation.InvocationID, chanResult.Interface())
 								} else {
@@ -164,7 +172,7 @@ func hubConnectionHandler(connectionID string, ws *websocket.Conn, hubInfo *hubI
 									break
 								}
 							}
-						}()
+						}(cancelChan)
 					}
 				} else {
 					switch invocation.Type {
@@ -176,11 +184,14 @@ func hubConnectionHandler(connectionID string, ws *websocket.Conn, hubInfo *hubI
 						invokeConnection(conn, invocation, streamItem, result)
 					}
 				}
-
-				break
+			case cancelInvocationMessage:
+				cancelInvocation := message.(cancelInvocationMessage)
+				if cancel, ok := streamCancels[cancelInvocation.InvocationID]; ok {
+					cancel <- true
+					delete(streamCancels, cancelInvocation.InvocationID)
+				}
 			case hubMessage:
 				// Ping
-				break
 			}
 		}
 

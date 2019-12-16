@@ -28,6 +28,10 @@ func (j *jsonHubProtocol) ReadMessage(buf *bytes.Buffer) (interface{}, error) {
 		invocation := hubInvocationMessage{}
 		err = json.Unmarshal(data, &invocation)
 		return invocation, err
+	case 5:
+		invocation := cancelInvocationMessage{}
+		err = json.Unmarshal(data, &invocation)
+		return invocation, err
 	default:
 		return message, nil
 	}

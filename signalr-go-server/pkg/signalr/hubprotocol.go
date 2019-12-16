@@ -44,6 +44,11 @@ type streamItemMessage struct {
 	Item         interface{} `json:"item"`
 }
 
+type cancelInvocationMessage struct {
+	Type         int         `json:"type"`
+	InvocationID string      `json:"invocationId"`
+}
+
 type closeMessage struct {
 	Type           int    `json:"type"`
 	Error          string `json:"error"`
