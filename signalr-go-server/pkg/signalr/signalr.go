@@ -510,7 +510,7 @@ func hubConnectionHandler(connectionID string, ws *websocket.Conn, hubInfo *hubI
 				result := func() []reflect.Value {
 					defer func() {
 						if err := recover(); err != nil {
-							conn.completion(invocation.InvocationID, nil, fmt.Sprintf("%v\n%v", err, debug.Stack()))
+							conn.completion(invocation.InvocationID, nil, fmt.Sprintf("%v\n%v", err, string(debug.Stack())))
 						}
 					}()
 					return method.Call(in)
