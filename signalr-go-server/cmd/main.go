@@ -15,13 +15,11 @@ type chat struct {
 
 func (c *chat) OnConnected(connectionID string) {
 	fmt.Printf("%s connected\n", connectionID)
-
 	c.Groups().AddToGroup("group", connectionID)
 }
 
 func (c *chat) OnDisconnected(connectionID string) {
 	fmt.Printf("%s disconnected\n", connectionID)
-
 	c.Groups().RemoveFromGroup("group", connectionID)
 }
 
@@ -31,6 +29,10 @@ func (c *chat) Send(message string) {
 
 func (c *chat) Echo(message string) {
 	c.Clients().Caller().Send("send", message)
+}
+
+func (c *chat) Panic() {
+	panic("Don't panic!")
 }
 
 func (c *chat) RequestAsync(message string) <-chan map[string]string {

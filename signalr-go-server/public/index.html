@@ -4,6 +4,7 @@
     <input type="text" id="message" />
     <input type="button" value="Send" id="send" />
     <input type="button" value="Echo" id="echo" />
+    <input type="button" value="Panic" id="panic" />
     <input type="button" value="RequestTuple" id="requesttuple" />
     <input type="button" value="RequestAsync" id="requestasync" />
     <ul id="messages">
@@ -27,6 +28,13 @@
                 if (val) {
                     connection.invoke('send', val);
                 }
+            });
+            document.getElementById('panic').addEventListener('click', () => {
+                connection.invoke('panic').catch((err) =>{
+                    var li = document.createElement('li');
+                    li.innerText = err;
+                    document.getElementById('messages').appendChild(li);
+                });
             });
 
             document.getElementById('requestasync').addEventListener('click', () => {
