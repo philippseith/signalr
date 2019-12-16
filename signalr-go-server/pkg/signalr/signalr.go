@@ -33,10 +33,10 @@ func (h *Hub) Groups() GroupManager {
 	return h.context.Groups()
 }
 
-func (h *Hub) OnConnected(connectionID string) {
+func (h *Hub) OnConnected(string) {
 
 }
-func (h *Hub) OnDisconnected(connectionID string) {
+func (h *Hub) OnDisconnected(string) {
 
 }
 
@@ -64,6 +64,7 @@ type HubClients interface {
 	All() ClientProxy
 	Client(connectionID string) ClientProxy
 	Group(groupName string) ClientProxy
+	Caller() ClientProxy
 }
 
 type GroupManager interface {
@@ -270,6 +271,10 @@ func (c *defaultHubClients) Group(groupName string) ClientProxy {
 	return &groupClientProxy{groupName: groupName, lifetimeManager: c.lifetimeManager}
 }
 
+func (c *defaultHubClients) Caller() ClientProxy {
+	panic("use only with contextHubClients")
+}
+
 // Protocol
 type hubMessage struct {
 	Type int `json:"type"`
@@ -299,7 +304,7 @@ type completionMessage struct {
 type streamItemMessage struct {
 	Type         int         `json:"type"`
 	InvocationID string      `json:"invocationId"`
-	Item       interface{} `json:"item"`
+	Item         interface{} `json:"item"`
 }
 
 type closeMessage struct {
@@ -365,7 +370,7 @@ func (w *webSocketHubConnection) streamItem(id string, item interface{}) {
 	var streamItemMessage = streamItemMessage{
 		Type:         3,
 		InvocationID: id,
-		Item:       item,
+		Item:         item,
 	}
 
 	w.protocol.WriteMessage(streamItemMessage, w.ws)
@@ -561,7 +566,7 @@ func hubConnectionHandler(connectionID string, ws *websocket.Conn, hubInfo *hubI
 
 func simpleInvocationCompletion(conn webSocketHubConnection, invocation hubInvocationMessage, result []reflect.Value) {
 	if len(result) > 0 {
-		values := make([]interface{}, len(result), len(result))
+		values := make([]interface{}, len(result))
 		for i, rv := range result {
 			values[i] = rv.Interface()
 		}
@@ -616,7 +621,7 @@ func negotiateHandler(w http.ResponseWriter, req *http.Request) {
 	response := negotiateResponse{
 		ConnectionID: connectionID,
 		AvailableTransports: []availableTransport{
-			availableTransport{
+			{
 				Transport:       "WebSockets",
 				TransferFormats: []string{"Text", "Binary"},
 			},
@@ -632,14 +637,35 @@ func getConnectionID() string {
 	return base64.StdEncoding.EncodeToString(bytes)
 }
 
-var protocolMap map[string]HubProtocol = map[string]HubProtocol{
+var protocolMap = map[string]HubProtocol {
 	"json": &jsonHubProtocol{},
 }
 
+type contextHubClients struct {
+	defaultHubClients HubClients
+	connectionID      string
+}
+
+func (c *contextHubClients) All() ClientProxy {
+	return c.defaultHubClients.All()
+}
+
+func (c *contextHubClients) Client(connectionID string) ClientProxy {
+	return c.defaultHubClients.Client(connectionID)
+}
+
+func (c *contextHubClients) Group(groupName string) ClientProxy {
+	return c.defaultHubClients.Group(groupName)
+}
+
+func (c *contextHubClients) Caller() ClientProxy {
+	return c.defaultHubClients.Client(c.connectionID)
+}
+
 // MapHub used to register a SignalR Hub with the specified ServeMux
-func MapHub(mux *http.ServeMux, path string, hub HubInterface) {
+func MapHub(mux *http.ServeMux, path string, hubPrototype HubInterface) {
 	lifetimeManager := defaultHubLifetimeManager{}
-	hubClients := defaultHubClients{
+	defaultHubClients := defaultHubClients{
 		lifetimeManager: &lifetimeManager,
 		allCache:        allClientProxy{lifetimeManager: &lifetimeManager},
 	}
@@ -648,26 +674,7 @@ func MapHub(mux *http.ServeMux, path string, hub HubInterface) {
 		lifetimeManager: &lifetimeManager,
 	}
 
-	hubContext := defaultHubContext{
-		clients: &hubClients,
-		groups:  &groupManager,
-	}
-
-	hubInfo := hubInfo{
-		hub:             hub,
-		lifetimeManager: &lifetimeManager,
-		methods:         make(map[string]reflect.Value),
-	}
-
-	hub.Initialize(&hubContext)
-
-	hubType := reflect.TypeOf(hub)
-	hubValue := reflect.ValueOf(hub)
-
-	for i := 0; i < hubType.NumMethod(); i++ {
-		m := hubType.Method(i)
-		hubInfo.methods[strings.ToLower(m.Name)] = hubValue.Method(i)
-	}
+	hubType := reflect.TypeOf(hubPrototype)
 
 	mux.HandleFunc(fmt.Sprintf("%s/negotiate", path), negotiateHandler)
 	mux.Handle(path, websocket.Handler(func(ws *websocket.Conn) {
@@ -678,6 +685,31 @@ func MapHub(mux *http.ServeMux, path string, hub HubInterface) {
 			connectionID = getConnectionID()
 		}
 
-		hubConnectionHandler(connectionID, ws, &hubInfo)
+		// Copy hubPrototype
+		hub := reflect.New(reflect.ValueOf(hubPrototype).Elem().Type()).Interface().(HubInterface)
+
+		hubContext := &defaultHubContext{
+			clients: &contextHubClients{
+				defaultHubClients: &defaultHubClients,
+				connectionID:      connectionID,
+			},
+			groups: &groupManager,
+		}
+
+		hub.Initialize(hubContext)
+
+		hubInfo := &hubInfo{
+			hub:             hub,
+			lifetimeManager: &lifetimeManager,
+			methods:         make(map[string]reflect.Value),
+		}
+
+		hubValue := reflect.ValueOf(hub)
+		for i := 0; i < hubType.NumMethod(); i++ {
+			m := hubType.Method(i)
+			hubInfo.methods[strings.ToLower(m.Name)] = hubValue.Method(i)
+		}
+
+		hubConnectionHandler(connectionID, ws, hubInfo)
 	}))
 }

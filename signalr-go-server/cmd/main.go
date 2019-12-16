@@ -29,6 +29,10 @@ func (c *chat) Send(message string) {
 	c.Clients().Group("group").Send("send", message)
 }
 
+func (c *chat) Echo(message string) {
+	c.Clients().Caller().Send("send", message)
+}
+
 func (c *chat) RequestAsync(message string) <-chan map[string]string {
 	r := make(chan map[string]string)
 	go func() {

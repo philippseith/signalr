@@ -3,6 +3,7 @@
 <body>
     <input type="text" id="message" />
     <input type="button" value="Send" id="send" />
+    <input type="button" value="Echo" id="echo" />
     <input type="button" value="RequestTuple" id="requesttuple" />
     <input type="button" value="RequestAsync" id="requestasync" />
     <ul id="messages">
@@ -15,6 +16,12 @@
                 .withUrl('/chat')
                 .build();
 
+            document.getElementById('echo').addEventListener('click', () => {
+                var val = document.getElementById('message').value;
+                if (val) {
+                    connection.invoke('echo', val);
+                }
+            });
             document.getElementById('send').addEventListener('click', () => {
                 var val = document.getElementById('message').value;
                 if (val) {
