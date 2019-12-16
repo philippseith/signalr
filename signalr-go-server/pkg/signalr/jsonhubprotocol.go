@@ -25,9 +25,17 @@ func (j *jsonHubProtocol) ReadMessage(buf *bytes.Buffer) (interface{}, error) {
 
 	switch message.Type {
 	case 1, 4:
-		invocation := hubInvocationMessage{}
+		invocation := invocationMessage{}
 		err = json.Unmarshal(data, &invocation)
 		return invocation, err
+	case 2:
+		streamItem := streamItemMessage{}
+		err = json.Unmarshal(data, &streamItem)
+		return streamItem, err
+	case 3:
+		completion := completionMessage{}
+		err := json.Unmarshal(data, &completion)
+		return completion, err
 	case 5:
 		invocation := cancelInvocationMessage{}
 		err = json.Unmarshal(data, &invocation)

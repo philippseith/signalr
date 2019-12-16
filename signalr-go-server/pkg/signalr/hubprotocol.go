@@ -17,7 +17,7 @@ type hubMessage struct {
 	Type int `json:"type"`
 }
 
-type hubInvocationMessage struct {
+type invocationMessage struct {
 	Type         int               `json:"type"`
 	Target       string            `json:"target"`
 	InvocationID string            `json:"invocationId"`

@@ -65,6 +65,10 @@ func (c *chat) DateStream() <-chan string {
 	return r
 }
 
+func (c *chat) UploadStream(upload <-chan string) {
+	c.Clients().All().Send(<- upload)
+}
+
 func main() {
 	router := http.NewServeMux()
 	router.Handle("/", http.FileServer(http.Dir("../public")))

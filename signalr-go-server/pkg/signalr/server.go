@@ -2,8 +2,6 @@ package signalr
 
 import (
 	"bytes"
-	"crypto/rand"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -82,6 +80,7 @@ func hubConnectionHandler(connectionID string, ws *websocket.Conn, hubInfo *hubI
 	var waitgroup sync.WaitGroup
 	var buf bytes.Buffer
 	var streamCancels = make(map[string]chan bool)
+	var upstreamChannels = make(map[string]interface{})
 
 	protocol, err := processHandshake(ws, &buf)
 
@@ -98,7 +97,14 @@ func hubConnectionHandler(connectionID string, ws *websocket.Conn, hubInfo *hubI
 
 	// Start sending pings to the client
 	waitgroup.Add(1)
-	go pingLoop(&waitgroup, &conn)
+	go func(waitGroup *sync.WaitGroup, conn hubConnection){
+		defer waitGroup.Done()
+
+		for conn.isConnected() {
+			conn.ping()
+			time.Sleep(5 * time.Second)
+		}
+	}(&waitgroup, &conn)
 
 	for conn.isConnected() {
 		for {
@@ -110,8 +116,8 @@ func hubConnectionHandler(connectionID string, ws *websocket.Conn, hubInfo *hubI
 			}
 
 			switch message.(type) {
-			case hubInvocationMessage:
-				invocation := message.(hubInvocationMessage)
+			case invocationMessage:
+				invocation := message.(invocationMessage)
 
 				// Dispatch invocation here
 				normalized := strings.ToLower(invocation.Target)
@@ -126,11 +132,23 @@ func hubConnectionHandler(connectionID string, ws *websocket.Conn, hubInfo *hubI
 
 				in := make([]reflect.Value, method.Type().NumIn())
 
+				chanCount := 0
 				for i := 0; i < method.Type().NumIn(); i++ {
 					t := method.Type().In(i)
-					arg := reflect.New(t)
-					json.Unmarshal(invocation.Arguments[i], arg.Interface())
-					in[i] = arg.Elem()
+					// if method arg is a chan, it is the target client-side streaming
+					if t.Kind() == reflect.Chan && len(invocation.StreamIds) > chanCount {
+						arg := reflect.MakeChan(t, 0)
+						upstreamChannels[invocation.StreamIds[chanCount]] = arg
+						// TODO is this working?
+						in[i] = arg
+						chanCount++
+						// TODO The method needs to be called in a goroutine, because it is expected to wait on its channel parameters
+					} else {
+						arg := reflect.New(t)
+						// TODO protocol specific
+						json.Unmarshal(invocation.Arguments[i-chanCount], arg.Interface())
+						in[i] = arg.Elem()
+					}
 				}
 
 				result := func() []reflect.Value {
@@ -190,6 +208,20 @@ func hubConnectionHandler(connectionID string, ws *websocket.Conn, hubInfo *hubI
 					cancel <- true
 					delete(streamCancels, cancelInvocation.InvocationID)
 				}
+			case streamItemMessage:
+				streamItem := message.(streamItemMessage)
+				if upChan, ok := upstreamChannels[streamItem.InvocationID]; ok {
+					chanT := reflect.TypeOf(upChan)
+					itemT := reflect.TypeOf(streamItem.Item)
+					if chanT.Elem() == itemT {
+						reflect.ValueOf(upChan).Send(reflect.ValueOf(streamItem.Item))
+					} else {
+						// TODO Log error
+					}
+				}
+			case completionMessage:
+				completion := message.(completionMessage)
+				delete(upstreamChannels, completion.InvocationID)
 			case hubMessage:
 				// Ping
 			}
@@ -214,70 +246,17 @@ func hubConnectionHandler(connectionID string, ws *websocket.Conn, hubInfo *hubI
 	waitgroup.Wait()
 }
 
-func processHandshake(ws *websocket.Conn, buf *bytes.Buffer) (HubProtocol, error) {
-	var err error
-	var data []byte
-	var protocol HubProtocol
-	var ok bool
-	const handshakeResponse = "{}\u001e"
-	const errorHandshakeResponse = "{\"error\":\"%s\"}\u001e"
+type connFunc func(conn webSocketHubConnection, invocation invocationMessage, value interface{})
 
-	// 5 seconds to process the handshake
-	ws.SetReadDeadline(time.Now().Add(5 * time.Second))
-
-	for {
-		if err = websocket.Message.Receive(ws, &data); err != nil {
-			break
-		}
-
-		buf.Write(data)
-
-		rawHandshake, err := parseTextMessageFormat(buf)
-
-		if err != nil {
-			// Partial message, read more data
-			continue
-		}
-
-		fmt.Println("Handshake received")
-
-		request := handshakeRequest{}
-		err = json.Unmarshal(rawHandshake, &request)
-
-		if err != nil {
-			// Malformed handshake
-			break
-		}
-
-		protocol, ok = protocolMap[request.Protocol]
-
-		if ok {
-			// Send the handshake response
-			err = websocket.Message.Send(ws, handshakeResponse)
-		} else {
-			// Protocol not supported
-			fmt.Printf("\"%s\" is the only supported protocol\n", request.Protocol)
-			err = websocket.Message.Send(ws, fmt.Sprintf(errorHandshakeResponse, fmt.Sprintf("Protocol \"%s\" not supported", request.Protocol)))
-		}
-		break
-	}
-
-	// Disable the timeout (either we already timeout out or)
-	ws.SetReadDeadline(time.Time{})
-
-	return protocol, err
-}
-type connFunc func(conn webSocketHubConnection, invocation hubInvocationMessage, value interface{})
-
-func completion(conn webSocketHubConnection, invocation hubInvocationMessage, value interface{}) {
+func completion(conn webSocketHubConnection, invocation invocationMessage, value interface{}) {
 	conn.completion(invocation.InvocationID, value, "")
 }
 
-func streamItem(conn webSocketHubConnection, invocation hubInvocationMessage, value interface{}) {
+func streamItem(conn webSocketHubConnection, invocation invocationMessage, value interface{}) {
 	conn.streamItem(invocation.InvocationID, value)
 }
 
-func invokeConnection(conn webSocketHubConnection, invocation hubInvocationMessage, connFunc connFunc, result []reflect.Value) {
+func invokeConnection(conn webSocketHubConnection, invocation invocationMessage, connFunc connFunc, result []reflect.Value) {
 	values := make([]interface{}, len(result))
 	for i, rv := range result {
 		values[i] = rv.Interface()
@@ -292,65 +271,5 @@ func invokeConnection(conn webSocketHubConnection, invocation hubInvocationMessa
 	}
 }
 
-func parseTextMessageFormat(buf *bytes.Buffer) ([]byte, error) {
-	// 30 = ASCII record separator
-	data, err := buf.ReadBytes(30)
-
-	if err != nil {
-		return data, err
-	}
-	// Remove the delimeter
-	return data[0 : len(data)-1], err
-}
-
-func pingLoop(waitGroup *sync.WaitGroup, conn hubConnection) {
-	defer waitGroup.Done()
-
-	for conn.isConnected() {
-		conn.ping()
-		time.Sleep(5 * time.Second)
-	}
-}
-
-type availableTransport struct {
-	Transport       string   `json:"transport"`
-	TransferFormats []string `json:"transferFormats"`
-}
-
-type negotiateResponse struct {
-	ConnectionID        string               `json:"connectionId"`
-	AvailableTransports []availableTransport `json:"availableTransports"`
-}
-
-func negotiateHandler(w http.ResponseWriter, req *http.Request) {
-	if req.Method != "POST" {
-		w.WriteHeader(400)
-		return
-	}
-
-	connectionID := getConnectionID()
-
-	response := negotiateResponse{
-		ConnectionID: connectionID,
-		AvailableTransports: []availableTransport{
-			{
-				Transport:       "WebSockets",
-				TransferFormats: []string{"Text", "Binary"},
-			},
-		},
-	}
-
-	json.NewEncoder(w).Encode(response)
-}
-
-func getConnectionID() string {
-	bytes := make([]byte, 16)
-	rand.Read(bytes)
-	return base64.StdEncoding.EncodeToString(bytes)
-}
-
-var protocolMap = map[string]HubProtocol {
-	"json": &jsonHubProtocol{},
-}
 
 
