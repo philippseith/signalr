@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"reflect"
+	"runtime/debug"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -506,7 +507,14 @@ func hubConnectionHandler(connectionID string, ws *websocket.Conn, hubInfo *hubI
 					in[i] = arg.Elem()
 				}
 
-				result := method.Call(in)
+				result := func() []reflect.Value {
+					defer func() {
+						if err := recover(); err != nil {
+							conn.completion(invocation.InvocationID, nil, fmt.Sprintf("%v\n%v", err, debug.Stack()))
+						}
+					}()
+					return method.Call(in)
+				}()
 
 				// if the hub method returns a chan, it should be considered asynchronous or source for a stream
 				if len(result) == 1 && result[0].Kind() == reflect.Chan {
