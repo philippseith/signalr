@@ -55,7 +55,7 @@ func (w *webSocketHubConnection) completion(id string, result interface{}, error
 
 func (w *webSocketHubConnection) streamItem(id string, item interface{}) {
 	var streamItemMessage = streamItemMessage{
-		Type:         3,
+		Type:         2,
 		InvocationID: id,
 		Item:         item,
 	}
@@ -67,7 +67,7 @@ func (w *webSocketHubConnection) close(error string) {
 	atomic.StoreInt32(&w.connected, 0)
 
 	var closeMessage = closeMessage{
-		Type:           6,
+		Type:           7,
 		Error:          error,
 		AllowReconnect: true,
 	}

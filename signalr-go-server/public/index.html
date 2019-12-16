@@ -7,6 +7,7 @@
     <input type="button" value="Panic" id="panic" />
     <input type="button" value="RequestTuple" id="requesttuple" />
     <input type="button" value="RequestAsync" id="requestasync" />
+    <input type="button" value="Stream" id="stream" />
     <ul id="messages">
     </ul>
 
@@ -57,6 +58,20 @@
                         document.getElementById('messages').appendChild(li);
                     })
                 }
+            });
+            document.getElementById('stream').addEventListener('click', () => {
+                connection.stream('datestream').subscribe({
+                    next: (item) => {
+                        var li = document.createElement('li');
+                        li.innerText = 'item ' + item;
+                        document.getElementById('messages').appendChild(li);
+                    },
+                    complete: () => {
+                        var li = document.createElement('li');
+                        li.innerText = 'complete';
+                        document.getElementById('messages').appendChild(li);
+                    }
+                })
             });
 
             connection.on('send', message => {

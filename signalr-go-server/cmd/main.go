@@ -38,6 +38,7 @@ func (c *chat) Panic() {
 func (c *chat) RequestAsync(message string) <-chan map[string]string {
 	r := make(chan map[string]string)
 	go func() {
+		defer close(r)
 		time.Sleep(5 * time.Second)
 		m := make(map[string]string)
 		m["ToUpper"] = strings.ToUpper(message)
@@ -50,6 +51,18 @@ func (c *chat) RequestAsync(message string) <-chan map[string]string {
 
 func (c *chat) RequestTuple(message string) (string, string, int) {
 	return strings.ToUpper(message), strings.ToLower(message), len(message)
+}
+
+func (c *chat) DateStream() <-chan string {
+	r := make(chan string)
+	go func() {
+		defer close(r)
+		for i := 0;  i < 5; i++ {
+			r <- fmt.Sprint(time.Now().Clock())
+			time.Sleep(time.Second)
+		}
+	}()
+	return r
 }
 
 func main() {
