@@ -213,7 +213,9 @@ func buildMethodArguments(method reflect.Value, invocation invocationMessage,
 		} else {
 			// it is not, so do the normal thing
 			arg := reflect.New(t)
-			protocol.UnmarshalArgument(invocation.Arguments[i-chanCount], arg.Interface())
+			if err := protocol.UnmarshalArgument(invocation.Arguments[i-chanCount], arg.Interface()); err != nil {
+				return arguments, chanCount > 0, err
+			}
 			arguments[i] = arg.Elem()
 		}
 	}
