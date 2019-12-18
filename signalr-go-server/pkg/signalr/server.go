@@ -75,9 +75,7 @@ type hubInfo struct {
 
 func hubConnectionHandler(connectionID string, ws *websocket.Conn, hubInfo *hubInfo) {
 	var err error
-	var data []byte
 	var buf bytes.Buffer
-	var upstreamChannels = make(map[string]reflect.Value)
 	protocol, err := processHandshake(ws, &buf)
 
 	if err != nil {
@@ -89,6 +87,7 @@ func hubConnectionHandler(connectionID string, ws *websocket.Conn, hubInfo *hubI
 	conn.start()
 
 	streamer := newStreamer(conn)
+	streamClient := newStreamClient()
 
 	hubInfo.lifetimeManager.OnConnected(&conn)
 	hubInfo.hub.OnConnected(connectionID)
@@ -108,49 +107,15 @@ func hubConnectionHandler(connectionID string, ws *websocket.Conn, hubInfo *hubI
 			switch message.(type) {
 			case invocationMessage:
 				invocation := message.(invocationMessage)
-
 				// Dispatch invocation here
-				normalized := strings.ToLower(invocation.Target)
-
-				method, ok := hubInfo.methods[normalized]
-
-				if !ok {
+				if method, ok := hubInfo.methods[strings.ToLower(invocation.Target)]; !ok {
 					// Unable to find the method
 					conn.completion(invocation.InvocationID, nil, fmt.Sprintf("Unknown method %s", invocation.Target))
-					break
-				}
-
-				in := make([]reflect.Value, method.Type().NumIn())
-
-				chanCount := 0
-				unmatchingChannelParams := false
-				for i := 0; i < method.Type().NumIn(); i++ {
-					t := method.Type().In(i)
-					// if method arg is a RecvDir or BothDir chan, it is the target client-side streaming
-					if t.Kind() == reflect.Chan && t.ChanDir() != reflect.SendDir {
-						// MakeChan does only accept bidirectional channels and we need to Send to this channel anyway
-						arg := reflect.MakeChan(reflect.ChanOf(reflect.BothDir, t.Elem()), 0)
-						if len(invocation.StreamIds) > chanCount {
-							upstreamChannels[invocation.StreamIds[chanCount]] = arg
-							chanCount++
-						} else {
-							// To many channel parameters in this method. The client will not send streamItems for these
-							conn.completion(invocation.InvocationID, nil, fmt.Sprintf("method %s has more chan parameters than the client will stream", invocation.Target))
-							unmatchingChannelParams = true
-							break
-						}
-						// TODO is this working?
-						in[i] = arg
-					} else {
-						arg := reflect.New(t)
-						protocol.UnmarshalArgument(invocation.Arguments[i-chanCount], arg.Interface())
-						in[i] = arg.Elem()
-					}
-				}
-				if unmatchingChannelParams {
-					break
-				}
-				if chanCount > 0 {
+				} else if in, clientStreaming, err := buildMethodArguments(method, invocation, streamClient, protocol); err != nil {
+					// argument build failed
+					conn.completion(invocation.InvocationID, nil, err.Error())
+				} else if clientStreaming {
+					// let the receiving method run idependently
 					go func() {
 						defer func() {
 							if err := recover(); err != nil {
@@ -159,70 +124,35 @@ func hubConnectionHandler(connectionID string, ws *websocket.Conn, hubInfo *hubI
 						}()
 						method.Call(in)
 					}()
-					break
-				}
-
-				result := func() []reflect.Value {
-					defer func() {
-						if err := recover(); err != nil {
-							conn.completion(invocation.InvocationID, nil, fmt.Sprintf("%v\n%v", err, string(debug.Stack())))
-						}
-					}()
-					return method.Call(in)
-				}()
-
-				// if the hub method returns a chan, it should be considered asynchronous or source for a stream
-				if len(result) == 1 && result[0].Kind() == reflect.Chan {
-					switch invocation.Type {
-					// Simple invocation
-					case 1:
-						go func() {
-							if chanResult, ok := result[0].Recv(); ok {
-								invokeConnection(conn, invocation, completion, []reflect.Value{chanResult})
-							} else {
-								conn.completion(invocation.InvocationID, nil, "go channel closed")
+				} else {
+					result := func() []reflect.Value {
+						defer func() {
+							if err := recover(); err != nil {
+								conn.completion(invocation.InvocationID, nil, fmt.Sprintf("%v\n%v", err, string(debug.Stack())))
 							}
 						}()
-					// StreamInvocation
-					case 4:
-						streamer.Start(invocation.InvocationID, result[0])
-					}
-				} else {
-					switch invocation.Type {
-					// Simple invocation
-					case 1:
-						invokeConnection(conn, invocation, completion, result)
-					case 4:
-						// Stream invocation
-						invokeConnection(conn, invocation, streamItem, result)
-					}
+						return method.Call(in)
+					}()
+					returnInvocationResult(conn, invocation, streamer, result)
 				}
 			case cancelInvocationMessage:
-				cancelInvocationMessage := message.(cancelInvocationMessage)
-				streamer.Stop(cancelInvocationMessage.InvocationID)
+				streamer.Stop(message.(cancelInvocationMessage).InvocationID)
 			case streamItemMessage:
-				streamItem := message.(streamItemMessage)
-				if upChan, ok := upstreamChannels[streamItem.InvocationID]; ok {
-					upChan.Send(reflect.ValueOf(streamItem.Item))
-				}
+				streamClient.receiveStreamItem(message.(streamItemMessage))
 			case completionMessage:
-				completion := message.(completionMessage)
-				channel := upstreamChannels[completion.InvocationID]
-				channel.Close()
-				delete(upstreamChannels, completion.InvocationID)
+				streamClient.receiveCompletionItem(message.(completionMessage))
 			case hubMessage:
 				// Ping
 			}
 		}
 
+		var data []byte
 		if err = websocket.Message.Receive(ws, &data); err != nil {
 			fmt.Println(err)
 			break
 		}
-
 		// Main message loop
 		fmt.Println("Message received " + string(data))
-
 		buf.Write(data)
 	}
 
@@ -232,6 +162,62 @@ func hubConnectionHandler(connectionID string, ws *websocket.Conn, hubInfo *hubI
 
 	// Wait for pings to complete
 	pings.Wait()
+}
+
+func returnInvocationResult(conn webSocketHubConnection, invocation invocationMessage, streamer *streamer, result []reflect.Value) {
+	// if the hub method returns a chan, it should be considered asynchronous or source for a stream
+	if len(result) == 1 && result[0].Kind() == reflect.Chan {
+		switch invocation.Type {
+		// Simple invocation
+		case 1:
+			go func() {
+				// Recv might block, so run continue in a goroutine
+				if chanResult, ok := result[0].Recv(); ok {
+					invokeConnection(conn, invocation, completion, []reflect.Value{chanResult})
+				} else {
+					conn.completion(invocation.InvocationID, nil, "go channel closed")
+				}
+			}()
+		// StreamInvocation
+		case 4:
+			streamer.Start(invocation.InvocationID, result[0])
+		}
+	} else {
+		switch invocation.Type {
+		// Simple invocation
+		case 1:
+			invokeConnection(conn, invocation, completion, result)
+		case 4:
+			// Stream invocation of method with no stream result.
+			// Return a single StreamItem and an empty completion
+			invokeConnection(conn, invocation, streamItem, result)
+			conn.completion(invocation.InvocationID, nil, "")
+		}
+	}
+}
+
+func buildMethodArguments(method reflect.Value, invocation invocationMessage,
+	streamClient *streamClient, protocol HubProtocol) (arguments []reflect.Value, clientStreaming bool, err error) {
+	arguments = make([]reflect.Value, method.Type().NumIn())
+	chanCount := 0
+	for i := 0; i < method.Type().NumIn(); i++ {
+		t := method.Type().In(i)
+		// Is it a channel for client streaming?
+		if arg, clientStreaming, err := streamClient.buildChannelArgument(invocation, t, chanCount); err != nil {
+			// it is, but channel count in invocation and method mismatch
+			return nil, false, err
+		} else if clientStreaming {
+			// it is
+			chanCount++
+			arguments[i] = arg
+		} else {
+			// it is not, so do the normal thing
+			arg := reflect.New(t)
+			protocol.UnmarshalArgument(invocation.Arguments[i-chanCount], arg.Interface())
+			arguments[i] = arg.Elem()
+		}
+	}
+	return arguments, chanCount > 0, nil
 }
 
 func startPingClientLoop(conn webSocketHubConnection) sync.WaitGroup {

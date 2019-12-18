@@ -2,23 +2,18 @@ package signalr
 
 import "reflect"
 
-type streamer interface {
-	Start(invocationID string, reflectedChannel reflect.Value)
-	Stop(invocationID string)
+func newStreamer(conn webSocketHubConnection) *streamer {
+	return &streamer{make(map[string]chan bool), conn }
 }
 
-func newStreamer(conn webSocketHubConnection) streamer {
-	return &defaultStreamer{make(map[string]chan bool), conn }
-}
-
-type defaultStreamer struct {
+type streamer struct {
 	streamCancels map[string]chan bool
 	conn          webSocketHubConnection
 }
 
-func (d *defaultStreamer) Start(invocationID string, reflectedChannel reflect.Value) {
+func (s *streamer) Start(invocationID string, reflectedChannel reflect.Value) {
 	cancelChan := make(chan bool)
-	d.streamCancels[invocationID] = cancelChan
+	s.streamCancels[invocationID] = cancelChan
 	go func(cancelChan chan bool) {
 		defer close(cancelChan)
 		for {
@@ -29,21 +24,21 @@ func (d *defaultStreamer) Start(invocationID string, reflectedChannel reflect.Va
 					return
 				default:
 				}
-				d.conn.streamItem(invocationID, chanResult.Interface())
+				s.conn.streamItem(invocationID, chanResult.Interface())
 			} else {
-				d.conn.completion(invocationID, nil, "")
+				s.conn.completion(invocationID, nil, "")
 				break
 			}
 		}
 	}(cancelChan)
 }
 
-func (d *defaultStreamer) Stop(invocationID string) {
-	if cancel, ok := d.streamCancels[invocationID]; ok {
+func (s *streamer) Stop(invocationID string) {
+	if cancel, ok := s.streamCancels[invocationID]; ok {
 		go func() {
 			// in goroutine, because cancel might not be read when stream producer hangs
 			cancel <- true
-			delete(d.streamCancels, invocationID)
+			delete(s.streamCancels, invocationID)
 		}()
 	}
 }
