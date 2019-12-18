@@ -2,7 +2,6 @@ package signalr
 
 import (
 	"bytes"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"reflect"
@@ -77,11 +76,8 @@ type hubInfo struct {
 func hubConnectionHandler(connectionID string, ws *websocket.Conn, hubInfo *hubInfo) {
 	var err error
 	var data []byte
-	var waitgroup sync.WaitGroup
 	var buf bytes.Buffer
-	var streamCancels = make(map[string]chan bool)
 	var upstreamChannels = make(map[string]interface{})
-
 	protocol, err := processHandshake(ws, &buf)
 
 	if err != nil {
@@ -98,15 +94,7 @@ func hubConnectionHandler(connectionID string, ws *websocket.Conn, hubInfo *hubI
 	hubInfo.hub.OnConnected(connectionID)
 
 	// Start sending pings to the client
-	waitgroup.Add(1)
-	go func(waitGroup *sync.WaitGroup, conn hubConnection){
-		defer waitGroup.Done()
-
-		for conn.isConnected() {
-			conn.ping()
-			time.Sleep(5 * time.Second)
-		}
-	}(&waitgroup, &conn)
+	pings := startPingClientLoop(conn)
 
 	for conn.isConnected() {
 		for {
@@ -135,21 +123,43 @@ func hubConnectionHandler(connectionID string, ws *websocket.Conn, hubInfo *hubI
 				in := make([]reflect.Value, method.Type().NumIn())
 
 				chanCount := 0
+				unmatchingChannelParams := false
 				for i := 0; i < method.Type().NumIn(); i++ {
 					t := method.Type().In(i)
 					// if method arg is a chan, it is the target client-side streaming
-					if t.Kind() == reflect.Chan && len(invocation.StreamIds) > chanCount {
+					if t.Kind() == reflect.Chan {
 						arg := reflect.MakeChan(t, 0)
-						upstreamChannels[invocation.StreamIds[chanCount]] = arg
+						if len(invocation.StreamIds) > chanCount {
+							upstreamChannels[invocation.StreamIds[chanCount]] = arg
+							chanCount++
+							// TODO The method needs to be called in a goroutine, because it is expected to wait on its channel parameters
+						} else {
+							// To many channel parameters in this method. The client will not send streamItems for these
+							conn.completion(invocation.InvocationID, nil, fmt.Sprintf("method %s has more chan parameters than the client will stream", invocation.Target))
+							unmatchingChannelParams = true
+							break
+						}
 						// TODO is this working?
 						in[i] = arg
-						chanCount++
-						// TODO The method needs to be called in a goroutine, because it is expected to wait on its channel parameters
 					} else {
 						arg := reflect.New(t)
 						protocol.UnmarshalArgument(invocation.Arguments[i-chanCount], arg.Interface())
 						in[i] = arg.Elem()
 					}
+				}
+				if unmatchingChannelParams {
+					break
+				}
+				if chanCount > 0 {
+					go func() {
+						defer func() {
+							if err := recover(); err != nil {
+								conn.completion(invocation.InvocationID, nil, fmt.Sprintf("%v\n%v", err, string(debug.Stack())))
+							}
+						}()
+						method.Call(in)
+					}()
+					break
 				}
 
 				result := func() []reflect.Value {
@@ -225,7 +235,21 @@ func hubConnectionHandler(connectionID string, ws *websocket.Conn, hubInfo *hubI
 	conn.close("")
 
 	// Wait for pings to complete
-	waitgroup.Wait()
+	pings.Wait()
+}
+
+func startPingClientLoop(conn webSocketHubConnection) sync.WaitGroup {
+	var waitgroup sync.WaitGroup
+	waitgroup.Add(1)
+	go func(waitGroup *sync.WaitGroup, conn hubConnection) {
+		defer waitGroup.Done()
+
+		for conn.isConnected() {
+			conn.ping()
+			time.Sleep(5 * time.Second)
+		}
+	}(&waitgroup, &conn)
+	return waitgroup
 }
 
 type connFunc func(conn webSocketHubConnection, invocation invocationMessage, value interface{})
