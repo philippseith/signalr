@@ -92,6 +92,8 @@ func hubConnectionHandler(connectionID string, ws *websocket.Conn, hubInfo *hubI
 	conn := webSocketHubConnection{protocol: protocol, connectionID: connectionID, ws: ws}
 	conn.start()
 
+	streamer := newStreamer(conn)
+
 	hubInfo.lifetimeManager.OnConnected(&conn)
 	hubInfo.hub.OnConnected(connectionID)
 
@@ -173,23 +175,7 @@ func hubConnectionHandler(connectionID string, ws *websocket.Conn, hubInfo *hubI
 						}()
 					// StreamInvocation
 					case 4:
-						cancelChan := make(chan bool)
-						streamCancels[invocation.InvocationID] = cancelChan
-						go func(cancelChan chan bool) {
-							for {
-								select {
-								case <-cancelChan:
-									return
-								default:
-								}
-								if chanResult, ok := result[0].Recv(); ok {
-									conn.streamItem(invocation.InvocationID, chanResult.Interface())
-								} else {
-									conn.completion(invocation.InvocationID, nil, "")
-									break
-								}
-							}
-						}(cancelChan)
+						streamer.Start(invocation.InvocationID, result[0])
 					}
 				} else {
 					switch invocation.Type {
@@ -202,11 +188,8 @@ func hubConnectionHandler(connectionID string, ws *websocket.Conn, hubInfo *hubI
 					}
 				}
 			case cancelInvocationMessage:
-				cancelInvocation := message.(cancelInvocationMessage)
-				if cancel, ok := streamCancels[cancelInvocation.InvocationID]; ok {
-					cancel <- true
-					delete(streamCancels, cancelInvocation.InvocationID)
-				}
+				cancelInvocationMessage := message.(cancelInvocationMessage)
+				streamer.Stop(cancelInvocationMessage.InvocationID)
 			case streamItemMessage:
 				streamItem := message.(streamItemMessage)
 				if upChan, ok := upstreamChannels[streamItem.InvocationID]; ok {
