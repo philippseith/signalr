@@ -65,10 +65,10 @@ func (c *chat) DateStream() <-chan string {
 	return r
 }
 
-func (c *chat) UploadStream(upload1 <-chan float64, factor float64, upload2 <-chan float64) {
+func (c *chat) UploadStream(upload1 <-chan int, factor float64, upload2 <-chan float64) {
 	ok1 := true
 	ok2 := true
-	u1 := 0.0
+	u1 := 0
 	u2 := 0.0
 	c.Send(fmt.Sprintf("f: %v", factor))
 	for {

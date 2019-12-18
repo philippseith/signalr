@@ -29,7 +29,42 @@ func (u *streamClient) buildChannelArgument(invocation invocationMessage, argTyp
 
 func (u *streamClient) receiveStreamItem(streamItem streamItemMessage) {
 	if upChan, ok := u.upstreamChannels[streamItem.InvocationID]; ok {
-		upChan.Send(reflect.ValueOf(streamItem.Item))
+		// Hack(?) for missing channel type information when the protocol decodes streamItem.Item
+		// Protocol specific, as only json has this inexact number type. Messagepack might cause different problems
+		if f, ok := streamItem.Item.(float64); ok {
+			// This type of solution is constrained to basic types, e.g. chan MyInt is not supported
+			chanElm := reflect.Indirect(reflect.New(upChan.Type().Elem())).Interface()
+			switch chanElm.(type) {
+			case int:
+				upChan.Send(reflect.ValueOf(int(f)))
+			case int8:
+				upChan.Send(reflect.ValueOf(int8(f)))
+			case int16:
+				upChan.Send(reflect.ValueOf(int16(f)))
+			case int32:
+				upChan.Send(reflect.ValueOf(int32(f)))
+			case int64:
+				upChan.Send(reflect.ValueOf(int64(f)))
+			case uint:
+				upChan.Send(reflect.ValueOf(uint(f)))
+			case uint8:
+				upChan.Send(reflect.ValueOf(uint8(f)))
+			case uint16:
+				upChan.Send(reflect.ValueOf(uint16(f)))
+			case uint32:
+				upChan.Send(reflect.ValueOf(uint32(f)))
+			case uint64:
+				upChan.Send(reflect.ValueOf(uint64(f)))
+			case float32:
+				upChan.Send(reflect.ValueOf(float32(f)))
+			case float64:
+				upChan.Send(reflect.ValueOf(f))
+			case string:
+				upChan.Send(reflect.ValueOf(fmt.Sprint(f)))
+			}
+		} else {
+			upChan.Send(reflect.ValueOf(streamItem.Item))
+		}
 	}
 }
 
