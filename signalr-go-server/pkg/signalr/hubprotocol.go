@@ -2,7 +2,6 @@ package signalr
 
 import (
 	"bytes"
-	"encoding/json"
 	"io"
 )
 
@@ -10,6 +9,7 @@ import (
 type HubProtocol interface {
 	ReadMessage(buf *bytes.Buffer) (interface{}, error)
 	WriteMessage(message interface{}, writer io.Writer) error
+	UnmarshalArgument(argument interface{}, value interface{}) error
 }
 
 // Protocol
@@ -18,11 +18,11 @@ type hubMessage struct {
 }
 
 type invocationMessage struct {
-	Type         int               `json:"type"`
-	Target       string            `json:"target"`
-	InvocationID string            `json:"invocationId"`
-	Arguments    []json.RawMessage `json:"arguments"`
-	StreamIds    []string          `json:"streamIds,omitempty"`
+	Type         int
+	Target       string
+	InvocationID string
+	Arguments    []interface{}
+	StreamIds    []string
 }
 
 type sendOnlyHubInvocationMessage struct {

@@ -10,6 +10,19 @@ import (
 type jsonHubProtocol struct {
 }
 
+// protocol specific message for correct unmarshaling Arguments
+type jsonInvocationMessage struct {
+	Type         int               `json:"type"`
+	Target       string            `json:"target"`
+	InvocationID string            `json:"invocationId"`
+	Arguments    []json.RawMessage `json:"arguments"`
+	StreamIds    []string          `json:"streamIds,omitempty"`
+}
+
+func (j *jsonHubProtocol) UnmarshalArgument(argument interface{}, value interface{}) error {
+	return json.Unmarshal(argument.(json.RawMessage), value)
+}
+
 func (j *jsonHubProtocol) ReadMessage(buf *bytes.Buffer) (interface{}, error) {
 	data, err := parseTextMessageFormat(buf)
 	if err != nil {
@@ -25,8 +38,19 @@ func (j *jsonHubProtocol) ReadMessage(buf *bytes.Buffer) (interface{}, error) {
 
 	switch message.Type {
 	case 1, 4:
-		invocation := invocationMessage{}
-		err = json.Unmarshal(data, &invocation)
+		jsonInvocation := jsonInvocationMessage{}
+		err = json.Unmarshal(data, &jsonInvocation)
+		arguments := make([]interface{}, len(jsonInvocation.Arguments))
+		for i, a := range jsonInvocation.Arguments {
+			arguments[i] = a
+		}
+		invocation := invocationMessage{
+			Type:         jsonInvocation.Type,
+			Target:       jsonInvocation.Target,
+			InvocationID: jsonInvocation.InvocationID,
+			Arguments:    arguments,
+			StreamIds:    jsonInvocation.StreamIds,
+		}
 		return invocation, err
 	case 2:
 		streamItem := streamItemMessage{}
@@ -64,4 +88,6 @@ func (j *jsonHubProtocol) WriteMessage(message interface{}, writer io.Writer) er
 	_, err := writer.Write(buf.Bytes())
 	return err
 }
+
+
 

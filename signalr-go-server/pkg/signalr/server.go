@@ -145,8 +145,7 @@ func hubConnectionHandler(connectionID string, ws *websocket.Conn, hubInfo *hubI
 						// TODO The method needs to be called in a goroutine, because it is expected to wait on its channel parameters
 					} else {
 						arg := reflect.New(t)
-						// TODO protocol specific
-						json.Unmarshal(invocation.Arguments[i-chanCount], arg.Interface())
+						protocol.UnmarshalArgument(invocation.Arguments[i-chanCount], arg.Interface())
 						in[i] = arg.Elem()
 					}
 				}
