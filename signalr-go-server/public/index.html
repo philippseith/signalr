@@ -9,6 +9,7 @@
     <input type="button" value="RequestAsync" id="requestasync" />
     <input type="button" value="Stream" id="stream" />
     <input type="button" value="Stop Stream" id="stopstream" />
+    <input type="button" value="Upstream" id="upstream" />
     <ul id="messages">
     </ul>
 
@@ -79,6 +80,29 @@
                 if (subscription) {
                     subscription.dispose()
                 }
+            });
+            document.getElementById('upstream').addEventListener('click', () => {
+                const subject1 = new signalR.Subject();
+                const subject2 = new signalR.Subject();
+                connection.send("uploadstream", subject1, 3, subject2);
+                var iteration1 = 0;
+                const intervalHandle1 = setInterval(() => {
+                    iteration1++;
+                    subject1.next(iteration1);
+                    if (iteration1 === 5) {
+                        clearInterval(intervalHandle1);
+                        subject1.complete();
+                    }
+                }, 500);
+                var iteration2 = 0;
+                const intervalHandle2 = setInterval(() => {
+                    iteration2++;
+                    subject2.next(iteration2);
+                    if (iteration2 === 10) {
+                        clearInterval(intervalHandle2);
+                        subject2.complete();
+                    }
+                }, 100);
             });
 
             connection.on('send', message => {

@@ -77,7 +77,7 @@ func hubConnectionHandler(connectionID string, ws *websocket.Conn, hubInfo *hubI
 	var err error
 	var data []byte
 	var buf bytes.Buffer
-	var upstreamChannels = make(map[string]interface{})
+	var upstreamChannels = make(map[string]reflect.Value)
 	protocol, err := processHandshake(ws, &buf)
 
 	if err != nil {
@@ -126,13 +126,13 @@ func hubConnectionHandler(connectionID string, ws *websocket.Conn, hubInfo *hubI
 				unmatchingChannelParams := false
 				for i := 0; i < method.Type().NumIn(); i++ {
 					t := method.Type().In(i)
-					// if method arg is a chan, it is the target client-side streaming
-					if t.Kind() == reflect.Chan {
-						arg := reflect.MakeChan(t, 0)
+					// if method arg is a RecvDir or BothDir chan, it is the target client-side streaming
+					if t.Kind() == reflect.Chan && t.ChanDir() != reflect.SendDir {
+						// MakeChan does only accept bidirectional channels and we need to Send to this channel anyway
+						arg := reflect.MakeChan(reflect.ChanOf(reflect.BothDir, t.Elem()), 0)
 						if len(invocation.StreamIds) > chanCount {
 							upstreamChannels[invocation.StreamIds[chanCount]] = arg
 							chanCount++
-							// TODO The method needs to be called in a goroutine, because it is expected to wait on its channel parameters
 						} else {
 							// To many channel parameters in this method. The client will not send streamItems for these
 							conn.completion(invocation.InvocationID, nil, fmt.Sprintf("method %s has more chan parameters than the client will stream", invocation.Target))
@@ -203,16 +203,12 @@ func hubConnectionHandler(connectionID string, ws *websocket.Conn, hubInfo *hubI
 			case streamItemMessage:
 				streamItem := message.(streamItemMessage)
 				if upChan, ok := upstreamChannels[streamItem.InvocationID]; ok {
-					chanT := reflect.TypeOf(upChan)
-					itemT := reflect.TypeOf(streamItem.Item)
-					if chanT.Elem() == itemT {
-						reflect.ValueOf(upChan).Send(reflect.ValueOf(streamItem.Item))
-					} else {
-						// TODO Log error
-					}
+					upChan.Send(reflect.ValueOf(streamItem.Item))
 				}
 			case completionMessage:
 				completion := message.(completionMessage)
+				channel := upstreamChannels[completion.InvocationID]
+				channel.Close()
 				delete(upstreamChannels, completion.InvocationID)
 			case hubMessage:
 				// Ping

@@ -65,8 +65,31 @@ func (c *chat) DateStream() <-chan string {
 	return r
 }
 
-func (c *chat) UploadStream(upload <-chan string) {
-	c.Clients().All().Send(<- upload)
+func (c *chat) UploadStream(upload1 <-chan float64, factor float64, upload2 <-chan float64) {
+	ok1 := true
+	ok2 := true
+	u1 := 0.0
+	u2 := 0.0
+	c.Send(fmt.Sprintf("f: %v", factor))
+	for {
+		select {
+		case u1, ok1 = <-upload1:
+			if ok1 {
+				c.Send(fmt.Sprintf("u1: %v", u1))
+			} else if !ok2 {
+				c.Send("Finished")
+				return
+			}
+		case u2, ok2 = <-upload2:
+			if ok2 {
+				c.Send(fmt.Sprintf("u2: %v", u2))
+			} else if !ok1  {
+				c.Send("Finished")
+				return
+			}
+		default:
+		}
+	}
 }
 
 func main() {
