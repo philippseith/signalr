@@ -1,7 +1,7 @@
 package main
 
 import (
-	"../pkg/signalr"
+	"../signalr"
 	"fmt"
 	"log"
 	"net/http"

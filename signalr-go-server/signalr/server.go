@@ -222,7 +222,7 @@ func buildMethodArguments(method reflect.Value, invocation invocationMessage,
 	return arguments, chanCount > 0, nil
 }
 
-func startPingClientLoop(conn webSocketHubConnection) sync.WaitGroup {
+func startPingClientLoop(conn webSocketHubConnection) *sync.WaitGroup {
 	var waitgroup sync.WaitGroup
 	waitgroup.Add(1)
 	go func(waitGroup *sync.WaitGroup, conn hubConnection) {
@@ -233,7 +233,7 @@ func startPingClientLoop(conn webSocketHubConnection) sync.WaitGroup {
 			time.Sleep(5 * time.Second)
 		}
 	}(&waitgroup, &conn)
-	return waitgroup
+	return &waitgroup
 }
 
 type connFunc func(conn webSocketHubConnection, invocation invocationMessage, value interface{})
