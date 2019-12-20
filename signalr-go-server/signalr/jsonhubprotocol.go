@@ -10,7 +10,7 @@ import (
 type jsonHubProtocol struct {
 }
 
-// protocol specific message for correct unmarshaling Arguments
+// protocol specific message for correct unmarshaling of Arguments
 type jsonInvocationMessage struct {
 	Type         int               `json:"type"`
 	Target       string            `json:"target"`

@@ -25,12 +25,10 @@ func MapHub(mux *http.ServeMux, path string, hubPrototype HubInterface) {
 		lifetimeManager: &lifetimeManager,
 	}
 
-	hubType := reflect.TypeOf(hubPrototype)
-
 	mux.HandleFunc(fmt.Sprintf("%s/negotiate", path), negotiateHandler)
 	mux.Handle(path, websocket.Handler(func(ws *websocket.Conn) {
-		connectionID := ws.Request().URL.Query().Get("id")
 
+		connectionID := ws.Request().URL.Query().Get("id")
 		if len(connectionID) == 0 {
 			// Support websocket connection without negotiate
 			connectionID = getConnectionID()
@@ -39,15 +37,13 @@ func MapHub(mux *http.ServeMux, path string, hubPrototype HubInterface) {
 		// Copy hubPrototype
 		hub := reflect.New(reflect.ValueOf(hubPrototype).Elem().Type()).Interface().(HubInterface)
 
-		hubContext := &defaultHubContext{
+		hub.Initialize(&defaultHubContext{
 			clients: &contextHubClients{
 				defaultHubClients: &defaultHubClients,
 				connectionID:      connectionID,
 			},
 			groups: &groupManager,
-		}
-
-		hub.Initialize(hubContext)
+		})
 
 		hubInfo := &hubInfo{
 			hub:             hub,
@@ -55,6 +51,7 @@ func MapHub(mux *http.ServeMux, path string, hubPrototype HubInterface) {
 			methods:         make(map[string]reflect.Value),
 		}
 
+		hubType := reflect.TypeOf(hub)
 		hubValue := reflect.ValueOf(hub)
 		for i := 0; i < hubType.NumMethod(); i++ {
 			m := hubType.Method(i)
