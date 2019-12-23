@@ -45,21 +45,24 @@ func MapHub(mux *http.ServeMux, path string, hubPrototype HubInterface) {
 			groups: &groupManager,
 		})
 
-		hubInfo := &hubInfo{
-			hub:             hub,
-			lifetimeManager: &lifetimeManager,
-			methods:         make(map[string]reflect.Value),
-		}
-
-		hubType := reflect.TypeOf(hub)
-		hubValue := reflect.ValueOf(hub)
-		for i := 0; i < hubType.NumMethod(); i++ {
-			m := hubType.Method(i)
-			hubInfo.methods[strings.ToLower(m.Name)] = hubValue.Method(i)
-		}
-
-		hubConnectionHandler(connectionID, ws, hubInfo)
+		webSocketMessageLoop(connectionID, ws, buildHubInfo(hub, &lifetimeManager))
 	}))
+}
+
+func buildHubInfo(hub HubInterface, lifetimeManager HubLifetimeManager) *hubInfo {
+	hubInfo := &hubInfo{
+		hub:             hub,
+		lifetimeManager: lifetimeManager,
+		methods:         make(map[string]reflect.Value),
+	}
+
+	hubType := reflect.TypeOf(hub)
+	hubValue := reflect.ValueOf(hub)
+	for i := 0; i < hubType.NumMethod(); i++ {
+		m := hubType.Method(i)
+		hubInfo.methods[strings.ToLower(m.Name)] = hubValue.Method(i)
+	}
+	return hubInfo
 }
 
 // Implementation
@@ -70,37 +73,35 @@ type hubInfo struct {
 	methods         map[string]reflect.Value
 }
 
-func hubConnectionHandler(connectionID string, ws *websocket.Conn, hubInfo *hubInfo) {
-	var err error
+func webSocketMessageLoop(connectionID string, ws *websocket.Conn, hubInfo *hubInfo) {
 	var buf bytes.Buffer
-	protocol, err := processHandshake(ws, &buf)
-
-	if err != nil {
+	if protocol, err := processHandshake(ws, &buf); err != nil {
 		fmt.Println(err)
-		return
+	} else {
+		conn := newWebSocketHubConnection(protocol, connectionID, ws)
+		// start sending pings to the client
+		pings := startPingClientLoop(conn)
+		conn.start()
+		// Process messages
+		messageLoop(conn, connectionID, protocol, hubInfo)
+		conn.close("")
+		// Wait for pings to complete
+		pings.Wait()
 	}
+}
 
-	conn := webSocketHubConnection{protocol: protocol, connectionID: connectionID, ws: ws}
-	conn.start()
-
+func messageLoop(conn hubConnection, connectionID string, protocol HubProtocol, hubInfo *hubInfo) {
 	streamer := newStreamer(conn)
 	streamClient := newStreamClient()
-
-	hubInfo.lifetimeManager.OnConnected(&conn)
+	hubInfo.lifetimeManager.OnConnected(conn)
 	hubInfo.hub.OnConnected(connectionID)
 
-	// Start sending pings to the client
-	pings := startPingClientLoop(conn)
-
 	for conn.isConnected() {
-		for {
-			message, err := protocol.ReadMessage(&buf)
-
-			if err != nil {
-				// Partial message, need more data
-				break
-			}
-
+		if message, err := conn.receive(); err != nil {
+			fmt.Println(err)
+			break
+		} else {
+			fmt.Printf("Message received %v\n", message)
 			switch message.(type) {
 			case invocationMessage:
 				invocation := message.(invocationMessage)
@@ -139,29 +140,16 @@ func hubConnectionHandler(connectionID string, ws *websocket.Conn, hubInfo *hubI
 			case completionMessage:
 				streamClient.receiveCompletionItem(message.(completionMessage))
 			case hubMessage:
-				// Ping
+				// ping
 			}
 		}
-
-		var data []byte
-		if err = websocket.Message.Receive(ws, &data); err != nil {
-			fmt.Println(err)
-			break
-		}
-		// Main message loop
-		fmt.Println("Message received " + string(data))
-		buf.Write(data)
 	}
-
 	hubInfo.hub.OnDisconnected(connectionID)
-	hubInfo.lifetimeManager.OnDisconnected(&conn)
-	conn.close("")
+	hubInfo.lifetimeManager.OnDisconnected(conn)
 
-	// Wait for pings to complete
-	pings.Wait()
 }
 
-func returnInvocationResult(conn webSocketHubConnection, invocation invocationMessage, streamer *streamer, result []reflect.Value) {
+func returnInvocationResult(conn hubConnection, invocation invocationMessage, streamer *streamer, result []reflect.Value) {
 	// if the hub method returns a chan, it should be considered asynchronous or source for a stream
 	if len(result) == 1 && result[0].Kind() == reflect.Chan {
 		switch invocation.Type {
@@ -219,7 +207,7 @@ func buildMethodArguments(method reflect.Value, invocation invocationMessage,
 	return arguments, chanCount > 0, nil
 }
 
-func startPingClientLoop(conn webSocketHubConnection) *sync.WaitGroup {
+func startPingClientLoop(conn *webSocketHubConnection) *sync.WaitGroup {
 	var waitgroup sync.WaitGroup
 	waitgroup.Add(1)
 	go func(waitGroup *sync.WaitGroup, conn hubConnection) {
@@ -229,21 +217,21 @@ func startPingClientLoop(conn webSocketHubConnection) *sync.WaitGroup {
 			conn.ping()
 			time.Sleep(5 * time.Second)
 		}
-	}(&waitgroup, &conn)
+	}(&waitgroup, conn)
 	return &waitgroup
 }
 
-type connFunc func(conn webSocketHubConnection, invocation invocationMessage, value interface{})
+type connFunc func(conn hubConnection, invocation invocationMessage, value interface{})
 
-func completion(conn webSocketHubConnection, invocation invocationMessage, value interface{}) {
+func completion(conn hubConnection, invocation invocationMessage, value interface{}) {
 	conn.completion(invocation.InvocationID, value, "")
 }
 
-func streamItem(conn webSocketHubConnection, invocation invocationMessage, value interface{}) {
+func streamItem(conn hubConnection, invocation invocationMessage, value interface{}) {
 	conn.streamItem(invocation.InvocationID, value)
 }
 
-func invokeConnection(conn webSocketHubConnection, invocation invocationMessage, connFunc connFunc, result []reflect.Value) {
+func invokeConnection(conn hubConnection, invocation invocationMessage, connFunc connFunc, result []reflect.Value) {
 	values := make([]interface{}, len(result))
 	for i, rv := range result {
 		values[i] = rv.Interface()

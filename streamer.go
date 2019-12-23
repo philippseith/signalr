@@ -2,13 +2,13 @@ package signalr
 
 import "reflect"
 
-func newStreamer(conn webSocketHubConnection) *streamer {
+func newStreamer(conn hubConnection) *streamer {
 	return &streamer{make(map[string]chan bool), conn }
 }
 
 type streamer struct {
 	streamCancels map[string]chan bool
-	conn          webSocketHubConnection
+	conn          hubConnection
 }
 
 func (s *streamer) Start(invocationID string, reflectedChannel reflect.Value) {

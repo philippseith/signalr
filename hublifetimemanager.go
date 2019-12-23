@@ -11,13 +11,6 @@ type HubLifetimeManager interface {
 	AddToGroup(groupName, connectionID string)
 	RemoveFromGroup(groupName, connectionID string)
 }
-type hubConnection interface {
-	isConnected() bool
-	getConnectionID() string
-	sendInvocation(target string, args []interface{})
-	completion(id string, result interface{}, error string)
-	ping()
-}
 
 type defaultHubLifetimeManager struct {
 	clients sync.Map
