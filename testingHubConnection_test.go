@@ -2,8 +2,8 @@ package signalr_test
 
 import (
 	"bytes"
-	"io"
 	"github.com/philippseith/signalr"
+	"io"
 )
 
 type testingHubConnection struct {
