@@ -6,54 +6,54 @@ import (
 	"sync/atomic"
 )
 
-type baseHubConnection struct {
-	protocol     HubProtocol
-	connectionID string
-	connected    int32
-	writer       io.Writer
-	reader			 io.Reader
+type HubConnectionBase struct {
+	Protocol     HubProtocol
+	ConnectionID string
+	Connected    int32
+	Writer       io.Writer
+	Reader       io.Reader
 }
 
-func (w *baseHubConnection) isConnected() bool {
-	return atomic.LoadInt32(&w.connected) == 1
+func (c *HubConnectionBase) IsConnected() bool {
+	return atomic.LoadInt32(&c.Connected) == 1
 }
 
-func (w *baseHubConnection) getConnectionID() string {
-	return w.connectionID
+func (c *HubConnectionBase) GetConnectionID() string {
+	return c.ConnectionID
 }
 
-func (w *baseHubConnection) sendInvocation(target string, args []interface{}) {
+func (c *HubConnectionBase) SendInvocation(target string, args []interface{}) {
 	var invocationMessage = sendOnlyHubInvocationMessage{
 		Type:      1,
 		Target:    target,
 		Arguments: args,
 	}
 
-	w.protocol.WriteMessage(invocationMessage, w.writer)
+	c.Protocol.WriteMessage(invocationMessage, c.Writer)
 }
 
-func (w *baseHubConnection) ping() {
+func (c *HubConnectionBase) Ping() {
 	var pingMessage = hubMessage{
 		Type: 6,
 	}
 
-	w.protocol.WriteMessage(pingMessage, w.writer)
+	c.Protocol.WriteMessage(pingMessage, c.Writer)
 }
 
-func (w *baseHubConnection) start() {
-	atomic.CompareAndSwapInt32(&w.connected, 0, 1)
+func (c *HubConnectionBase) start() {
+	atomic.CompareAndSwapInt32(&c.Connected, 0, 1)
 }
 
-func (w *baseHubConnection) receive() (interface{}, error) {
+func (c *HubConnectionBase) Receive() (interface{}, error) {
 	var buf bytes.Buffer
 	var data = make([]byte, 1 << 15) // 32K
 	var n int
 	for {
-		if message, err := w.protocol.ReadMessage(&buf); err != nil {
+		if message, err := c.Protocol.ReadMessage(&buf); err != nil {
 			// Partial message, need more data
 			// ReadMessage read data out of the buf, so its gone there: refill
 			buf.Write(data[:n])
-			if n, err = w.reader.Read(data); err != nil {
+			if n, err = c.Reader.Read(data); err != nil {
 				return nil, err
 			} else {
 				buf.Write(data[:n])
@@ -64,7 +64,7 @@ func (w *baseHubConnection) receive() (interface{}, error) {
 	}
 }
 
-func (w *baseHubConnection) completion(id string, result interface{}, error string) {
+func (c *HubConnectionBase) Completion(id string, result interface{}, error string) {
 	var completionMessage = completionMessage{
 		Type:         3,
 		InvocationID: id,
@@ -72,21 +72,21 @@ func (w *baseHubConnection) completion(id string, result interface{}, error stri
 		Error:        error,
 	}
 
-	w.protocol.WriteMessage(completionMessage, w.writer)
+	c.Protocol.WriteMessage(completionMessage, c.Writer)
 }
 
-func (w *baseHubConnection) streamItem(id string, item interface{}) {
+func (c *HubConnectionBase) StreamItem(id string, item interface{}) {
 	var streamItemMessage = streamItemMessage{
 		Type:         2,
 		InvocationID: id,
 		Item:         item,
 	}
 
-	w.protocol.WriteMessage(streamItemMessage, w.writer)
+	c.Protocol.WriteMessage(streamItemMessage, c.Writer)
 }
 
-func (w *baseHubConnection) close(error string) {
-	atomic.StoreInt32(&w.connected, 0)
+func (c *HubConnectionBase) close(error string) {
+	atomic.StoreInt32(&c.Connected, 0)
 
 	var closeMessage = closeMessage{
 		Type:           7,
@@ -94,6 +94,6 @@ func (w *baseHubConnection) close(error string) {
 		AllowReconnect: true,
 	}
 
-	w.protocol.WriteMessage(closeMessage, w.writer)
+	c.Protocol.WriteMessage(closeMessage, c.Writer)
 }
 

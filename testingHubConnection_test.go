@@ -1,12 +1,13 @@
-package signalr
+package signalr_test
 
 import (
 	"bytes"
 	"io"
+	"github.com/philippseith/signalr"
 )
 
 type testingHubConnection struct {
-	baseHubConnection
+	signalr.HubConnectionBase
 	cliWriter io.Writer
 	cliReader io.Reader
 }
@@ -15,12 +16,12 @@ func newTestingHubConnection() *testingHubConnection {
 	cliReader, srvWriter := io.Pipe()
 	srvReader, cliWriter := io.Pipe()
 	return &testingHubConnection{
-		baseHubConnection: baseHubConnection{
-			connectionID: "TestID",
-			protocol:     &jsonHubProtocol{},
-			connected:    0,
-			writer:       srvWriter,
-			reader:       srvReader,
+		HubConnectionBase: signalr.HubConnectionBase{
+			ConnectionID: "TestID",
+			Protocol:     &signalr.JsonHubProtocol{},
+			Connected:    0,
+			Writer:       srvWriter,
+			Reader:       srvReader,
 		},
 		cliWriter: cliWriter,
 		cliReader: cliReader,

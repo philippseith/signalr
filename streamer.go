@@ -2,13 +2,13 @@ package signalr
 
 import "reflect"
 
-func newStreamer(conn hubConnection) *streamer {
+func newStreamer(conn HubConnection) *streamer {
 	return &streamer{make(map[string]chan bool), conn }
 }
 
 type streamer struct {
 	streamCancels map[string]chan bool
-	conn          hubConnection
+	conn          HubConnection
 }
 
 func (s *streamer) Start(invocationID string, reflectedChannel reflect.Value) {
@@ -24,9 +24,9 @@ func (s *streamer) Start(invocationID string, reflectedChannel reflect.Value) {
 					return
 				default:
 				}
-				s.conn.streamItem(invocationID, chanResult.Interface())
+				s.conn.StreamItem(invocationID, chanResult.Interface())
 			} else {
-				s.conn.completion(invocationID, nil, "")
+				s.conn.Completion(invocationID, nil, "")
 				break
 			}
 		}

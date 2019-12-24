@@ -1,12 +1,12 @@
 package signalr
 
-type hubConnection interface {
-	isConnected() bool
-	getConnectionID() string
-	receive() (interface{}, error)
-	sendInvocation(target string, args []interface{})
-	streamItem(id string, item interface{})
-	completion(id string, result interface{}, error string)
-	ping()
+type HubConnection interface {
+	IsConnected() bool
+	GetConnectionID() string
+	Receive() (interface{}, error)
+	SendInvocation(target string, args []interface{})
+	StreamItem(id string, item interface{})
+	Completion(id string, result interface{}, error string)
+	Ping()
 }
 

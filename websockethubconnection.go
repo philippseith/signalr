@@ -5,18 +5,18 @@ import (
 	"golang.org/x/net/websocket"
 )
 
-type webSocketHubConnection struct {
-	baseHubConnection
+type WebSocketHubConnection struct {
+	HubConnectionBase
 }
 
-func newWebSocketHubConnection(protocol HubProtocol, connectionID string, conn *websocket.Conn) *webSocketHubConnection {
-	return &webSocketHubConnection{
-		baseHubConnection: baseHubConnection{
-			connectionID: connectionID,
-			protocol:     protocol,
-			connected:    0,
-			writer:       conn,
-			reader: &webSocketMessageReader{ws: conn,},
+func NewWebSocketHubConnection(protocol HubProtocol, connectionID string, conn *websocket.Conn) *WebSocketHubConnection {
+	return &WebSocketHubConnection{
+		HubConnectionBase: HubConnectionBase{
+			ConnectionID: connectionID,
+			Protocol:     protocol,
+			Connected:    0,
+			Writer:       conn,
+			Reader:       &webSocketMessageReader{ws: conn,},
 		},
 	}
 }

@@ -7,10 +7,10 @@ import (
 	"io"
 )
 
-type jsonHubProtocol struct {
+type JsonHubProtocol struct {
 }
 
-// protocol specific message for correct unmarshaling of Arguments
+// Protocol specific message for correct unmarshaling of Arguments
 type jsonInvocationMessage struct {
 	Type         int               `json:"type"`
 	Target       string            `json:"target"`
@@ -19,11 +19,11 @@ type jsonInvocationMessage struct {
 	StreamIds    []string          `json:"streamIds,omitempty"`
 }
 
-func (j *jsonHubProtocol) UnmarshalArgument(argument interface{}, value interface{}) error {
+func (j *JsonHubProtocol) UnmarshalArgument(argument interface{}, value interface{}) error {
 	return json.Unmarshal(argument.(json.RawMessage), value)
 }
 
-func (j *jsonHubProtocol) ReadMessage(buf *bytes.Buffer) (interface{}, error) {
+func (j *JsonHubProtocol) ReadMessage(buf *bytes.Buffer) (interface{}, error) {
 	data, err := parseTextMessageFormat(buf)
 	if err != nil {
 		return nil, err
@@ -69,11 +69,23 @@ func (j *jsonHubProtocol) ReadMessage(buf *bytes.Buffer) (interface{}, error) {
 	}
 }
 
-func (j *jsonHubProtocol) WriteMessage(message interface{}, writer io.Writer) error {
+func parseTextMessageFormat(buf *bytes.Buffer) ([]byte, error) {
+	// 30 = ASCII record separator
+	data, err := buf.ReadBytes(30)
+
+	if err != nil {
+		return data, err
+	}
+	// Remove the delimeter
+	return data[0 : len(data)-1], err
+}
+
+
+func (j *JsonHubProtocol) WriteMessage(message interface{}, writer io.Writer) error {
 
 	// TODO: Reduce the amount of copies
 
-	// We're copying because we want to write complete messages to the underlying writer
+	// We're copying because we want to write complete messages to the underlying Writer
 	buf := bytes.Buffer{}
 
 	if err := json.NewEncoder(&buf).Encode(message); err != nil {

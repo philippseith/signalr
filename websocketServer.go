@@ -8,41 +8,37 @@ import (
 	"fmt"
 	"golang.org/x/net/websocket"
 	"net/http"
+	"sync"
 	"time"
 )
 
 // MapHub used to register a SignalR Hub with the specified ServeMux
 func MapHub(mux *http.ServeMux, path string, hubPrototype HubInterface) {
-	hubPrototypeInfo := newHubPrototypeInfo(hubPrototype)
 	mux.HandleFunc(fmt.Sprintf("%s/negotiate", path), negotiateHandler)
+	server := NewServer(hubPrototype)
 	mux.Handle(path, websocket.Handler(func(ws *websocket.Conn) {
 		connectionID := ws.Request().URL.Query().Get("id")
 		if len(connectionID) == 0 {
 			// Support websocket connection without negotiate
 			connectionID = getConnectionID()
 		}
-		webSocketMessageLoop(connectionID, ws, buildHubInfo(connectionID, hubPrototypeInfo))
+		if protocol, err := processHandshake(ws); err != nil {
+			fmt.Println(err)
+		} else {
+			conn := NewWebSocketHubConnection(protocol, connectionID, ws)
+			// start sending pings to the client
+			pings := startPingClientLoop(conn)
+			conn.start()
+			// Process messages
+			server.MessageLoop(conn, connectionID, protocol)
+			conn.close("")
+			// Wait for pings to complete
+			pings.Wait()
+		}
 	}))
 }
 
-func webSocketMessageLoop(connectionID string, ws *websocket.Conn, hubInfo *hubInfo) {
-	var buf bytes.Buffer
-	if protocol, err := processHandshake(ws, &buf); err != nil {
-		fmt.Println(err)
-	} else {
-		conn := newWebSocketHubConnection(protocol, connectionID, ws)
-		// start sending pings to the client
-		pings := startPingClientLoop(conn)
-		conn.start()
-		// Process messages
-		messageLoop(conn, connectionID, protocol, hubInfo)
-		conn.close("")
-		// Wait for pings to complete
-		pings.Wait()
-	}
-}
-
-func processHandshake(ws *websocket.Conn, buf *bytes.Buffer) (HubProtocol, error) {
+func processHandshake(ws *websocket.Conn) (HubProtocol, error) {
 	var err error
 	var data []byte
 	var protocol HubProtocol
@@ -53,6 +49,7 @@ func processHandshake(ws *websocket.Conn, buf *bytes.Buffer) (HubProtocol, error
 	// 5 seconds to process the handshake
 	ws.SetReadDeadline(time.Now().Add(5 * time.Second))
 
+	var buf bytes.Buffer
 	for {
 		if err = websocket.Message.Receive(ws, &data); err != nil {
 			break
@@ -60,7 +57,7 @@ func processHandshake(ws *websocket.Conn, buf *bytes.Buffer) (HubProtocol, error
 
 		buf.Write(data)
 
-		rawHandshake, err := parseTextMessageFormat(buf)
+		rawHandshake, err := parseTextMessageFormat(&buf)
 
 		if err != nil {
 			// Partial message, read more data
@@ -84,7 +81,7 @@ func processHandshake(ws *websocket.Conn, buf *bytes.Buffer) (HubProtocol, error
 			err = websocket.Message.Send(ws, handshakeResponse)
 		} else {
 			// Protocol not supported
-			fmt.Printf("\"%s\" is the only supported protocol\n", request.Protocol)
+			fmt.Printf("\"%s\" is the only supported Protocol\n", request.Protocol)
 			err = websocket.Message.Send(ws, fmt.Sprintf(errorHandshakeResponse, fmt.Sprintf("Protocol \"%s\" not supported", request.Protocol)))
 		}
 		break
@@ -94,17 +91,6 @@ func processHandshake(ws *websocket.Conn, buf *bytes.Buffer) (HubProtocol, error
 	ws.SetReadDeadline(time.Time{})
 
 	return protocol, err
-}
-
-func parseTextMessageFormat(buf *bytes.Buffer) ([]byte, error) {
-	// 30 = ASCII record separator
-	data, err := buf.ReadBytes(30)
-
-	if err != nil {
-		return data, err
-	}
-	// Remove the delimeter
-	return data[0 : len(data)-1], err
 }
 
 func negotiateHandler(w http.ResponseWriter, req *http.Request) {
@@ -129,7 +115,7 @@ func negotiateHandler(w http.ResponseWriter, req *http.Request) {
 }
 
 var protocolMap = map[string]HubProtocol{
-	"json": &jsonHubProtocol{},
+	"json": &JsonHubProtocol{},
 }
 
 type availableTransport struct {
@@ -148,4 +134,17 @@ func getConnectionID() string {
 	return base64.StdEncoding.EncodeToString(bytes)
 }
 
+func startPingClientLoop(conn *WebSocketHubConnection) *sync.WaitGroup {
+	var waitgroup sync.WaitGroup
+	waitgroup.Add(1)
+	go func(waitGroup *sync.WaitGroup, conn HubConnection) {
+		defer waitGroup.Done()
+
+		for conn.IsConnected() {
+			conn.Ping()
+			time.Sleep(5 * time.Second)
+		}
+	}(&waitgroup, conn)
+	return &waitgroup
+}
 

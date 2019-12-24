@@ -29,7 +29,7 @@ func (u *streamClient) buildChannelArgument(invocation invocationMessage, argTyp
 
 func (u *streamClient) receiveStreamItem(streamItem streamItemMessage) {
 	if upChan, ok := u.upstreamChannels[streamItem.InvocationID]; ok {
-		// Hack(?) for missing channel type information when the protocol decodes streamItem.Item
+		// Hack(?) for missing channel type information when the Protocol decodes StreamItem.Item
 		// Protocol specific, as only json has this inexact number type. Messagepack might cause different problems
 		if f, ok := streamItem.Item.(float64); ok {
 			// This type of solution is constrained to basic types, e.g. chan MyInt is not supported

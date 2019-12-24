@@ -56,7 +56,7 @@ type closeMessage struct {
 }
 
 type handshakeRequest struct {
-	Protocol string `json:"protocol"`
+	Protocol string `json:"Protocol"`
 	Version  int    `json:"version"`
 }
 
