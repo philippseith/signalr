@@ -1,58 +1,37 @@
 package signalr
 
 import (
-	"bytes"
 	"fmt"
-	"net/http"
 	"reflect"
 	"runtime/debug"
 	"strings"
 	"sync"
 	"time"
-
-	"golang.org/x/net/websocket"
 )
 
-// MapHub used to register a SignalR Hub with the specified ServeMux
-func MapHub(mux *http.ServeMux, path string, hubPrototype HubInterface) {
-	lifetimeManager := defaultHubLifetimeManager{}
-	defaultHubClients := defaultHubClients{
-		lifetimeManager: &lifetimeManager,
-		allCache:        allClientProxy{lifetimeManager: &lifetimeManager},
-	}
-
-	groupManager := defaultGroupManager{
-		lifetimeManager: &lifetimeManager,
-	}
-
-	mux.HandleFunc(fmt.Sprintf("%s/negotiate", path), negotiateHandler)
-	mux.Handle(path, websocket.Handler(func(ws *websocket.Conn) {
-
-		connectionID := ws.Request().URL.Query().Get("id")
-		if len(connectionID) == 0 {
-			// Support websocket connection without negotiate
-			connectionID = getConnectionID()
-		}
-
-		// Copy hubPrototype
-		hub := reflect.New(reflect.ValueOf(hubPrototype).Elem().Type()).Interface().(HubInterface)
-
-		hub.Initialize(&defaultHubContext{
-			clients: &contextHubClients{
-				defaultHubClients: &defaultHubClients,
-				connectionID:      connectionID,
-			},
-			groups: &groupManager,
-		})
-
-		webSocketMessageLoop(connectionID, ws, buildHubInfo(hub, &lifetimeManager))
-	}))
+type hubPrototypeInfo struct {
+	hubPrototype HubInterface
+	lifetimeManager HubLifetimeManager
+	defaultHubClients defaultHubClients
+	groupManager GroupManager
 }
 
-func buildHubInfo(hub HubInterface, lifetimeManager HubLifetimeManager) *hubInfo {
+func buildHubInfo(connectionID string, i *hubPrototypeInfo) *hubInfo {
+
+	// Copy hubPrototype
+	hub := reflect.New(reflect.ValueOf(i.hubPrototype).Elem().Type()).Interface().(HubInterface)
+
+	hub.Initialize(&defaultHubContext{
+		clients: &contextHubClients{
+			defaultHubClients: &i.defaultHubClients,
+			connectionID:      connectionID,
+		},
+		groups: i.groupManager,
+	})
+
 	hubInfo := &hubInfo{
 		hub:             hub,
-		lifetimeManager: lifetimeManager,
+		lifetimeManager: i.lifetimeManager,
 		methods:         make(map[string]reflect.Value),
 	}
 
@@ -65,29 +44,10 @@ func buildHubInfo(hub HubInterface, lifetimeManager HubLifetimeManager) *hubInfo
 	return hubInfo
 }
 
-// Implementation
-
 type hubInfo struct {
 	hub             HubInterface
 	lifetimeManager HubLifetimeManager
 	methods         map[string]reflect.Value
-}
-
-func webSocketMessageLoop(connectionID string, ws *websocket.Conn, hubInfo *hubInfo) {
-	var buf bytes.Buffer
-	if protocol, err := processHandshake(ws, &buf); err != nil {
-		fmt.Println(err)
-	} else {
-		conn := newWebSocketHubConnection(protocol, connectionID, ws)
-		// start sending pings to the client
-		pings := startPingClientLoop(conn)
-		conn.start()
-		// Process messages
-		messageLoop(conn, connectionID, protocol, hubInfo)
-		conn.close("")
-		// Wait for pings to complete
-		pings.Wait()
-	}
 }
 
 func messageLoop(conn hubConnection, connectionID string, protocol HubProtocol, hubInfo *hubInfo) {
@@ -246,5 +206,18 @@ func invokeConnection(conn hubConnection, invocation invocationMessage, connFunc
 	}
 }
 
-
+func newHubPrototypeInfo(hubPrototype HubInterface) *hubPrototypeInfo {
+	lifetimeManager := defaultHubLifetimeManager{}
+	return &hubPrototypeInfo{
+		hubPrototype:    hubPrototype,
+		lifetimeManager: &lifetimeManager,
+		defaultHubClients: defaultHubClients{
+			lifetimeManager: &lifetimeManager,
+			allCache:        allClientProxy{lifetimeManager: &lifetimeManager},
+		},
+		groupManager: &defaultGroupManager{
+			lifetimeManager: &lifetimeManager,
+		},
+	}
+}
 

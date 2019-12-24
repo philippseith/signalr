@@ -2,7 +2,6 @@ package signalr
 
 import (
 	"bytes"
-	"golang.org/x/net/websocket"
 	"io"
 	"sync/atomic"
 )
@@ -43,6 +42,26 @@ func (w *baseHubConnection) ping() {
 
 func (w *baseHubConnection) start() {
 	atomic.CompareAndSwapInt32(&w.connected, 0, 1)
+}
+
+func (w *baseHubConnection) receive() (interface{}, error) {
+	var buf bytes.Buffer
+	var data = make([]byte, 1 << 15) // 32K
+	var n int
+	for {
+		if message, err := w.protocol.ReadMessage(&buf); err != nil {
+			// Partial message, need more data
+			// ReadMessage read data out of the buf, so its gone there: refill
+			buf.Write(data[:n])
+			if n, err = w.reader.Read(data); err != nil {
+				return nil, err
+			} else {
+				buf.Write(data[:n])
+			}
+		} else {
+			return message, nil
+		}
+	}
 }
 
 func (w *baseHubConnection) completion(id string, result interface{}, error string) {

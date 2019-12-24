@@ -11,6 +11,37 @@ import (
 	"time"
 )
 
+// MapHub used to register a SignalR Hub with the specified ServeMux
+func MapHub(mux *http.ServeMux, path string, hubPrototype HubInterface) {
+	hubPrototypeInfo := newHubPrototypeInfo(hubPrototype)
+	mux.HandleFunc(fmt.Sprintf("%s/negotiate", path), negotiateHandler)
+	mux.Handle(path, websocket.Handler(func(ws *websocket.Conn) {
+		connectionID := ws.Request().URL.Query().Get("id")
+		if len(connectionID) == 0 {
+			// Support websocket connection without negotiate
+			connectionID = getConnectionID()
+		}
+		webSocketMessageLoop(connectionID, ws, buildHubInfo(connectionID, hubPrototypeInfo))
+	}))
+}
+
+func webSocketMessageLoop(connectionID string, ws *websocket.Conn, hubInfo *hubInfo) {
+	var buf bytes.Buffer
+	if protocol, err := processHandshake(ws, &buf); err != nil {
+		fmt.Println(err)
+	} else {
+		conn := newWebSocketHubConnection(protocol, connectionID, ws)
+		// start sending pings to the client
+		pings := startPingClientLoop(conn)
+		conn.start()
+		// Process messages
+		messageLoop(conn, connectionID, protocol, hubInfo)
+		conn.close("")
+		// Wait for pings to complete
+		pings.Wait()
+	}
+}
+
 func processHandshake(ws *websocket.Conn, buf *bytes.Buffer) (HubProtocol, error) {
 	var err error
 	var data []byte

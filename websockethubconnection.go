@@ -7,7 +7,6 @@ import (
 
 type webSocketHubConnection struct {
 	baseHubConnection
-	ws *websocket.Conn
 }
 
 func newWebSocketHubConnection(protocol HubProtocol, connectionID string, conn *websocket.Conn) *webSocketHubConnection {
@@ -19,27 +18,25 @@ func newWebSocketHubConnection(protocol HubProtocol, connectionID string, conn *
 			writer:       conn,
 			reader: &webSocketMessageReader{ws: conn,},
 		},
-		ws: conn,
 	}
 }
 
-func (w *webSocketHubConnection) receive() (interface{}, error) {
-	var buf bytes.Buffer
-	var data []byte
-	for {
-		if message, err := w.protocol.ReadMessage(&buf); err != nil {
-			// Partial message, need more data
-			if err = websocket.Message.Receive(w.ws, &data); err != nil {
-				return nil, err
-			} else {
-				buf.Write(data)
-			}
+type webSocketMessageReader struct {
+	ws *websocket.Conn
+	r  *bytes.Reader
+}
+
+func (w *webSocketMessageReader) Read(p []byte) (n int, err error) {
+	if w.r == nil || w.r.Len() == 0 {
+		var data []byte
+		if err = websocket.Message.Receive(w.ws, &data); err != nil {
+			return 0, err
 		} else {
-			return message, nil
+			w.r = bytes.NewReader(data)
+			return w.r.Read(p)
 		}
+	} else {
+		return w.r.Read(p)
 	}
 }
-
-
-
 
