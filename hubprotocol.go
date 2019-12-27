@@ -7,7 +7,7 @@ import (
 
 // HubProtocol interface
 type HubProtocol interface {
-	ReadMessage(buf *bytes.Buffer) (interface{}, error)
+	ReadMessage(buf *bytes.Buffer) (interface{}, bool, error)
 	WriteMessage(message interface{}, writer io.Writer) error
 	UnmarshalArgument(argument interface{}, value interface{}) error
 }

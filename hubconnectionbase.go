@@ -49,7 +49,7 @@ func (c *HubConnectionBase) Receive() (interface{}, error) {
 	var data = make([]byte, 1 << 15) // 32K
 	var n int
 	for {
-		if message, err := c.Protocol.ReadMessage(&buf); err != nil {
+		if message, complete, err := c.Protocol.ReadMessage(&buf); !complete {
 			// Partial message, need more data
 			// ReadMessage read data out of the buf, so its gone there: refill
 			buf.Write(data[:n])
@@ -59,7 +59,7 @@ func (c *HubConnectionBase) Receive() (interface{}, error) {
 				buf.Write(data[:n])
 			}
 		} else {
-			return message, nil
+			return message, err
 		}
 	}
 }

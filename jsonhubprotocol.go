@@ -23,17 +23,23 @@ func (j *JsonHubProtocol) UnmarshalArgument(argument interface{}, value interfac
 	return json.Unmarshal(argument.(json.RawMessage), value)
 }
 
-func (j *JsonHubProtocol) ReadMessage(buf *bytes.Buffer) (interface{}, error) {
+func (j *JsonHubProtocol) ReadMessage(buf *bytes.Buffer) (interface{}, bool, error) {
 	data, err := parseTextMessageFormat(buf)
+	switch {
+	case err == io.EOF:
+		return nil, false, err
+	case err != nil:
+		return nil, true, err
+	}
 	if err != nil {
-		return nil, err
+		return nil, true, err
 	}
 
 	message := hubMessage{}
 	err = json.Unmarshal(data, &message)
 
 	if err != nil {
-		return nil, err
+		return nil, true, err
 	}
 
 	switch message.Type {
@@ -51,21 +57,21 @@ func (j *JsonHubProtocol) ReadMessage(buf *bytes.Buffer) (interface{}, error) {
 			Arguments:    arguments,
 			StreamIds:    jsonInvocation.StreamIds,
 		}
-		return invocation, err
+		return invocation, true, err
 	case 2:
 		streamItem := streamItemMessage{}
 		err = json.Unmarshal(data, &streamItem)
-		return streamItem, err
+		return streamItem, true, err
 	case 3:
 		completion := completionMessage{}
 		err := json.Unmarshal(data, &completion)
-		return completion, err
+		return completion, true, err
 	case 5:
 		invocation := cancelInvocationMessage{}
 		err = json.Unmarshal(data, &invocation)
-		return invocation, err
+		return invocation, true, err
 	default:
-		return message, nil
+		return message, true, nil
 	}
 }
 
