@@ -133,7 +133,7 @@ func returnInvocationResult(conn HubConnection, invocation invocationMessage, st
 				if chanResult, ok := result[0].Recv(); ok {
 					invokeConnection(conn, invocation, completion, []reflect.Value{chanResult})
 				} else {
-					conn.Completion(invocation.InvocationID, nil, "go channel closed")
+					conn.Completion(invocation.InvocationID, nil, "hub func returned closed chan")
 				}
 			}()
 		// StreamInvocation
