@@ -59,9 +59,9 @@ func (i *invocationHub) Panic() {
 var _ = Describe("Invocation", func() {
 
 	Describe("Simple invocation", func() {
-		conn := connect()
+		conn := connect(&invocationHub{})
 		Context("When invoked by the client", func() {
-			It("should be invoked", func(done Done) {
+			It("should be invoked", func() {
 				_, err := conn.clientSend(`{"type":1,"invocationId": "123","target":"simple"}`)
 				Expect(err).To(BeNil())
 				Expect(<-invocationQueue).To(Equal("Simple()"))
@@ -70,13 +70,12 @@ var _ = Describe("Invocation", func() {
 				Expect(recv.InvocationID).To(Equal("123"))
 				Expect(recv.Result).To(BeNil())
 				Expect(recv.Error).To(Equal(""))
-				close(done)
 			})
 		})
 	})
 
 	Describe("Invalid json", func() {
-		conn := connect()
+		conn := connect(&invocationHub{})
 		Context("When the client sends invalid json", func() {
 			It("should not return any value", func() {
 				_, err := conn.clientSend(`{"type":1,"invocationId": "123","target":"simpleint", arguments[CanNotParse]}`)
@@ -97,7 +96,7 @@ var _ = Describe("Invocation", func() {
 	})
 
 	Describe("SimpleInt invocation", func() {
-		conn := connect()
+		conn := connect(&invocationHub{})
 		Context("When invoked by the client", func() {
 			It("should be invoked on the server, get an int and return an int", func() {
 				var value int
@@ -116,7 +115,7 @@ var _ = Describe("Invocation", func() {
 	})
 
 	Describe("SimpleInt invocation with invalid argument", func() {
-		conn := connect()
+		conn := connect(&invocationHub{})
 		Context("When invoked by the client with an invalid argument", func() {
 			It("should not be invoked on the server and return an error", func() {
 				_, err := conn.clientSend(
@@ -131,7 +130,7 @@ var _ = Describe("Invocation", func() {
 	})
 
 	Describe("SimpleFloat invocation", func() {
-		conn := connect()
+		conn := connect(&invocationHub{})
 		Context("When invoked by the client", func() {
 			It("should be invoked on the server, get a float and return a two floats", func() {
 				var value float64
@@ -150,7 +149,7 @@ var _ = Describe("Invocation", func() {
 	})
 
 	Describe("SimpleString invocation", func() {
-		conn := connect()
+		conn := connect(&invocationHub{})
 		Context("When invoked by the client", func() {
 			It("should be invoked on the server, get two strings and return a string", func() {
 				value1 := "Camel"
@@ -169,7 +168,7 @@ var _ = Describe("Invocation", func() {
 	})
 
 	Describe("Async invocation", func() {
-		conn := connect()
+		conn := connect(&invocationHub{})
 		Context("When invoked by the client", func() {
 			It("should be invoked on the server and return true asynchronously", func() {
 				_, err := conn.clientSend(`{"type":1,"invocationId": "mfg","target":"async"}`)
@@ -185,7 +184,7 @@ var _ = Describe("Invocation", func() {
 	})
 
 	Describe("Async invocation with buggy server method which returns a closed channel", func() {
-		conn := connect()
+		conn := connect(&invocationHub{})
 		Context("When invoked by the client", func() {
 			It("should be invoked on the server and return an error", func() {
 				_, err := conn.clientSend(`{"type":1,"invocationId": "ouch","target":"asyncclosedchan"}`)
@@ -201,7 +200,7 @@ var _ = Describe("Invocation", func() {
 	})
 
 	Describe("Panic in invoked func", func() {
-		conn := connect()
+		conn := connect(&invocationHub{})
 		Context("When a func is invoked by the client and panics", func() {
 			It("should be invoked on the server and return an error but no result", func() {
 				_, err := conn.clientSend(`{"type":1,"invocationId": "???","target":"panic"}`)
@@ -217,9 +216,3 @@ var _ = Describe("Invocation", func() {
 	})
 })
 
-func connect() *testingHubConnection {
-	server := signalr.NewServer(&invocationHub{})
-	conn := newTestingHubConnection()
-	go server.MessageLoop(conn, "bla", &signalr.JsonHubProtocol{})
-	return conn
-}

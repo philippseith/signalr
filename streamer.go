@@ -1,26 +1,38 @@
 package signalr
 
-import "reflect"
+import (
+	"reflect"
+	"sync"
+)
 
 func newStreamer(conn HubConnection) *streamer {
-	return &streamer{make(map[string]chan bool), conn }
+	return &streamer{make(map[string]chan bool), sync.Mutex{}, conn }
 }
 
 type streamer struct {
-	streamCancels map[string]chan bool
-	conn          HubConnection
+	streamCancelChans map[string]chan bool
+	sccMutex					sync.Mutex
+	conn              HubConnection
 }
 
 func (s *streamer) Start(invocationID string, reflectedChannel reflect.Value) {
 	cancelChan := make(chan bool)
-	s.streamCancels[invocationID] = cancelChan
+	s.sccMutex.Lock()
+	defer s.sccMutex.Unlock()
+	s.streamCancelChans[invocationID] = cancelChan
 	go func(cancelChan chan bool) {
-		defer close(cancelChan)
+		defer func() {
+			s.sccMutex.Lock()
+			defer s.sccMutex.Unlock()
+			delete(s.streamCancelChans, invocationID)
+			close(cancelChan)
+		}()
 		for {
 			// Waits for channel, so might hang
 			if chanResult, ok := reflectedChannel.Recv(); ok {
 				select {
 				case <-cancelChan:
+					s.conn.Completion(invocationID, nil, "")
 					return
 				default:
 				}
@@ -34,12 +46,13 @@ func (s *streamer) Start(invocationID string, reflectedChannel reflect.Value) {
 }
 
 func (s *streamer) Stop(invocationID string) {
-	if cancel, ok := s.streamCancels[invocationID]; ok {
-		go func() {
-			// in goroutine, because cancel might not be read when stream producer hangs
+	// in goroutine, because cancel might not be read when stream producer hangs
+	go func() {
+		s.sccMutex.Lock()
+		defer s.sccMutex.Unlock()
+		if cancel, ok := s.streamCancelChans[invocationID]; ok {
 			cancel <- true
-			delete(s.streamCancels, invocationID)
-		}()
-	}
+		}
+	}()
 }
 
