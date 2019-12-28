@@ -25,13 +25,13 @@ func MapHub(mux *http.ServeMux, path string, hubPrototype HubInterface) {
 		if protocol, err := processHandshake(ws); err != nil {
 			fmt.Println(err)
 		} else {
-			conn := NewWebSocketHubConnection(protocol, connectionID, ws)
+			conn := NewHubConnection(&webSocketConnection{ws, nil}, connectionID, protocol)
 			// start sending pings to the client
 			pings := startPingClientLoop(conn)
-			conn.start()
+			conn.Start()
 			// Process messages
 			server.messageLoop(conn, connectionID, protocol)
-			conn.close("")
+			conn.Close("")
 			// Wait for pings to complete
 			pings.Wait()
 		}
@@ -134,7 +134,7 @@ func getConnectionID() string {
 	return base64.StdEncoding.EncodeToString(bytes)
 }
 
-func startPingClientLoop(conn *WebSocketHubConnection) *sync.WaitGroup {
+func startPingClientLoop(conn HubConnection) *sync.WaitGroup {
 	var waitgroup sync.WaitGroup
 	waitgroup.Add(1)
 	go func(waitGroup *sync.WaitGroup, conn HubConnection) {

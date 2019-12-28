@@ -12,10 +12,12 @@ func TestSignalr(t *testing.T) {
 	RunSpecs(t, "Signalr Suite")
 }
 
-func connect(hubProto HubInterface) *testingHubConnection {
+func connect(hubProto HubInterface) *testingConnection {
 	server := NewServer(hubProto)
-	conn := newTestingHubConnection()
-	go server.messageLoop(conn, "bla", &JsonHubProtocol{})
+	conn := newTestingConnection()
+	hubConn := NewHubConnection(conn, "bla", &JsonHubProtocol{})
+	hubConn.Start()
+	go server.messageLoop(hubConn, "bla", &JsonHubProtocol{})
 	return conn
 }
 

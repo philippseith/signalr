@@ -6,24 +6,28 @@ import (
 	"io"
 )
 
-type testingHubConnection struct {
-	HubConnectionBase
+type testingConnection struct {
+	srvWriter io.Writer
+	srvReader io.Reader
 	cliWriter io.Writer
 	cliReader io.Reader
 	received  chan interface{}
 }
 
-func newTestingHubConnection() *testingHubConnection {
+func (t *testingConnection) Read(b []byte) (n int, err error) {
+	return t.srvReader.Read(b)
+}
+
+func (t *testingConnection) Write(b []byte) (n int, err error) {
+	return t.srvWriter.Write(b)
+}
+
+func newTestingConnection() *testingConnection {
 	cliReader, srvWriter := io.Pipe()
 	srvReader, cliWriter := io.Pipe()
-	conn := &testingHubConnection{
-		HubConnectionBase: HubConnectionBase{
-			ConnectionID: "TestID",
-			Protocol:     &JsonHubProtocol{},
-			Connected:    1,
-			Writer:       srvWriter,
-			Reader:       srvReader,
-		},
+	conn := testingConnection{
+		srvWriter: srvWriter,
+		srvReader: srvReader,
 		cliWriter: cliWriter,
 		cliReader: cliReader,
 	}
@@ -49,14 +53,14 @@ func newTestingHubConnection() *testingHubConnection {
 			}
 		}
 	}()
-	return conn
+	return &conn
 }
 
-func (t *testingHubConnection) clientSend(message string) (int, error) {
+func (t *testingConnection) clientSend(message string) (int, error) {
 	return t.cliWriter.Write(append([]byte(message), 30))
 }
 
-func (t *testingHubConnection) clientReceive() (string, error) {
+func (t *testingConnection) clientReceive() (string, error) {
 	var buf bytes.Buffer
 	var data = make([]byte, 1<<15) // 32K
 	var n int
