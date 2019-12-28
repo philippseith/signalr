@@ -6,7 +6,7 @@ import (
 	"sync/atomic"
 )
 
-type HubConnection interface {
+type hubConnection interface {
 	Start()
 	IsConnected() bool
 	Close(error string)
@@ -23,7 +23,7 @@ type Connection interface {
 	io.Writer
 }
 
-func NewHubConnection(connection Connection, connectionID string, protocol HubProtocol) HubConnection {
+func newHubConnection(connection Connection, connectionID string, protocol HubProtocol) hubConnection {
 	return &defaultHubConnection{
 		Protocol:     protocol,
 		ConnectionID: connectionID,

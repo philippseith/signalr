@@ -29,7 +29,7 @@ func NewServer(hub HubInterface) *Server {
 	}
 }
 
-func (s *Server) messageLoop(conn HubConnection, connectionID string, protocol HubProtocol) {
+func (s *Server) messageLoop(conn hubConnection, connectionID string, protocol HubProtocol) {
 	streamer := newStreamer(conn)
 	streamClient := newStreamClient()
 	hubInfo := s.newHubInfo()
@@ -116,7 +116,7 @@ func (s *Server) newHubInfo() *hubInfo {
 	return hubInfo
 }
 
-func returnInvocationResult(conn HubConnection, invocation invocationMessage, streamer *streamer, result []reflect.Value) {
+func returnInvocationResult(conn hubConnection, invocation invocationMessage, streamer *streamer, result []reflect.Value) {
 	// if the hub method returns a chan, it should be considered asynchronous or source for a stream
 	if len(result) == 1 && result[0].Kind() == reflect.Chan {
 		switch invocation.Type {
@@ -174,17 +174,17 @@ func buildMethodArguments(method reflect.Value, invocation invocationMessage,
 	return arguments, chanCount > 0, nil
 }
 
-type connFunc func(conn HubConnection, invocation invocationMessage, value interface{})
+type connFunc func(conn hubConnection, invocation invocationMessage, value interface{})
 
-func completion(conn HubConnection, invocation invocationMessage, value interface{}) {
+func completion(conn hubConnection, invocation invocationMessage, value interface{}) {
 	conn.Completion(invocation.InvocationID, value, "")
 }
 
-func streamItem(conn HubConnection, invocation invocationMessage, value interface{}) {
+func streamItem(conn hubConnection, invocation invocationMessage, value interface{}) {
 	conn.StreamItem(invocation.InvocationID, value)
 }
 
-func invokeConnection(conn HubConnection, invocation invocationMessage, connFunc connFunc, result []reflect.Value) {
+func invokeConnection(conn hubConnection, invocation invocationMessage, connFunc connFunc, result []reflect.Value) {
 	values := make([]interface{}, len(result))
 	for i, rv := range result {
 		values[i] = rv.Interface()

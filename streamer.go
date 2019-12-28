@@ -5,14 +5,14 @@ import (
 	"sync"
 )
 
-func newStreamer(conn HubConnection) *streamer {
+func newStreamer(conn hubConnection) *streamer {
 	return &streamer{make(map[string]chan bool), sync.Mutex{}, conn }
 }
 
 type streamer struct {
 	streamCancelChans map[string]chan bool
-	sccMutex					sync.Mutex
-	conn              HubConnection
+	sccMutex          sync.Mutex
+	conn              hubConnection
 }
 
 func (s *streamer) Start(invocationID string, reflectedChannel reflect.Value) {

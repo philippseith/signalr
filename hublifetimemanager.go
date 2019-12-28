@@ -3,8 +3,8 @@ package signalr
 import "sync"
 
 type HubLifetimeManager interface {
-	OnConnected(conn HubConnection)
-	OnDisconnected(conn HubConnection)
+	OnConnected(conn hubConnection)
+	OnDisconnected(conn hubConnection)
 	InvokeAll(target string, args []interface{})
 	InvokeClient(connectionID string, target string, args []interface{})
 	InvokeGroup(groupName string, target string, args []interface{})
@@ -17,17 +17,17 @@ type defaultHubLifetimeManager struct {
 	groups  sync.Map
 }
 
-func (d *defaultHubLifetimeManager) OnConnected(conn HubConnection) {
+func (d *defaultHubLifetimeManager) OnConnected(conn hubConnection) {
 	d.clients.Store(conn.GetConnectionID(), conn)
 }
 
-func (d *defaultHubLifetimeManager) OnDisconnected(conn HubConnection) {
+func (d *defaultHubLifetimeManager) OnDisconnected(conn hubConnection) {
 	d.clients.Delete(conn.GetConnectionID())
 }
 
 func (d *defaultHubLifetimeManager) InvokeAll(target string, args []interface{}) {
 	d.clients.Range(func(key, value interface{}) bool {
-		value.(HubConnection).SendInvocation(target, args)
+		value.(hubConnection).SendInvocation(target, args)
 		return true
 	})
 }
@@ -39,7 +39,7 @@ func (d *defaultHubLifetimeManager) InvokeClient(connectionID string, target str
 		return
 	}
 
-	client.(HubConnection).SendInvocation(target, args)
+	client.(hubConnection).SendInvocation(target, args)
 }
 
 func (d *defaultHubLifetimeManager) InvokeGroup(groupName string, target string, args []interface{}) {
@@ -50,7 +50,7 @@ func (d *defaultHubLifetimeManager) InvokeGroup(groupName string, target string,
 		return
 	}
 
-	for _, v := range groups.(map[string]HubConnection) {
+	for _, v := range groups.(map[string]hubConnection) {
 		v.SendInvocation(target, args)
 	}
 }
@@ -63,9 +63,9 @@ func (d *defaultHubLifetimeManager) AddToGroup(groupName string, connectionID st
 		return
 	}
 
-	groups, _ := d.groups.LoadOrStore(groupName, make(map[string]HubConnection))
+	groups, _ := d.groups.LoadOrStore(groupName, make(map[string]hubConnection))
 
-	groups.(map[string]HubConnection)[connectionID] = client.(HubConnection)
+	groups.(map[string]hubConnection)[connectionID] = client.(hubConnection)
 }
 
 func (d *defaultHubLifetimeManager) RemoveFromGroup(groupName string, connectionID string) {
@@ -75,7 +75,7 @@ func (d *defaultHubLifetimeManager) RemoveFromGroup(groupName string, connection
 		return
 	}
 
-	delete(groups.(map[string]HubConnection), connectionID)
+	delete(groups.(map[string]hubConnection), connectionID)
 }
 
 
