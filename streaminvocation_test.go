@@ -1,15 +1,14 @@
-package signalr_test
+package signalr
 
 import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	"github.com/philippseith/signalr"
 )
 
 var streamInvocationQueue = make(chan string, 20)
 
 type streamHub struct {
-	signalr.Hub
+	Hub
 }
 
 func (s *streamHub) SimpleStream() <-chan int {

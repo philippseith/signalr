@@ -30,7 +30,7 @@ func MapHub(mux *http.ServeMux, path string, hubPrototype HubInterface) {
 			pings := startPingClientLoop(conn)
 			conn.start()
 			// Process messages
-			server.MessageLoop(conn, connectionID, protocol)
+			server.messageLoop(conn, connectionID, protocol)
 			conn.close("")
 			// Wait for pings to complete
 			pings.Wait()

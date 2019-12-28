@@ -29,7 +29,7 @@ func NewServer(hubPrototype HubInterface) *Server {
 	}
 }
 
-func (s *Server) MessageLoop(conn HubConnection, connectionID string, protocol HubProtocol) {
+func (s *Server) messageLoop(conn HubConnection, connectionID string, protocol HubProtocol) {
 	streamer := newStreamer(conn)
 	streamClient := newStreamClient()
 	hubInfo := s.newHubInfo(connectionID)

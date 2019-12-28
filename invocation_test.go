@@ -1,10 +1,9 @@
-package signalr_test
+package signalr
 
 import (
 	"fmt"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	"github.com/philippseith/signalr"
 	"strings"
 	"time"
 )
@@ -12,7 +11,7 @@ import (
 var invocationQueue = make(chan string, 20)
 
 type invocationHub struct {
-	signalr.Hub
+	Hub
 }
 
 func (i *invocationHub) Simple() {

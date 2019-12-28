@@ -1,11 +1,10 @@
-package signalr_test
+package signalr
 
 import (
 	"testing"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	"github.com/philippseith/signalr"
 )
 
 func TestSignalr(t *testing.T) {
@@ -13,10 +12,10 @@ func TestSignalr(t *testing.T) {
 	RunSpecs(t, "Signalr Suite")
 }
 
-func connect(hubProto signalr.HubInterface) *testingHubConnection {
-	server := signalr.NewServer(hubProto)
+func connect(hubProto HubInterface) *testingHubConnection {
+	server := NewServer(hubProto)
 	conn := newTestingHubConnection()
-	go server.MessageLoop(conn, "bla", &signalr.JsonHubProtocol{})
+	go server.messageLoop(conn, "bla", &JsonHubProtocol{})
 	return conn
 }
 

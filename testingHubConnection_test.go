@@ -1,45 +1,25 @@
-package signalr_test
+package signalr
 
 import (
 	"bytes"
 	"encoding/json"
-	"github.com/philippseith/signalr"
 	"io"
 )
 
 type testingHubConnection struct {
-	signalr.HubConnectionBase
+	HubConnectionBase
 	cliWriter io.Writer
 	cliReader io.Reader
 	received  chan interface{}
 }
 
-type hubMessage struct {
-	Type         int    `json:"type"`
-	InvocationID string `json:"invocationId"`
-}
-
-type completionMessage struct {
-	Type         int         `json:"type"`
-	InvocationID string      `json:"invocationId"`
-	Result       interface{} `json:"result"`
-	Error        string      `json:"error"`
-}
-
-type streamItemMessage struct {
-	Type         int         `json:"type"`
-	InvocationID string      `json:"invocationId"`
-	Item         interface{} `json:"item"`
-}
-
-
 func newTestingHubConnection() *testingHubConnection {
 	cliReader, srvWriter := io.Pipe()
 	srvReader, cliWriter := io.Pipe()
 	conn := &testingHubConnection{
-		HubConnectionBase: signalr.HubConnectionBase{
+		HubConnectionBase: HubConnectionBase{
 			ConnectionID: "TestID",
-			Protocol:     &signalr.JsonHubProtocol{},
+			Protocol:     &JsonHubProtocol{},
 			Connected:    1,
 			Writer:       srvWriter,
 			Reader:       srvReader,
