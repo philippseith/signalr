@@ -27,10 +27,6 @@ func (c *chat) Send(message string) {
 	c.Clients().Group("group").Send("send", message)
 }
 
-func (c *chat) Echo(message string) {
-	c.Clients().Caller().Send("send", message)
-}
-
 func (c *chat) Panic() {
 	panic("Don't panic!")
 }
@@ -70,21 +66,21 @@ func (c *chat) UploadStream(upload1 <-chan int, factor float64, upload2 <-chan f
 	ok2 := true
 	u1 := 0
 	u2 := 0.0
-	c.Echo(fmt.Sprintf("f: %v", factor))
+	c.Send(fmt.Sprintf("f: %v", factor))
 	for {
 		select {
 		case u1, ok1 = <-upload1:
 			if ok1 {
-				c.Echo(fmt.Sprintf("u1: %v", u1))
+				c.Send(fmt.Sprintf("u1: %v", u1))
 			} else if !ok2 {
-				c.Echo("Finished")
+				c.Send("Finished")
 				return
 			}
 		case u2, ok2 = <-upload2:
 			if ok2 {
-				c.Echo(fmt.Sprintf("u2: %v", u2))
+				c.Send(fmt.Sprintf("u2: %v", u2))
 			} else if !ok1  {
-				c.Echo("Finished")
+				c.Send("Finished")
 				return
 			}
 		default:

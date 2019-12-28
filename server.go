@@ -8,16 +8,16 @@ import (
 )
 
 type Server struct {
-	hubPrototype HubInterface
+	hub HubInterface
 	lifetimeManager HubLifetimeManager
 	defaultHubClients defaultHubClients
 	groupManager GroupManager
 }
 
-func NewServer(hubPrototype HubInterface) *Server {
+func NewServer(hub HubInterface) *Server {
 	lifetimeManager := defaultHubLifetimeManager{}
 	return &Server{
-		hubPrototype:    hubPrototype,
+		hub:    hub,
 		lifetimeManager: &lifetimeManager,
 		defaultHubClients: defaultHubClients{
 			lifetimeManager: &lifetimeManager,
@@ -32,7 +32,7 @@ func NewServer(hubPrototype HubInterface) *Server {
 func (s *Server) messageLoop(conn HubConnection, connectionID string, protocol HubProtocol) {
 	streamer := newStreamer(conn)
 	streamClient := newStreamClient()
-	hubInfo := s.newHubInfo(connectionID)
+	hubInfo := s.newHubInfo()
 	hubInfo.lifetimeManager.OnConnected(conn)
 	hubInfo.hub.OnConnected(connectionID)
 
@@ -94,27 +94,21 @@ type hubInfo struct {
 	methods         map[string]reflect.Value
 }
 
-func (s *Server) newHubInfo(connectionID string) *hubInfo {
+func (s *Server) newHubInfo() *hubInfo {
 
-	// Copy hubPrototype
-	hub := reflect.New(reflect.ValueOf(s.hubPrototype).Elem().Type()).Interface().(HubInterface)
-
-	hub.Initialize(&defaultHubContext{
-		clients: &contextHubClients{
-			defaultHubClients: &s.defaultHubClients,
-			connectionID:      connectionID,
-		},
+	s.hub.Initialize(&defaultHubContext{
+		clients: &s.defaultHubClients,
 		groups: s.groupManager,
 	})
 
 	hubInfo := &hubInfo{
-		hub:             hub,
+		hub:             s.hub,
 		lifetimeManager: s.lifetimeManager,
 		methods:         make(map[string]reflect.Value),
 	}
 
-	hubType := reflect.TypeOf(hub)
-	hubValue := reflect.ValueOf(hub)
+	hubType := reflect.TypeOf(s.hub)
+	hubValue := reflect.ValueOf(s.hub)
 	for i := 0; i < hubType.NumMethod(); i++ {
 		m := hubType.Method(i)
 		hubInfo.methods[strings.ToLower(m.Name)] = hubValue.Method(i)
