@@ -27,16 +27,14 @@ type Connection interface {
 func newHubConnection(connection Connection, protocol HubProtocol) hubConnection {
 	return &defaultHubConnection{
 		Protocol:     protocol,
-		Writer:       connection,
-		Reader:       connection,
+		Connection: connection,
 	}
 }
 
 type defaultHubConnection struct {
 	Protocol     HubProtocol
 	Connected    int32
-	Writer       io.Writer
-	Reader       io.Reader
+	Connection   Connection
 }
 
 func (c *defaultHubConnection) Start() {
@@ -56,7 +54,7 @@ func (c *defaultHubConnection) Close(error string) {
 		Error:          error,
 		AllowReconnect: true,
 	}
-	c.Protocol.WriteMessage(closeMessage, c.Writer)
+	c.Protocol.WriteMessage(closeMessage, c.Connection)
 }
 
 func (c *defaultHubConnection) GetConnectionID() string {
@@ -70,7 +68,7 @@ func (c *defaultHubConnection) SendInvocation(target string, args []interface{})
 		Arguments: args,
 	}
 
-	c.Protocol.WriteMessage(invocationMessage, c.Writer)
+	c.Protocol.WriteMessage(invocationMessage, c.Connection)
 }
 
 func (c *defaultHubConnection) Ping() {
@@ -78,7 +76,7 @@ func (c *defaultHubConnection) Ping() {
 		Type: 6,
 	}
 
-	c.Protocol.WriteMessage(pingMessage, c.Writer)
+	c.Protocol.WriteMessage(pingMessage, c.Connection)
 }
 
 func (c *defaultHubConnection) Receive() (interface{}, error) {
@@ -90,7 +88,7 @@ func (c *defaultHubConnection) Receive() (interface{}, error) {
 			// Partial message, need more data
 			// ReadMessage read data out of the buf, so its gone there: refill
 			buf.Write(data[:n])
-			if n, err = c.Reader.Read(data); err != nil {
+			if n, err = c.Connection.Read(data); err != nil {
 				return nil, err
 			} else {
 				buf.Write(data[:n])
@@ -109,7 +107,7 @@ func (c *defaultHubConnection) Completion(id string, result interface{}, error s
 		Error:        error,
 	}
 
-	c.Protocol.WriteMessage(completionMessage, c.Writer)
+	c.Protocol.WriteMessage(completionMessage, c.Connection)
 }
 
 func (c *defaultHubConnection) StreamItem(id string, item interface{}) {
@@ -119,6 +117,6 @@ func (c *defaultHubConnection) StreamItem(id string, item interface{}) {
 		Item:         item,
 	}
 
-	c.Protocol.WriteMessage(streamItemMessage, c.Writer)
+	c.Protocol.WriteMessage(streamItemMessage, c.Connection)
 }
 
