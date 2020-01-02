@@ -12,16 +12,16 @@ import (
 )
 
 type server struct {
-	hub               HubInterface
+	newHub            func() HubInterface
 	lifetimeManager   HubLifetimeManager
 	defaultHubClients HubClients
 	groupManager      GroupManager
 }
 
-func newServer(hub HubInterface) *server {
+func newServer(newHub func() HubInterface) *server {
 	lifetimeManager := defaultHubLifetimeManager{}
 	return &server{
-		hub:             hub,
+		newHub:          newHub,
 		lifetimeManager: &lifetimeManager,
 		defaultHubClients: &defaultHubClients{
 			lifetimeManager: &lifetimeManager,
