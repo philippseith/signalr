@@ -3,6 +3,7 @@ package signalr
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 )
@@ -26,12 +27,9 @@ func (j *jsonHubProtocol) UnmarshalArgument(argument interface{}, value interfac
 func (j *jsonHubProtocol) ReadMessage(buf *bytes.Buffer) (interface{}, bool, error) {
 	data, err := parseTextMessageFormat(buf)
 	switch {
-	case err == io.EOF:
+	case errors.Is(err, io.EOF):
 		return nil, false, err
 	case err != nil:
-		return nil, true, err
-	}
-	if err != nil {
 		return nil, true, err
 	}
 

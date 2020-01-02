@@ -41,11 +41,15 @@ func negotiateHandler(w http.ResponseWriter, req *http.Request) {
 		},
 	}
 
-	json.NewEncoder(w).Encode(response)
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		fmt.Println(err)
+	}
 }
 
 func getConnectionID() string {
 	bytes := make([]byte, 16)
-	rand.Read(bytes)
+	if _, err := rand.Read(bytes); err != nil {
+		fmt.Println(err)
+	}
 	return base64.StdEncoding.EncodeToString(bytes)
 }
