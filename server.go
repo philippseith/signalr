@@ -41,13 +41,11 @@ func (s *server) messageLoop(conn Connection) {
 		// start sending pings to the client
 		pings := startPingClientLoop(hubConn)
 		hubConn.Start()
-		// Process messages
+		s.lifetimeManager.OnConnected(hubConn)
 		streamer := newStreamer(hubConn)
 		streamClient := newStreamClient()
-		hubInfo := s.newHubInfo()
-		hubInfo.lifetimeManager.OnConnected(hubConn)
-		hubInfo.hub.OnConnected(hubConn.GetConnectionID())
-
+		s.transientHub(hubConn).OnConnected(hubConn.GetConnectionID())
+		// Process messages
 		for hubConn.IsConnected() {
 			if message, err := hubConn.Receive(); err != nil {
 				fmt.Println(err)
@@ -57,8 +55,9 @@ func (s *server) messageLoop(conn Connection) {
 				switch message.(type) {
 				case invocationMessage:
 					invocation := message.(invocationMessage)
+					// Transient hub
 					// Dispatch invocation here
-					if method, ok := hubInfo.methods[strings.ToLower(invocation.Target)]; !ok {
+					if method, ok := getMethod(s.transientHub(hubConn), invocation.Target); !ok {
 						// Unable to find the method
 						hubConn.Completion(invocation.InvocationID, nil, fmt.Sprintf("Unknown method %s", invocation.Target))
 					} else if in, clientStreaming, err := buildMethodArguments(method, invocation, streamClient, protocol); err != nil {
@@ -96,8 +95,8 @@ func (s *server) messageLoop(conn Connection) {
 				}
 			}
 		}
-		hubInfo.hub.OnDisconnected(hubConn.GetConnectionID())
-		hubInfo.lifetimeManager.OnDisconnected(hubConn)
+		s.transientHub(hubConn).OnDisconnected(hubConn.GetConnectionID())
+		s.lifetimeManager.OnDisconnected(hubConn)
 		hubConn.Close("")
 		// Wait for pings to complete
 		pings.Wait()
@@ -118,32 +117,37 @@ func startPingClientLoop(conn hubConnection) *sync.WaitGroup {
 	return &waitgroup
 }
 
-type hubInfo struct {
-	hub             HubInterface
-	lifetimeManager HubLifetimeManager
-	methods         map[string]reflect.Value
+func Clone(hubProto HubInterface) HubInterface {
+	return reflect.New(reflect.ValueOf(hubProto).Elem().Type()).Interface().(HubInterface)
 }
 
-func (s *server) newHubInfo() *hubInfo {
-
-	s.hub.Initialize(&defaultHubContext{
-		clients: s.defaultHubClients,
-		groups:  s.groupManager,
-	})
-
-	hubInfo := &hubInfo{
-		hub:             s.hub,
-		lifetimeManager: s.lifetimeManager,
-		methods:         make(map[string]reflect.Value),
+func (s *server) newConnectionHubContext(conn hubConnection) HubContext {
+	return &connectionHubContext{
+		clients: &callerHubClients{
+			defaultHubClients: s.defaultHubClients,
+			connectionID:      conn.GetConnectionID(),
+		},
+		groups: s.groupManager,
+		items:  conn.Items(),
 	}
+}
 
-	hubType := reflect.TypeOf(s.hub)
-	hubValue := reflect.ValueOf(s.hub)
+func (s *server) transientHub(conn hubConnection) HubInterface {
+	hub := s.newHub()
+	hub.Initialize(s.newConnectionHubContext(conn))
+	return hub
+}
+
+func getMethod(hub HubInterface, name string) (reflect.Value, bool) {
+	hubType := reflect.TypeOf(hub)
+	hubValue := reflect.ValueOf(hub)
+	name = strings.ToLower(name)
 	for i := 0; i < hubType.NumMethod(); i++ {
-		m := hubType.Method(i)
-		hubInfo.methods[strings.ToLower(m.Name)] = hubValue.Method(i)
+		if m := hubType.Method(i); strings.ToLower(m.Name) == name {
+			return hubValue.Method(i), true
+		}
 	}
-	return hubInfo
+	return reflect.Value{}, false
 }
 
 func returnInvocationResult(conn hubConnection, invocation invocationMessage, streamer *streamer, result []reflect.Value) {

@@ -13,7 +13,9 @@ func TestSignalr(t *testing.T) {
 }
 
 func connect(hubProto HubInterface) *testingConnection {
-	server := newServer(hubProto)
+	server := newServer(func() HubInterface {
+		return Clone(hubProto)
+	})
 	conn := newTestingConnection()
 	go server.messageLoop(conn)
 	return conn
