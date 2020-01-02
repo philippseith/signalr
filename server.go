@@ -29,12 +29,12 @@ func NewServer(hub HubInterface) *Server {
 	}
 }
 
-func (s *Server) messageLoop(conn hubConnection, connectionID string, protocol HubProtocol) {
+func (s *Server) messageLoop(conn hubConnection, protocol HubProtocol) {
 	streamer := newStreamer(conn)
 	streamClient := newStreamClient()
 	hubInfo := s.newHubInfo()
 	hubInfo.lifetimeManager.OnConnected(conn)
-	hubInfo.hub.OnConnected(connectionID)
+	hubInfo.hub.OnConnected(conn.GetConnectionID())
 
 	for conn.IsConnected() {
 		if message, err := conn.Receive(); err != nil {
@@ -84,7 +84,7 @@ func (s *Server) messageLoop(conn hubConnection, connectionID string, protocol H
 			}
 		}
 	}
-	hubInfo.hub.OnDisconnected(connectionID)
+	hubInfo.hub.OnDisconnected(conn.GetConnectionID())
 	hubInfo.lifetimeManager.OnDisconnected(conn)
 }
 

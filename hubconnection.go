@@ -21,12 +21,12 @@ type hubConnection interface {
 type Connection interface {
 	io.Reader
 	io.Writer
+	ConnectionId() string
 }
 
-func newHubConnection(connection Connection, connectionID string, protocol HubProtocol) hubConnection {
+func newHubConnection(connection Connection, protocol HubProtocol) hubConnection {
 	return &defaultHubConnection{
 		Protocol:     protocol,
-		ConnectionID: connectionID,
 		Writer:       connection,
 		Reader:       connection,
 	}
@@ -34,7 +34,6 @@ func newHubConnection(connection Connection, connectionID string, protocol HubPr
 
 type defaultHubConnection struct {
 	Protocol     HubProtocol
-	ConnectionID string
 	Connected    int32
 	Writer       io.Writer
 	Reader       io.Reader
@@ -61,7 +60,7 @@ func (c *defaultHubConnection) Close(error string) {
 }
 
 func (c *defaultHubConnection) GetConnectionID() string {
-	return c.ConnectionID
+	return c.Connection.ConnectionId()
 }
 
 func (c *defaultHubConnection) SendInvocation(target string, args []interface{}) {

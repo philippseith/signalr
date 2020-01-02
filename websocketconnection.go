@@ -8,6 +8,11 @@ import (
 type webSocketConnection struct {
 	ws *websocket.Conn
 	r  *bytes.Reader
+	connectionID string
+}
+
+func (w *webSocketConnection) ConnectionId() string {
+	return w.connectionID
 }
 
 func (w *webSocketConnection) Write(p []byte) (n int, err error) {

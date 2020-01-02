@@ -15,9 +15,9 @@ func TestSignalr(t *testing.T) {
 func connect(hubProto HubInterface) *testingConnection {
 	server := NewServer(hubProto)
 	conn := newTestingConnection()
-	hubConn := newHubConnection(conn, "bla", &JsonHubProtocol{})
+	hubConn := newHubConnection(conn, &JsonHubProtocol{})
 	hubConn.Start()
-	go server.messageLoop(hubConn, "bla", &JsonHubProtocol{})
+	go server.messageLoop(hubConn, &JsonHubProtocol{})
 	return conn
 }
 

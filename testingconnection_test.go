@@ -14,6 +14,10 @@ type testingConnection struct {
 	received  chan interface{}
 }
 
+func (t *testingConnection) ConnectionId() string {
+	return "test"
+}
+
 func (t *testingConnection) Read(b []byte) (n int, err error) {
 	return t.srvReader.Read(b)
 }
