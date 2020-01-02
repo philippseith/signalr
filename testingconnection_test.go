@@ -81,7 +81,7 @@ func (t *testingConnection) clientReceive() (string, error) {
 			buf.Write(data[:n])
 			if n, err = t.cliReader.Read(data); err == nil {
 				buf.Write(data[:n])
-			} else{
+			} else {
 				return "", err
 			}
 		} else {

@@ -31,7 +31,7 @@ func newHubConnection(connection Connection, protocol HubProtocol) hubConnection
 	return &defaultHubConnection{
 		Protocol:   protocol,
 		Connection: connection,
-		items: make(map[string] interface{}),
+		items:      make(map[string]interface{}),
 	}
 }
 
@@ -39,7 +39,7 @@ type defaultHubConnection struct {
 	Protocol   HubProtocol
 	Connected  int32
 	Connection Connection
-	items map[string]interface{}
+	items      map[string]interface{}
 }
 
 func (c *defaultHubConnection) Items() map[string]interface{} {

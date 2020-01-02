@@ -10,7 +10,7 @@ type HubContext interface {
 type connectionHubContext struct {
 	clients HubClients
 	groups  GroupManager
-	items map[string]interface{}
+	items   map[string]interface{}
 }
 
 func (c *connectionHubContext) Clients() HubClients {

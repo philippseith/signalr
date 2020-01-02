@@ -49,4 +49,3 @@ func (c *callerHubClients) Client(connectionID string) ClientProxy {
 func (c *callerHubClients) Group(groupName string) ClientProxy {
 	return c.defaultHubClients.Group(groupName)
 }
-
