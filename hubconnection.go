@@ -83,7 +83,7 @@ func (c *defaultHubConnection) Ping() {
 
 func (c *defaultHubConnection) Receive() (interface{}, error) {
 	var buf bytes.Buffer
-	var data = make([]byte, 1<<15) // 32K
+	var data = make([]byte, 1<<12) // 4K
 	var n int
 	for {
 		if message, complete, err := c.Protocol.ReadMessage(&buf); !complete {
