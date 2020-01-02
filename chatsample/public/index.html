@@ -15,7 +15,7 @@
     <script src="js/signalr.js"></script>
     <script>
         (async function () {
-            var subscription
+            var subscription;
             var connection = new signalR.HubConnectionBuilder()
                 .withUrl('/chat')
                 .build();
