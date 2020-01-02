@@ -24,12 +24,14 @@ type hubConnection interface {
 	StreamItem(id string, item interface{})
 	Completion(id string, result interface{}, error string)
 	Ping()
+	Items() map[string]interface{}
 }
 
 func newHubConnection(connection Connection, protocol HubProtocol) hubConnection {
 	return &defaultHubConnection{
 		Protocol:   protocol,
 		Connection: connection,
+		items: make(map[string] interface{}),
 	}
 }
 
@@ -37,6 +39,11 @@ type defaultHubConnection struct {
 	Protocol   HubProtocol
 	Connected  int32
 	Connection Connection
+	items map[string]interface{}
+}
+
+func (c *defaultHubConnection) Items() map[string]interface{} {
+	return c.items
 }
 
 func (c *defaultHubConnection) Start() {

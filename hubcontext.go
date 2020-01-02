@@ -4,17 +4,23 @@ package signalr
 type HubContext interface {
 	Clients() HubClients
 	Groups() GroupManager
+	Items() map[string]interface{}
 }
 
-type defaultHubContext struct {
+type connectionHubContext struct {
 	clients HubClients
 	groups  GroupManager
+	items map[string]interface{}
 }
 
-func (d *defaultHubContext) Clients() HubClients {
-	return d.clients
+func (c *connectionHubContext) Clients() HubClients {
+	return c.clients
 }
 
-func (d *defaultHubContext) Groups() GroupManager {
-	return d.groups
+func (c *connectionHubContext) Groups() GroupManager {
+	return c.groups
+}
+
+func (c *connectionHubContext) Items() map[string]interface{} {
+	return c.items
 }
