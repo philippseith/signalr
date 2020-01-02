@@ -1,10 +1,14 @@
 package signalr
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
 	"reflect"
 	"runtime/debug"
 	"strings"
+	"sync"
+	"time"
 )
 
 type Server struct {
@@ -29,63 +33,89 @@ func NewServer(hub HubInterface) *Server {
 	}
 }
 
-func (s *Server) messageLoop(conn hubConnection, protocol HubProtocol) {
-	streamer := newStreamer(conn)
-	streamClient := newStreamClient()
-	hubInfo := s.newHubInfo()
-	hubInfo.lifetimeManager.OnConnected(conn)
-	hubInfo.hub.OnConnected(conn.GetConnectionID())
+func (s *Server) messageLoop(conn Connection) {
+	if protocol, err := processHandshake(conn); err != nil {
+		fmt.Println(err)
+	} else {
+		hubConn := newHubConnection(conn, protocol)
+		// start sending pings to the client
+		pings := startPingClientLoop(hubConn)
+		hubConn.Start()
+		// Process messages
+		streamer := newStreamer(hubConn)
+		streamClient := newStreamClient()
+		hubInfo := s.newHubInfo()
+		hubInfo.lifetimeManager.OnConnected(hubConn)
+		hubInfo.hub.OnConnected(hubConn.GetConnectionID())
 
-	for conn.IsConnected() {
-		if message, err := conn.Receive(); err != nil {
-			fmt.Println(err)
-			break
-		} else {
-			fmt.Printf("Message received %v\n", message)
-			switch message.(type) {
-			case invocationMessage:
-				invocation := message.(invocationMessage)
-				// Dispatch invocation here
-				if method, ok := hubInfo.methods[strings.ToLower(invocation.Target)]; !ok {
-					// Unable to find the method
-					conn.Completion(invocation.InvocationID, nil, fmt.Sprintf("Unknown method %s", invocation.Target))
-				} else if in, clientStreaming, err := buildMethodArguments(method, invocation, streamClient, protocol); err != nil {
-					// argument build failed
-					conn.Completion(invocation.InvocationID, nil, err.Error())
-				} else if clientStreaming {
-					// let the receiving method run idependently
-					go func() {
-						defer func() {
-							if err := recover(); err != nil {
-								conn.Completion(invocation.InvocationID, nil, fmt.Sprintf("%v\n%v", err, string(debug.Stack())))
-							}
+		for hubConn.IsConnected() {
+			if message, err := hubConn.Receive(); err != nil {
+				fmt.Println(err)
+				break
+			} else {
+				fmt.Printf("Message received %v\n", message)
+				switch message.(type) {
+				case invocationMessage:
+					invocation := message.(invocationMessage)
+					// Dispatch invocation here
+					if method, ok := hubInfo.methods[strings.ToLower(invocation.Target)]; !ok {
+						// Unable to find the method
+						hubConn.Completion(invocation.InvocationID, nil, fmt.Sprintf("Unknown method %s", invocation.Target))
+					} else if in, clientStreaming, err := buildMethodArguments(method, invocation, streamClient, protocol); err != nil {
+						// argument build failed
+						hubConn.Completion(invocation.InvocationID, nil, err.Error())
+					} else if clientStreaming {
+						// let the receiving method run idependently
+						go func() {
+							defer func() {
+								if err := recover(); err != nil {
+									hubConn.Completion(invocation.InvocationID, nil, fmt.Sprintf("%v\n%v", err, string(debug.Stack())))
+								}
+							}()
+							method.Call(in)
 						}()
-						method.Call(in)
-					}()
-				} else {
-					result := func() []reflect.Value {
-						defer func() {
-							if err := recover(); err != nil {
-								conn.Completion(invocation.InvocationID, nil, fmt.Sprintf("%v\n%v", err, string(debug.Stack())))
-							}
+					} else {
+						result := func() []reflect.Value {
+							defer func() {
+								if err := recover(); err != nil {
+									hubConn.Completion(invocation.InvocationID, nil, fmt.Sprintf("%v\n%v", err, string(debug.Stack())))
+								}
+							}()
+							return method.Call(in)
 						}()
-						return method.Call(in)
-					}()
-					returnInvocationResult(conn, invocation, streamer, result)
+						returnInvocationResult(hubConn, invocation, streamer, result)
+					}
+				case cancelInvocationMessage:
+					streamer.Stop(message.(cancelInvocationMessage).InvocationID)
+				case streamItemMessage:
+					streamClient.receiveStreamItem(message.(streamItemMessage))
+				case completionMessage:
+					streamClient.receiveCompletionItem(message.(completionMessage))
+				case hubMessage:
+					// Ping
 				}
-			case cancelInvocationMessage:
-				streamer.Stop(message.(cancelInvocationMessage).InvocationID)
-			case streamItemMessage:
-				streamClient.receiveStreamItem(message.(streamItemMessage))
-			case completionMessage:
-				streamClient.receiveCompletionItem(message.(completionMessage))
-			case hubMessage:
-				// Ping
 			}
 		}
+		hubInfo.hub.OnDisconnected(hubConn.GetConnectionID())
+		hubInfo.lifetimeManager.OnDisconnected(hubConn)
+		hubConn.Close("")
+		// Wait for pings to complete
+		pings.Wait()
 	}
-	hubInfo.hub.OnDisconnected(conn.GetConnectionID())
-	hubInfo.lifetimeManager.OnDisconnected(conn)
+}
+
+func startPingClientLoop(conn hubConnection) *sync.WaitGroup {
+	var waitgroup sync.WaitGroup
+	waitgroup.Add(1)
+	go func(waitGroup *sync.WaitGroup, conn hubConnection) {
+		defer waitGroup.Done()
+
+		for conn.IsConnected() {
+			conn.Ping()
+			time.Sleep(5 * time.Second)
+		}
+	}(&waitgroup, conn)
+	return &waitgroup
 }
 
 type hubInfo struct {
@@ -199,4 +229,72 @@ func invokeConnection(conn hubConnection, invocation invocationMessage, connFunc
 	}
 }
 
+func processHandshake(conn Connection) (HubProtocol, error) {
+	var err error
+	var protocol HubProtocol
+	var ok bool
+	const handshakeResponse = "{}\u001e"
+	const errorHandshakeResponse = "{\"error\":\"%s\"}\u001e"
 
+	// TODO 5 seconds to process the handshake
+	// ws.SetReadDeadline(time.Now().Add(5 * time.Second))
+
+	var buf bytes.Buffer
+	data := make([]byte, 1<<12)
+	for {
+		n, err := conn.Read(data)
+		if err != nil {
+			break
+		}
+
+		buf.Write(data[:n])
+
+		rawHandshake, err := parseTextMessageFormat(&buf)
+
+		if err != nil {
+			// Partial message, read more data
+			continue
+		}
+
+		fmt.Println("Handshake received")
+
+		request := handshakeRequest{}
+		err = json.Unmarshal(rawHandshake, &request)
+
+		if err != nil {
+			// Malformed handshake
+			break
+		}
+
+		protocol, ok = protocolMap[request.Protocol]
+
+		if ok {
+			// Send the handshake response
+			_, err = conn.Write([]byte(handshakeResponse))
+		} else {
+			// Protocol not supported
+			fmt.Printf("\"%s\" is the only supported Protocol\n", request.Protocol)
+			_, err = conn.Write([]byte(fmt.Sprintf(errorHandshakeResponse, fmt.Sprintf("Protocol \"%s\" not supported", request.Protocol))))
+		}
+		break
+	}
+
+	// TODO Disable the timeout (either we already timeout out or)
+	//ws.SetReadDeadline(time.Time{})
+
+	return protocol, err
+}
+
+var protocolMap = map[string]HubProtocol{
+	"json": &JsonHubProtocol{},
+}
+
+type availableTransport struct {
+	Transport       string   `json:"transport"`
+	TransferFormats []string `json:"transferFormats"`
+}
+
+type negotiateResponse struct {
+	ConnectionID        string               `json:"connectionId"`
+	AvailableTransports []availableTransport `json:"availableTransports"`
+}

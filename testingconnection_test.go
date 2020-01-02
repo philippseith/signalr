@@ -35,6 +35,10 @@ func newTestingConnection() *testingConnection {
 		cliWriter: cliWriter,
 		cliReader: cliReader,
 	}
+	// Send initial Handshake
+	go func() {
+		conn.clientSend(`{"protocol": "json","version": 1}`)
+	}()
 	conn.received = make(chan interface{}, 20)
 	go func() {
 		for {
@@ -77,7 +81,7 @@ func (t *testingConnection) clientReceive() (string, error) {
 				buf.Write(data[:n])
 			}
 		} else {
-			return message[:len(message) - 1], nil
+			return message[:len(message)-1], nil
 		}
 	}
 }
