@@ -11,19 +11,19 @@ import (
 	"time"
 )
 
-type Server struct {
+type server struct {
 	hub               HubInterface
 	lifetimeManager   HubLifetimeManager
-	defaultHubClients defaultHubClients
+	defaultHubClients HubClients
 	groupManager      GroupManager
 }
 
-func NewServer(hub HubInterface) *Server {
+func newServer(hub HubInterface) *server {
 	lifetimeManager := defaultHubLifetimeManager{}
-	return &Server{
+	return &server{
 		hub:             hub,
 		lifetimeManager: &lifetimeManager,
-		defaultHubClients: defaultHubClients{
+		defaultHubClients: &defaultHubClients{
 			lifetimeManager: &lifetimeManager,
 			allCache:        allClientProxy{lifetimeManager: &lifetimeManager},
 		},
@@ -33,7 +33,7 @@ func NewServer(hub HubInterface) *Server {
 	}
 }
 
-func (s *Server) messageLoop(conn Connection) {
+func (s *server) messageLoop(conn Connection) {
 	if protocol, err := processHandshake(conn); err != nil {
 		fmt.Println(err)
 	} else {
@@ -65,7 +65,7 @@ func (s *Server) messageLoop(conn Connection) {
 						// argument build failed
 						hubConn.Completion(invocation.InvocationID, nil, err.Error())
 					} else if clientStreaming {
-						// let the receiving method run idependently
+						// let the receiving method run independently
 						go func() {
 							defer func() {
 								if err := recover(); err != nil {
@@ -124,10 +124,10 @@ type hubInfo struct {
 	methods         map[string]reflect.Value
 }
 
-func (s *Server) newHubInfo() *hubInfo {
+func (s *server) newHubInfo() *hubInfo {
 
 	s.hub.Initialize(&defaultHubContext{
-		clients: &s.defaultHubClients,
+		clients: s.defaultHubClients,
 		groups:  s.groupManager,
 	})
 
@@ -286,7 +286,7 @@ func processHandshake(conn Connection) (HubProtocol, error) {
 }
 
 var protocolMap = map[string]HubProtocol{
-	"json": &JsonHubProtocol{},
+	"json": &jsonHubProtocol{},
 }
 
 type availableTransport struct {

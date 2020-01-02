@@ -14,7 +14,7 @@ type testingConnection struct {
 	received  chan interface{}
 }
 
-func (t *testingConnection) ConnectionId() string {
+func (t *testingConnection) ConnectionID() string {
 	return "test"
 }
 
@@ -75,10 +75,10 @@ func (t *testingConnection) clientReceive() (string, error) {
 	for {
 		if message, err := buf.ReadString(30); err != nil {
 			buf.Write(data[:n])
-			if n, err = t.cliReader.Read(data); err != nil {
-				return "", err
-			} else {
+			if n, err = t.cliReader.Read(data); err == nil {
 				buf.Write(data[:n])
+			} else{
+				return "", err
 			}
 		} else {
 			return message[:len(message)-1], nil

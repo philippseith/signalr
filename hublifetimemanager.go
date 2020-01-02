@@ -2,6 +2,7 @@ package signalr
 
 import "sync"
 
+//HubLifetimeManager manages the lifetime of a hub
 type HubLifetimeManager interface {
 	OnConnected(conn hubConnection)
 	OnDisconnected(conn hubConnection)

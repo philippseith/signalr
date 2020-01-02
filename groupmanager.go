@@ -1,5 +1,6 @@
 package signalr
 
+//GroupManager manages the client groups of the hub
 type GroupManager interface {
 	AddToGroup(groupName string, connectionID string)
 	RemoveFromGroup(groupName string, connectionID string)

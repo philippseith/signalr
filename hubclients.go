@@ -1,5 +1,6 @@
 package signalr
 
+//HubClients gives the hub access to various client groups
 type HubClients interface {
 	All() ClientProxy
 	Client(connectionID string) ClientProxy

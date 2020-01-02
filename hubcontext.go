@@ -1,5 +1,6 @@
 package signalr
 
+//HubContext holds the clients and groups connected to the hub
 type HubContext interface {
 	Clients() HubClients
 	Groups() GroupManager

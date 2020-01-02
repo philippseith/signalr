@@ -6,6 +6,13 @@ import (
 	"sync/atomic"
 )
 
+//Connection describes a connection between signalR client and server
+type Connection interface {
+	io.Reader
+	io.Writer
+	ConnectionID() string
+}
+
 type hubConnection interface {
 	Start()
 	IsConnected() bool
@@ -16,12 +23,6 @@ type hubConnection interface {
 	StreamItem(id string, item interface{})
 	Completion(id string, result interface{}, error string)
 	Ping()
-}
-
-type Connection interface {
-	io.Reader
-	io.Writer
-	ConnectionId() string
 }
 
 func newHubConnection(connection Connection, protocol HubProtocol) hubConnection {
@@ -57,7 +58,7 @@ func (c *defaultHubConnection) Close(error string) {
 }
 
 func (c *defaultHubConnection) GetConnectionID() string {
-	return c.Connection.ConnectionId()
+	return c.Connection.ConnectionID()
 }
 
 func (c *defaultHubConnection) SendInvocation(target string, args []interface{}) {
@@ -87,10 +88,10 @@ func (c *defaultHubConnection) Receive() (interface{}, error) {
 			// Partial message, need more data
 			// ReadMessage read data out of the buf, so its gone there: refill
 			buf.Write(data[:n])
-			if n, err = c.Connection.Read(data); err != nil {
-				return nil, err
-			} else {
+			if n, err = c.Connection.Read(data); err == nil {
 				buf.Write(data[:n])
+			} else {
+				return nil, err
 			}
 		} else {
 			return message, err

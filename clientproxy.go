@@ -1,5 +1,6 @@
 package signalr
 
+//ClientProxy allows the hub to send messages to one or more of its clients
 type ClientProxy interface {
 	Send(target string, args ...interface{})
 }
