@@ -23,6 +23,11 @@ func (s *streamHub) SimpleStream() <-chan int {
 	return r
 }
 
+func (s *streamHub) SimpleInt() int {
+	streamInvocationQueue <- "SimpleInt()"
+	return -1
+}
+
 var _ = Describe("Streaminvocation", func() {
 
 	Describe("Simple stream invocation", func() {
@@ -76,6 +81,26 @@ var _ = Describe("Streaminvocation", func() {
 						return
 					}
 				}
+			})
+		})
+	})
+
+	Describe("Stream invocation of method with no stream result", func() {
+		conn := connect(&streamHub{})
+		Context("When invoked by the client", func() {
+			It("should be invoked on the server, return one stream item with the \"no stream\" result and a final completion without result", func() {
+				_, err := conn.clientSend(`{"type":4,"invocationId": "yyy","target":"simpleint"}`)
+				Expect(err).To(BeNil())
+				Expect(<-streamInvocationQueue).To(Equal("SimpleInt()"))
+				sRecv := (<-conn.received).(streamItemMessage)
+				Expect(sRecv).NotTo(BeNil())
+				Expect(sRecv.InvocationID).To(Equal("yyy"))
+				Expect(sRecv.Item).To(Equal(float64(-1)))
+				cRecv := (<-conn.received).(completionMessage)
+				Expect(cRecv).NotTo(BeNil())
+				Expect(cRecv.InvocationID).To(Equal("yyy"))
+				Expect(cRecv.Result).To(BeNil())
+				Expect(cRecv.Error).To(Equal(""))
 			})
 		})
 	})

@@ -213,4 +213,20 @@ var _ = Describe("Invocation", func() {
 			})
 		})
 	})
+
+	Describe("Missing method invocation", func() {
+		conn := connect(&invocationHub{})
+		Context("When a missing server method invoked by the client", func() {
+			It("should return an error", func() {
+				_, err := conn.clientSend(`{"type":1,"invocationId": "0000","target":"missing"}`)
+				Expect(err).To(BeNil())
+				recv := (<-conn.received).(completionMessage)
+				Expect(recv).NotTo(BeNil())
+				Expect(recv.InvocationID).To(Equal("0000"))
+				Expect(recv.Result).To(BeNil())
+				Expect(recv.Error).NotTo(BeNil())
+				Expect(len(recv.Error)).To(BeNumerically(">", 0))
+			})
+		})
+	})
 })

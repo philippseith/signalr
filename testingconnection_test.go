@@ -43,7 +43,7 @@ func newTestingConnection() *testingConnection {
 			ginkgo.Fail(fmt.Sprint(err))
 		}
 	}()
-	conn.received = make(chan interface{}, 20)
+	conn.received = make(chan interface{}, 0)
 	go func() {
 		for {
 			if message, err := conn.clientReceive(); err == nil {
