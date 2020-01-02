@@ -86,7 +86,6 @@ func parseTextMessageFormat(buf *bytes.Buffer) ([]byte, error) {
 	return data[0 : len(data)-1], err
 }
 
-
 func (j *JsonHubProtocol) WriteMessage(message interface{}, writer io.Writer) error {
 
 	// TODO: Reduce the amount of copies
@@ -106,6 +105,3 @@ func (j *JsonHubProtocol) WriteMessage(message interface{}, writer io.Writer) er
 	_, err := writer.Write(buf.Bytes())
 	return err
 }
-
-
-

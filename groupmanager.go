@@ -16,5 +16,3 @@ func (d *defaultGroupManager) AddToGroup(groupName string, connectionID string) 
 func (d *defaultGroupManager) RemoveFromGroup(groupName string, connectionID string) {
 	d.lifetimeManager.RemoveFromGroup(groupName, connectionID)
 }
-
-

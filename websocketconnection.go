@@ -6,8 +6,8 @@ import (
 )
 
 type webSocketConnection struct {
-	ws *websocket.Conn
-	r  *bytes.Reader
+	ws           *websocket.Conn
+	r            *bytes.Reader
 	connectionID string
 }
 
@@ -32,4 +32,3 @@ func (w *webSocketConnection) Read(p []byte) (n int, err error) {
 		return w.r.Read(p)
 	}
 }
-

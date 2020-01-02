@@ -45,8 +45,8 @@ type streamItemMessage struct {
 }
 
 type cancelInvocationMessage struct {
-	Type         int         `json:"type"`
-	InvocationID string      `json:"invocationId"`
+	Type         int    `json:"type"`
+	InvocationID string `json:"invocationId"`
 }
 
 type closeMessage struct {
@@ -59,4 +59,3 @@ type handshakeRequest struct {
 	Protocol string `json:"Protocol"`
 	Version  int    `json:"version"`
 }
-

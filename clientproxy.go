@@ -29,4 +29,3 @@ type groupClientProxy struct {
 func (g *groupClientProxy) Send(target string, args ...interface{}) {
 	g.lifetimeManager.InvokeGroup(g.groupName, target, args)
 }
-

@@ -17,5 +17,3 @@ func (d *defaultHubContext) Clients() HubClients {
 func (d *defaultHubContext) Groups() GroupManager {
 	return d.groups
 }
-
-

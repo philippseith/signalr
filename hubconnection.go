@@ -26,21 +26,20 @@ type Connection interface {
 
 func newHubConnection(connection Connection, protocol HubProtocol) hubConnection {
 	return &defaultHubConnection{
-		Protocol:     protocol,
+		Protocol:   protocol,
 		Connection: connection,
 	}
 }
 
 type defaultHubConnection struct {
-	Protocol     HubProtocol
-	Connected    int32
-	Connection   Connection
+	Protocol   HubProtocol
+	Connected  int32
+	Connection Connection
 }
 
 func (c *defaultHubConnection) Start() {
 	atomic.CompareAndSwapInt32(&c.Connected, 0, 1)
 }
-
 
 func (c *defaultHubConnection) IsConnected() bool {
 	return atomic.LoadInt32(&c.Connected) == 1
@@ -119,4 +118,3 @@ func (c *defaultHubConnection) StreamItem(id string, item interface{}) {
 
 	c.Protocol.WriteMessage(streamItemMessage, c.Connection)
 }
-

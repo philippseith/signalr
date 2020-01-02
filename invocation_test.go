@@ -15,7 +15,7 @@ type invocationHub struct {
 }
 
 func (i *invocationHub) Simple() {
-		invocationQueue <- "Simple()"
+	invocationQueue <- "Simple()"
 }
 
 func (i *invocationHub) SimpleInt(value int) int {
@@ -82,11 +82,11 @@ var _ = Describe("Invocation", func() {
 				// Strange: Even godoc states PipeReader/PipeWriter are blocking,
 				// clientSend returns before the server reads the pipe, so we have to poll.
 				// Did I get this right?
-				for i:= 0; i < 5; i++ {
+				for i := 0; i < 5; i++ {
 					select {
-						case recv := <- conn.received:
-							Fail(fmt.Sprintf("server answered %v", recv))
-						default:
+					case recv := <-conn.received:
+						Fail(fmt.Sprintf("server answered %v", recv))
+					default:
 					}
 					time.Sleep(time.Millisecond * 50)
 				}
@@ -214,4 +214,3 @@ var _ = Describe("Invocation", func() {
 		})
 	})
 })
-

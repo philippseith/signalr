@@ -77,6 +77,3 @@ func (d *defaultHubLifetimeManager) RemoveFromGroup(groupName string, connection
 
 	delete(groups.(map[string]hubConnection), connectionID)
 }
-
-
-

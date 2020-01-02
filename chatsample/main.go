@@ -53,7 +53,7 @@ func (c *chat) DateStream() <-chan string {
 	r := make(chan string)
 	go func() {
 		defer close(r)
-		for i := 0;  i < 50; i++ {
+		for i := 0; i < 50; i++ {
 			r <- fmt.Sprint(time.Now().Clock())
 			time.Sleep(time.Second)
 		}
@@ -79,7 +79,7 @@ func (c *chat) UploadStream(upload1 <-chan int, factor float64, upload2 <-chan f
 		case u2, ok2 = <-upload2:
 			if ok2 {
 				c.Send(fmt.Sprintf("u2: %v", u2))
-			} else if !ok1  {
+			} else if !ok1 {
 				c.Send("Finished")
 				return
 			}

@@ -6,7 +6,7 @@ import (
 )
 
 func newStreamer(conn hubConnection) *streamer {
-	return &streamer{make(map[string]chan bool), sync.Mutex{}, conn }
+	return &streamer{make(map[string]chan bool), sync.Mutex{}, conn}
 }
 
 type streamer struct {
@@ -55,4 +55,3 @@ func (s *streamer) Stop(invocationID string) {
 		}
 	}()
 }
-

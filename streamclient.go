@@ -15,7 +15,7 @@ type streamClient struct {
 
 func (u *streamClient) buildChannelArgument(invocation invocationMessage, argType reflect.Type, chanCount int) (arg reflect.Value, canClientStreaming bool, err error) {
 	if argType.Kind() != reflect.Chan || argType.ChanDir() == reflect.SendDir {
-		return reflect.Value{}, false,nil
+		return reflect.Value{}, false, nil
 	} else if len(invocation.StreamIds) > chanCount {
 		// MakeChan does only accept bidirectional channels and we need to Send to this channel anyway
 		arg = reflect.MakeChan(reflect.ChanOf(reflect.BothDir, argType.Elem()), 0)
@@ -73,4 +73,3 @@ func (u *streamClient) receiveCompletionItem(completion completionMessage) {
 	channel.Close()
 	delete(u.upstreamChannels, completion.InvocationID)
 }
-

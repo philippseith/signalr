@@ -25,6 +25,3 @@ func (h *Hub) Groups() GroupManager {
 func (h *Hub) OnConnected(string) {}
 
 func (h *Hub) OnDisconnected(string) {}
-
-
-

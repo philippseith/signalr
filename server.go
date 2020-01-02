@@ -12,16 +12,16 @@ import (
 )
 
 type Server struct {
-	hub HubInterface
-	lifetimeManager HubLifetimeManager
+	hub               HubInterface
+	lifetimeManager   HubLifetimeManager
 	defaultHubClients defaultHubClients
-	groupManager GroupManager
+	groupManager      GroupManager
 }
 
 func NewServer(hub HubInterface) *Server {
 	lifetimeManager := defaultHubLifetimeManager{}
 	return &Server{
-		hub:    hub,
+		hub:             hub,
 		lifetimeManager: &lifetimeManager,
 		defaultHubClients: defaultHubClients{
 			lifetimeManager: &lifetimeManager,
@@ -128,7 +128,7 @@ func (s *Server) newHubInfo() *hubInfo {
 
 	s.hub.Initialize(&defaultHubContext{
 		clients: &s.defaultHubClients,
-		groups: s.groupManager,
+		groups:  s.groupManager,
 	})
 
 	hubInfo := &hubInfo{
