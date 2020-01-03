@@ -94,10 +94,10 @@ func (c *defaultHubConnection) Receive() (interface{}, error) {
 			// Partial message, need more data
 			// ReadMessage read data out of the buf, so its gone there: refill
 			buf.Write(data[:n])
-			if n, err = c.Connection.Read(data); err != nil {
-				return nil, err
-			} else {
+			if n, err = c.Connection.Read(data); err == nil {
 				buf.Write(data[:n])
+			} else {
+				return nil, err
 			}
 		} else {
 			return message, err

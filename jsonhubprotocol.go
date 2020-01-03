@@ -8,7 +8,8 @@ import (
 	"io"
 )
 
-type jsonHubProtocol struct {
+// JsonHubProtocol is the JSON based SignalR protocol
+type JsonHubProtocol struct {
 }
 
 // Protocol specific message for correct unmarshaling of Arguments
@@ -20,11 +21,14 @@ type jsonInvocationMessage struct {
 	StreamIds    []string          `json:"streamIds,omitempty"`
 }
 
-func (j *jsonHubProtocol) UnmarshalArgument(argument interface{}, value interface{}) error {
+// UnmarshalArgument unmarshals a json.RawMessage depending of the specified value type into value
+func (j *JsonHubProtocol) UnmarshalArgument(argument interface{}, value interface{}) error {
 	return json.Unmarshal(argument.(json.RawMessage), value)
 }
 
-func (j *jsonHubProtocol) ReadMessage(buf *bytes.Buffer) (interface{}, bool, error) {
+// ReadMessage reads a JSON message from buf and returns the messgae if the buf contained one completely.
+// If buf does not contain the whole message, it returns a nil message and complete false
+func (j *JsonHubProtocol) ReadMessage(buf *bytes.Buffer) (m interface{}, complete bool, err error) {
 	data, err := parseTextMessageFormat(buf)
 	switch {
 	case errors.Is(err, io.EOF):
@@ -84,7 +88,8 @@ func parseTextMessageFormat(buf *bytes.Buffer) ([]byte, error) {
 	return data[0 : len(data)-1], err
 }
 
-func (j *jsonHubProtocol) WriteMessage(message interface{}, writer io.Writer) error {
+// WriteMessage writes a message as JSON to the specified writer
+func (j *JsonHubProtocol) WriteMessage(message interface{}, writer io.Writer) error {
 
 	// TODO: Reduce the amount of copies
 
