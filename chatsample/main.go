@@ -99,8 +99,8 @@ func runTCP(address string, hub signalr.HubInterface) {
 
 	fmt.Printf("Listening for TCP connection on %s\n", listener.Addr())
 
-	server := signalr.NewServer(func() HubInterface {
-		return CreateInstance(hub)
+	server := signalr.NewServer(func() signalr.HubInterface {
+		return signalr.CreateInstance(hub)
 	})
 
 	for {
@@ -117,7 +117,7 @@ func runTCP(address string, hub signalr.HubInterface) {
 
 func runHTTP(address string, hub signalr.HubInterface) {
 	router := http.NewServeMux()
-	router.Handle("/", http.FileServer(http.Dir("../public")))
+	router.Handle("/", http.FileServer(http.Dir("./public")))
 
 	signalr.MapHub(router, "/chat", hub)
 
