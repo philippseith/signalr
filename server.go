@@ -11,16 +11,16 @@ import (
 	"time"
 )
 
-type server struct {
+type Server struct {
 	newHub            func() HubInterface
 	lifetimeManager   HubLifetimeManager
 	defaultHubClients HubClients
 	groupManager      GroupManager
 }
 
-func newServer(newHub func() HubInterface) *server {
+func NewServer(newHub func() HubInterface) *Server {
 	lifetimeManager := defaultHubLifetimeManager{}
-	return &server{
+	return &Server{
 		newHub:          newHub,
 		lifetimeManager: &lifetimeManager,
 		defaultHubClients: &defaultHubClients{
@@ -33,7 +33,7 @@ func newServer(newHub func() HubInterface) *server {
 	}
 }
 
-func (s *server) messageLoop(conn Connection) {
+func (s *Server) Run(conn Connection) {
 	if protocol, err := processHandshake(conn); err != nil {
 		fmt.Println(err)
 	} else {
@@ -117,11 +117,11 @@ func startPingClientLoop(conn hubConnection) *sync.WaitGroup {
 	return &waitgroup
 }
 
-func Clone(hubProto HubInterface) HubInterface {
+func CreateInstance(hubProto HubInterface) HubInterface {
 	return reflect.New(reflect.ValueOf(hubProto).Elem().Type()).Interface().(HubInterface)
 }
 
-func (s *server) newConnectionHubContext(conn hubConnection) HubContext {
+func (s *Server) newConnectionHubContext(conn hubConnection) HubContext {
 	return &connectionHubContext{
 		clients: &callerHubClients{
 			defaultHubClients: s.defaultHubClients,
@@ -132,7 +132,7 @@ func (s *server) newConnectionHubContext(conn hubConnection) HubContext {
 	}
 }
 
-func (s *server) transientHub(conn hubConnection) HubInterface {
+func (s *Server) transientHub(conn hubConnection) HubInterface {
 	hub := s.newHub()
 	hub.Initialize(s.newConnectionHubContext(conn))
 	return hub

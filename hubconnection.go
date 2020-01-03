@@ -3,16 +3,8 @@ package signalr
 import (
 	"bytes"
 	"fmt"
-	"io"
 	"sync/atomic"
 )
-
-//Connection describes a connection between signalR client and server
-type Connection interface {
-	io.Reader
-	io.Writer
-	ConnectionID() string
-}
 
 type hubConnection interface {
 	Start()
@@ -102,10 +94,10 @@ func (c *defaultHubConnection) Receive() (interface{}, error) {
 			// Partial message, need more data
 			// ReadMessage read data out of the buf, so its gone there: refill
 			buf.Write(data[:n])
-			if n, err = c.Connection.Read(data); err == nil {
-				buf.Write(data[:n])
-			} else {
+			if n, err = c.Connection.Read(data); err != nil {
 				return nil, err
+			} else {
+				buf.Write(data[:n])
 			}
 		} else {
 			return message, err

@@ -34,8 +34,8 @@ type sendOnlyHubInvocationMessage struct {
 type completionMessage struct {
 	Type         int         `json:"type"`
 	InvocationID string      `json:"invocationId"`
-	Result       interface{} `json:"result"`
-	Error        string      `json:"error"`
+	Result       interface{} `json:"result,omitempty"`
+	Error        string      `json:"error,omitempty"`
 }
 
 type streamItemMessage struct {

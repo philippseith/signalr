@@ -12,8 +12,8 @@ import (
 // MapHub used to register a SignalR Hub with the specified ServeMux
 func MapHub(mux *http.ServeMux, path string, hubProto HubInterface) {
 	mux.HandleFunc(fmt.Sprintf("%s/negotiate", path), negotiateHandler)
-	server := newServer(func() HubInterface {
-		return Clone(hubProto)
+	server := NewServer(func() HubInterface {
+		return CreateInstance(hubProto)
 	})
 	mux.Handle(path, websocket.Handler(func(ws *websocket.Conn) {
 		connectionID := ws.Request().URL.Query().Get("id")
@@ -21,7 +21,7 @@ func MapHub(mux *http.ServeMux, path string, hubProto HubInterface) {
 			// Support websocket connection without negotiate
 			connectionID = getConnectionID()
 		}
-		server.messageLoop(&webSocketConnection{ws, nil, connectionID})
+		server.Run(&webSocketConnection{ws, nil, connectionID})
 	}))
 }
 
