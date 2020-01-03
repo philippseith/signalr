@@ -105,3 +105,4 @@ dist
 
 # Jetbrains IDE files
 .idea/
+/.vscode
