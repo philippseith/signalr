@@ -3,6 +3,7 @@ package signalr
 import (
 	"bytes"
 	"fmt"
+	"github.com/go-kit/kit/log"
 	"sync/atomic"
 )
 
@@ -19,11 +20,13 @@ type hubConnection interface {
 	Items() map[string]interface{}
 }
 
-func newHubConnection(connection Connection, protocol HubProtocol) hubConnection {
+func newHubConnection(connection Connection, protocol HubProtocol, info log.Logger, debug log.Logger) hubConnection {
 	return &defaultHubConnection{
 		Protocol:   protocol,
 		Connection: connection,
 		items:      make(map[string]interface{}),
+		info: info,
+		debug: debug,
 	}
 }
 
@@ -32,6 +35,8 @@ type defaultHubConnection struct {
 	Connected  int32
 	Connection Connection
 	items      map[string]interface{}
+	info log.Logger
+	debug log.Logger
 }
 
 func (c *defaultHubConnection) Items() map[string]interface{} {

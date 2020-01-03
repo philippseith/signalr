@@ -53,7 +53,7 @@ func (s *Server) Run(conn Connection) {
 	if protocol, err := processHandshake(conn); err != nil {
 		fmt.Println(err)
 	} else {
-		hubConn := newHubConnection(conn, protocol)
+		hubConn := newHubConnection(conn, protocol, s.info, s.debug)
 		// start sending pings to the client
 		pings := startPingClientLoop(hubConn)
 		hubConn.Start()
