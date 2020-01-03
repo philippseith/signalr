@@ -4,6 +4,9 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"github.com/go-kit/kit/log"
+	"github.com/go-kit/kit/log/level"
+	"os"
 	"reflect"
 	"runtime/debug"
 	"strings"
@@ -17,12 +20,19 @@ type Server struct {
 	lifetimeManager   HubLifetimeManager
 	defaultHubClients HubClients
 	groupManager      GroupManager
+	info              log.Logger
+	debug             log.Logger
 }
 
 // NewServer creates a new server for one type of hub
 // newHub is called each time a hub method is invoked by a client to create the transient hub instance
 func NewServer(newHub func() HubInterface) *Server {
 	lifetimeManager := defaultHubLifetimeManager{}
+	baseLog := log.With(
+		level.NewFilter(
+			log.NewLogfmtLogger(os.Stderr),
+			level.AllowInfo()),
+		"ts", log.DefaultTimestampUTC)
 	return &Server{
 		newHub:          newHub,
 		lifetimeManager: &lifetimeManager,
@@ -33,6 +43,8 @@ func NewServer(newHub func() HubInterface) *Server {
 		groupManager: &defaultGroupManager{
 			lifetimeManager: &lifetimeManager,
 		},
+		info:  level.Info(baseLog),
+		debug: level.Debug(baseLog),
 	}
 }
 
@@ -105,6 +117,18 @@ func (s *Server) Run(conn Connection) {
 		// Wait for pings to complete
 		pings.Wait()
 	}
+}
+
+// UseLogger sets the logger used by the server. If the debug flag is true, debug logs will be generated
+func (s *Server) UseLogger(logger log.Logger, debug bool) {
+	var baseLog log.Logger
+	if debug {
+		baseLog = log.With(level.NewFilter(logger, level.AllowDebug()), "ts", log.DefaultTimestampUTC)
+	} else {
+		baseLog = log.With(level.NewFilter(logger, level.AllowInfo()), "ts", log.DefaultTimestampUTC)
+	}
+	s.info = level.Info(baseLog)
+	s.debug = log.With(level.Debug(baseLog), "caller", log.DefaultCaller)
 }
 
 func startPingClientLoop(conn hubConnection) *sync.WaitGroup {
