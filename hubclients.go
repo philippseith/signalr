@@ -7,7 +7,7 @@ package signalr
 // Group() gets a ClientProxy that can be used to invoke methods on all connections in the specified group
 type HubClients interface {
 	All() ClientProxy
-	Caller(connectionID string) ClientProxy
+	Caller() ClientProxy
 	Client(connectionID string) ClientProxy
 	Group(groupName string) ClientProxy
 }
@@ -17,7 +17,7 @@ type defaultHubClients struct {
 	allCache        allClientProxy
 }
 
-func (c *defaultHubClients) Caller(connectionID string) ClientProxy {
+func (c *defaultHubClients) Caller() ClientProxy {
 	panic("call only on callerHubClients")
 }
 
@@ -42,7 +42,7 @@ func (c *callerHubClients) All() ClientProxy {
 	return c.defaultHubClients.All()
 }
 
-func (c *callerHubClients) Caller(connectionID string) ClientProxy {
+func (c *callerHubClients) Caller() ClientProxy {
 	return c.defaultHubClients.Client(c.connectionID)
 }
 
