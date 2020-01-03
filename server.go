@@ -323,12 +323,3 @@ var protocolMap = map[string]HubProtocol{
 	"json": &JSONHubProtocol{},
 }
 
-type availableTransport struct {
-	Transport       string   `json:"transport"`
-	TransferFormats []string `json:"transferFormats"`
-}
-
-type negotiateResponse struct {
-	ConnectionID        string               `json:"connectionId"`
-	AvailableTransports []availableTransport `json:"availableTransports"`
-}
