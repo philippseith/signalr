@@ -1,6 +1,9 @@
 package signalr
 
-//HubClients gives the hub access to various client groups
+// HubClients gives the hub access to various client groups
+// All() gets a ClientProxy that can be used to invoke methods on all clients connected to the hub
+// Client() gets a ClientProxy that can be used to invoke methods on the specified client connection
+// Group() gets a ClientProxy that can be used to invoke methods on all connections in the specified group
 type HubClients interface {
 	All() ClientProxy
 	Caller(connectionID string) ClientProxy

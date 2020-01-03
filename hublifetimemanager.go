@@ -2,7 +2,14 @@ package signalr
 
 import "sync"
 
-//HubLifetimeManager manages the lifetime of a hub
+// HubLifetimeManager is a lifetime manager abstraction for hub instances
+// OnConnected() is called when a connection is started
+// OnDisconnected() is called when a connection is finished
+// InvokeAll() sends an invocation message to all hub connections
+// InvokeClient() sends an invocation message to a specified hub connection
+// InvokeGroup() sends an invocation message to a specified group of hub connections
+// AddToGroup() adds a connection to the specified group
+// RemoveFromGroup() removes a connection from the specified group
 type HubLifetimeManager interface {
 	OnConnected(conn hubConnection)
 	OnDisconnected(conn hubConnection)
