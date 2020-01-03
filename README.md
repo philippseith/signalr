@@ -1,5 +1,7 @@
 ## SignalR
 
+[![Actions Status](https://github.com/philippseith/signalr/workflows/Build and Test/badge.svg)](https://github.com/philippseith/signalr/actions)
+
 SignalR is an open-source library that simplifies adding real-time web functionality to apps. 
 Real-time web functionality enables server-side code to push content to clients instantly.
 
