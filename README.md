@@ -1,7 +1,7 @@
 ## SignalR
 
 [![Actions Status](https://github.com/philippseith/signalr/workflows/Build%20and%20Test/badge.svg)](https://github.com/philippseith/signalr/actions)
-[![codecov](https://codecov.io/gh/TechnionYP5777/philippseith/signalr/branch/master/graph/badge.svg)](https://codecov.io/gh/TechnionYP5777/philippseith/signalr)
+[![codecov](https://codecov.io/gh/TechnionYP5777/signalr/branch/master/graph/badge.svg)](https://codecov.io/gh/TechnionYP5777/signalr)
 
 SignalR is an open-source library that simplifies adding real-time web functionality to apps. 
 Real-time web functionality enables server-side code to push content to clients instantly.
