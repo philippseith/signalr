@@ -11,6 +11,7 @@ import (
 	"time"
 )
 
+// Server is a SignalR server for one type of hub
 type Server struct {
 	newHub            func() HubInterface
 	lifetimeManager   HubLifetimeManager
@@ -18,6 +19,8 @@ type Server struct {
 	groupManager      GroupManager
 }
 
+// NewServer creates a new server for one type of hub
+// newHub is called each time a hub method is invoked by a client to create the transient hub instance
 func NewServer(newHub func() HubInterface) *Server {
 	lifetimeManager := defaultHubLifetimeManager{}
 	return &Server{
@@ -33,6 +36,7 @@ func NewServer(newHub func() HubInterface) *Server {
 	}
 }
 
+// Run runs the server on one connection. The same server might be run on different connections in parallel
 func (s *Server) Run(conn Connection) {
 	if protocol, err := processHandshake(conn); err != nil {
 		fmt.Println(err)
@@ -117,6 +121,8 @@ func startPingClientLoop(conn hubConnection) *sync.WaitGroup {
 	return &waitgroup
 }
 
+// CreateInstance creates an instance of the underlying type of hubProto without initializing any fields
+// The function can be used as newHub argument for NewServer()
 func CreateInstance(hubProto HubInterface) HubInterface {
 	return reflect.New(reflect.ValueOf(hubProto).Elem().Type()).Interface().(HubInterface)
 }
