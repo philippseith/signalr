@@ -296,7 +296,7 @@ func processHandshake(conn Connection) (HubProtocol, error) {
 }
 
 var protocolMap = map[string]HubProtocol{
-	"json": &JsonHubProtocol{},
+	"json": &JSONHubProtocol{},
 }
 
 type availableTransport struct {
