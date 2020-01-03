@@ -8,4 +8,4 @@ Historically it was tied to ASP.NET Core but the
 
 This repository contains an implementation of an SignalR server in go. The implementation is based on the work of 
 David Fowler at https://github.com/davidfowl/signalr-ports.
-The server currently supports transport over WebSockets and protocol encoding in JSON.
+The server currently supports transport over http/WebSockets and TCP. The supported protocol encoding in JSON.
