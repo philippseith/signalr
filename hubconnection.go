@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"github.com/go-kit/kit/log"
+	"reflect"
 	"sync/atomic"
 )
 
@@ -21,6 +22,12 @@ type hubConnection interface {
 }
 
 func newHubConnection(connection Connection, protocol HubProtocol, info log.Logger, debug log.Logger) hubConnection {
+	info = log.WithPrefix(info, "ts", log.DefaultTimestampUTC,
+		"class", "HubConnection")
+	debug =	log.WithPrefix(debug, "ts", log.DefaultTimestampUTC,
+			"class", "HubConnection",
+			"conn", reflect.ValueOf(connection).Elem().Type(),
+			"protocol", reflect.ValueOf(protocol).Elem().Type())
 	return &defaultHubConnection{
 		Protocol:   protocol,
 		Connection: connection,

@@ -21,12 +21,28 @@ type jsonInvocationMessage struct {
 	StreamIds    []string          `json:"streamIds,omitempty"`
 }
 
-// UnmarshalArgument unmarshals a json.RawMessage depending of the specified value type into value
-func (j *JSONHubProtocol) UnmarshalArgument(argument interface{}, value interface{}) error {
-	return json.Unmarshal(argument.(json.RawMessage), value)
+type jsonError struct {
+	raw string
+	err error
 }
 
-// ReadMessage reads a JSON message from buf and returns the messgae if the buf contained one completely.
+func (j *jsonError) Error() string {
+	return fmt.Sprintf("%v (source: %v)", j.err, j.raw)
+}
+
+func (j *jsonError) Unwrap() error {
+	return j.err
+}
+
+// UnmarshalArgument unmarshals a json.RawMessage depending of the specified value type into value
+func (j *JSONHubProtocol) UnmarshalArgument(argument interface{}, value interface{}) error {
+	if err := json.Unmarshal(argument.(json.RawMessage), value); err != nil {
+		return &jsonError{string(argument.(json.RawMessage)), err}
+	}
+	return nil
+}
+
+// ReadMessage reads a JSON message from buf and returns the message if the buf contained one completely.
 // If buf does not contain the whole message, it returns a nil message and complete false
 func (j *JSONHubProtocol) ReadMessage(buf *bytes.Buffer) (m interface{}, complete bool, err error) {
 	data, err := parseTextMessageFormat(buf)
@@ -41,13 +57,15 @@ func (j *JSONHubProtocol) ReadMessage(buf *bytes.Buffer) (m interface{}, complet
 	err = json.Unmarshal(data, &message)
 
 	if err != nil {
-		return nil, true, err
+		return nil, true, &jsonError{string(data), err}
 	}
 
 	switch message.Type {
 	case 1, 4:
 		jsonInvocation := jsonInvocationMessage{}
-		err = json.Unmarshal(data, &jsonInvocation)
+		if err = json.Unmarshal(data, &jsonInvocation); err != nil {
+			err = &jsonError{string(data), err}
+		}
 		arguments := make([]interface{}, len(jsonInvocation.Arguments))
 		for i, a := range jsonInvocation.Arguments {
 			arguments[i] = a
@@ -62,15 +80,21 @@ func (j *JSONHubProtocol) ReadMessage(buf *bytes.Buffer) (m interface{}, complet
 		return invocation, true, err
 	case 2:
 		streamItem := streamItemMessage{}
-		err = json.Unmarshal(data, &streamItem)
+		if err = json.Unmarshal(data, &streamItem); err != nil {
+			err = &jsonError{string(data), err}
+		}
 		return streamItem, true, err
 	case 3:
 		completion := completionMessage{}
-		err := json.Unmarshal(data, &completion)
+		if err := json.Unmarshal(data, &completion); err != nil {
+			err = &jsonError{string(data), err}
+		}
 		return completion, true, err
 	case 5:
 		invocation := cancelInvocationMessage{}
-		err = json.Unmarshal(data, &invocation)
+		if err = json.Unmarshal(data, &invocation); err != nil {
+			err = &jsonError{string(data), err}
+		}
 		return invocation, true, err
 	default:
 		return message, true, nil
@@ -84,7 +108,7 @@ func parseTextMessageFormat(buf *bytes.Buffer) ([]byte, error) {
 	if err != nil {
 		return data, err
 	}
-	// Remove the delimeter
+	// Remove the delimiter
 	return data[0 : len(data)-1], err
 }
 
