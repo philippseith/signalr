@@ -77,7 +77,7 @@ var _ = Describe("Invocation", func() {
 		conn := connect(&invocationHub{})
 		Context("When the client sends invalid json", func() {
 			It("should not return any value", func() {
-				_, err := conn.clientSend(`{"type":1,"invocationId": "123","target":"simpleint", arguments[CanNotParse]}`)
+				_, err := conn.clientSend(`{"type":1,"invocationId": "4444","target":"simpleint", arguments[CanNotParse]}`)
 				Expect(err).To(BeNil())
 				// Strange: Even godoc states PipeReader/PipeWriter are blocking,
 				// clientSend returns before the server reads the pipe, so we have to poll.

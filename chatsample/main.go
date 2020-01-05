@@ -103,9 +103,7 @@ func runTCP(address string, hub signalr.HubInterface) {
 
 	fmt.Printf("Listening for TCP connection on %s\n", listener.Addr())
 
-	server := signalr.NewServer(func() signalr.HubInterface {
-		return signalr.CreateInstance(hub)
-	})
+	server, _ := signalr.NewServer(signalr.HubSingleton(hub))
 
 	for {
 		conn, err := listener.Accept()

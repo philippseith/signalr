@@ -26,7 +26,7 @@ type Server struct {
 
 // NewServer creates a new server for one type of hub
 // newHub is called each time a hub method is invoked by a client to create the transient hub instance
-func NewServer(newHub func() HubInterface) *Server {
+func NewServer(options ...func(*Server) error) (*Server, error) {
 	lifetimeManager := defaultHubLifetimeManager{}
 	i, d := buildInfoDebugLogger(log.NewLogfmtLogger(os.Stderr), false)
 	server := &Server{
@@ -41,6 +41,12 @@ func NewServer(newHub func() HubInterface) *Server {
 		info:  i,
 		debug: d,
 	}
+	for _, option := range options {
+		if err := option(server); err != nil {
+			return nil, err
+		}
+	}
+	return server, nil
 }
 
 // Run runs the server on one connection. The same server might be run on different connections in parallel
@@ -158,12 +164,6 @@ func startPingClientLoop(conn hubConnection) *sync.WaitGroup {
 		}
 	}(&waitgroup, conn)
 	return &waitgroup
-}
-
-// CreateInstance creates an instance of the underlying type of hubProto without initializing any fields
-// The function can be used as newHub argument for NewServer()
-func CreateInstance(hubProto HubInterface) HubInterface {
-	return reflect.New(reflect.ValueOf(hubProto).Elem().Type()).Interface().(HubInterface)
 }
 
 func (s *Server) newConnectionHubContext(conn hubConnection) HubContext {
