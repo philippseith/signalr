@@ -32,8 +32,8 @@ func newHubConnection(connection Connection, protocol HubProtocol, info log.Logg
 		Protocol:   protocol,
 		Connection: connection,
 		items:      make(map[string]interface{}),
-		info: info,
-		debug: debug,
+		info:       info,
+		dbg:        debug,
 	}
 }
 
@@ -42,8 +42,8 @@ type defaultHubConnection struct {
 	Connected  int32
 	Connection Connection
 	items      map[string]interface{}
-	info log.Logger
-	debug log.Logger
+	info       log.Logger
+	dbg        log.Logger
 }
 
 func (c *defaultHubConnection) Items() map[string]interface{} {

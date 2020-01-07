@@ -3,6 +3,7 @@ package signalr
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
@@ -21,7 +22,7 @@ type Server struct {
 	defaultHubClients HubClients
 	groupManager      GroupManager
 	info              log.Logger
-	debug             log.Logger
+	dbg               log.Logger
 }
 
 // NewServer creates a new server for one type of hub
@@ -38,13 +39,18 @@ func NewServer(options ...func(*Server) error) (*Server, error) {
 		groupManager: &defaultGroupManager{
 			lifetimeManager: &lifetimeManager,
 		},
-		info:  i,
-		debug: d,
+		info: i,
+		dbg:  d,
 	}
 	for _, option := range options {
-		if err := option(server); err != nil {
-			return nil, err
+		if option != nil {
+			if err := option(server); err != nil {
+				return nil, err
+			}
 		}
+	}
+	if server.newHub == nil {
+		return server, errors.New("cannot determine hub type. Neither HubSingleton, TransientHubFactory or SimpleTransientHubFactory given as option")
 	}
 	return server, nil
 }
@@ -55,14 +61,17 @@ func (s *Server) Run(conn Connection) {
 	if protocol, err := s.processHandshake(conn); err != nil {
 		_ = info.Log(evt, "processHandshake", "error", err, react, "do not connect")
 	} else {
-		hubConn := newHubConnection(conn, protocol, s.info, s.debug)
+		// Copy protocol to set our own debug logger
+		protocol = reflect.New(reflect.ValueOf(protocol).Elem().Type()).Interface().(HubProtocol)
+		protocol.SetDebugLogger(s.dbg)
+		hubConn := newHubConnection(conn, protocol, s.info, s.dbg)
 		// start sending pings to the client
 		pings := startPingClientLoop(hubConn)
 		hubConn.Start()
 		s.lifetimeManager.OnConnected(hubConn)
 		streamer := newStreamer(hubConn)
 		streamClient := newStreamClient()
-		s.transientHub(hubConn).OnConnected(hubConn.GetConnectionID())
+		s.getHub(hubConn).OnConnected(hubConn.GetConnectionID())
 		// Process messages
 		for hubConn.IsConnected() {
 			if message, err := hubConn.Receive(); err != nil {
@@ -75,7 +84,7 @@ func (s *Server) Run(conn Connection) {
 					_ = dbg.Log(evt, msgRecv, msg, invocation)
 					// Transient hub
 					// Dispatch invocation here
-					if method, ok := getMethod(s.transientHub(hubConn), invocation.Target); !ok {
+					if method, ok := getMethod(s.getHub(hubConn), invocation.Target); !ok {
 						// Unable to find the method
 						_ = info.Log(evt, "getMethod", "error", "missing method", "name", invocation.Target, react, "send completion with error")
 						hubConn.Completion(invocation.InvocationID, nil, fmt.Sprintf("Unknown method %s", invocation.Target))
@@ -126,7 +135,7 @@ func (s *Server) Run(conn Connection) {
 				}
 			}
 		}
-		s.transientHub(hubConn).OnDisconnected(hubConn.GetConnectionID())
+		s.getHub(hubConn).OnDisconnected(hubConn.GetConnectionID())
 		s.lifetimeManager.OnDisconnected(hubConn)
 		hubConn.Close("")
 		// Wait for pings to complete
@@ -138,7 +147,7 @@ func (s *Server) prefixLogger() (info log.Logger, debug log.Logger) {
 	return log.WithPrefix(s.info, "ts", log.DefaultTimestampUTC,
 			"class", "Server",
 			"hub", reflect.ValueOf(s.newHub()).Elem().Type()),
-		log.WithPrefix(s.debug, "ts", log.DefaultTimestampUTC,
+		log.WithPrefix(s.dbg, "ts", log.DefaultTimestampUTC,
 			"class", "Server",
 			"hub", reflect.ValueOf(s.newHub()).Elem().Type())
 }
@@ -177,7 +186,7 @@ func (s *Server) newConnectionHubContext(conn hubConnection) HubContext {
 	}
 }
 
-func (s *Server) transientHub(conn hubConnection) HubInterface {
+func (s *Server) getHub(conn hubConnection) HubInterface {
 	hub := s.newHub()
 	hub.Initialize(s.newConnectionHubContext(conn))
 	return hub
@@ -284,7 +293,7 @@ func (s *Server) processHandshake(conn Connection) (HubProtocol, error) {
 	var ok bool
 	const handshakeResponse = "{}\u001e"
 	const errorHandshakeResponse = "{\"error\":\"%s\"}\u001e"
-	info, debug := s.prefixLogger()
+	info, dbg := s.prefixLogger()
 
 	// TODO 5 seconds to process the handshake
 	// ws.SetReadDeadline(time.Now().Add(5 * time.Second))
@@ -306,7 +315,7 @@ func (s *Server) processHandshake(conn Connection) (HubProtocol, error) {
 			continue
 		}
 
-		_ = debug.Log(evt, "handshake received")
+		_ = dbg.Log(evt, "handshake received")
 
 		request := handshakeRequest{}
 		err = json.Unmarshal(rawHandshake, &request)

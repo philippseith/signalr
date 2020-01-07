@@ -30,7 +30,7 @@ func Logger(logger log.Logger, debug bool) func(*Server) error {
 	return func(s *Server) error {
 		i, d := buildInfoDebugLogger(logger, debug)
 		s.info = i
-		s.debug = d
+		s.dbg = d
 		return nil
 	}
 }

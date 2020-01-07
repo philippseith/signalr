@@ -5,11 +5,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/go-kit/kit/log"
 	"io"
 )
 
 // JSONHubProtocol is the JSON based SignalR protocol
 type JSONHubProtocol struct {
+	dbg log.Logger
 }
 
 // Protocol specific message for correct unmarshaling of Arguments
@@ -132,3 +134,8 @@ func (j *JSONHubProtocol) WriteMessage(message interface{}, writer io.Writer) er
 	_, err := writer.Write(buf.Bytes())
 	return err
 }
+
+func (j *JSONHubProtocol) SetDebugLogger(dbg log.Logger) {
+	j.dbg = log.WithPrefix(dbg, "protocol", "JSON")
+}
+
