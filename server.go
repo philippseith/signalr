@@ -50,7 +50,7 @@ func NewServer(options ...func(*Server) error) (*Server, error) {
 		}
 	}
 	if server.newHub == nil {
-		return server, errors.New("cannot determine hub type. Neither HubSingleton, TransientHubFactory or SimpleTransientHubFactory given as option")
+		return server, errors.New("cannot determine hub type. Neither UseHub, HubFactory or SimpleHubFactory given as option")
 	}
 	return server, nil
 }

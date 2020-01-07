@@ -13,7 +13,7 @@ func TestSignalR(t *testing.T) {
 }
 
 func connect(hubProto HubInterface) *testingConnection {
-	if server, err := NewServer(SimpleTransientHubFactory(hubProto)); err != nil {
+	if server, err := NewServer(SimpleHubFactory(hubProto)); err != nil {
 		Fail(err.Error())
 		return nil
 	} else {
