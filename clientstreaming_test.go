@@ -4,6 +4,8 @@ import (
 	"fmt"
 	. "github.com/onsi/ginkgo"
 . "github.com/onsi/gomega"
+	"strings"
+	"time"
 )
 
 var clientStreamingInvocationQueue = make(chan string, 20)
@@ -23,18 +25,16 @@ func (c *clientStreamHub) UploadStream(upload1 <-chan int, factor float64, uploa
 		case u1, ok1 = <-upload1:
 			if ok1 {
 				clientStreamingInvocationQueue <- fmt.Sprintf("u1: %v", u1)
-			} else if !ok2 {
-				clientStreamingInvocationQueue <- "Finished"
-				return
 			}
 		case u2, ok2 = <-upload2:
 			if ok2 {
 				clientStreamingInvocationQueue <- fmt.Sprintf("u2: %v", u2)
-			} else if !ok1 {
-				clientStreamingInvocationQueue <- "Finished"
-				return
 			}
 		default:
+		}
+		if !ok1 && !ok2 {
+			clientStreamingInvocationQueue <- "Finished"
+			return
 		}
 	}
 }
@@ -43,23 +43,53 @@ func (c *clientStreamHub) UploadStream(upload1 <-chan int, factor float64, uploa
 var _ = Describe("ClientStreaming", func() {
 
 	Describe("Simple stream invocation", func() {
-		conn := connect(&streamHub{})
+		conn := connect(&clientStreamHub{})
 		Context("When invoked by the client with streamids", func() {
 			It("should be invoked on the server, and receive stream items until the caller sends a completion", func() {
-				_, err := conn.clientSend(`{"type":4,"invocationId": "zzz","target":"simplestream"}`)
+				_, err := conn.clientSend(fmt.Sprintf(
+					`{"type":1,"invocationId":"upstream","target":"uploadstream","arguments":[%v],"streamids":["123","456"]}`, 5))
 				Expect(err).To(BeNil())
-				Expect(<-streamInvocationQueue).To(Equal("SimpleStream()"))
-				for i := 1; i < 4; i++ {
-					recv := (<-conn.received).(streamItemMessage)
-					Expect(recv).NotTo(BeNil())
-					Expect(recv.InvocationID).To(Equal("zzz"))
-					Expect(recv.Item).To(Equal(float64(i)))
+				Expect(<-clientStreamingInvocationQueue).To(Equal(fmt.Sprintf("f: %v", 5)))
+				go func() {
+					go func() {
+						for i := 0; i < 10; i++ {
+							_, _ = conn.clientSend(fmt.Sprintf(`{"type":2,"invocationid":"123","item":%v}`, i))
+							time.Sleep(100 * time.Millisecond)
+						}
+						_, _ = conn.clientSend(`{"type":3,"invocationid":"123"}`)
+					}()
+					go func() {
+						for i := 5; i < 10; i++ {
+							_, _ = conn.clientSend(fmt.Sprintf(`{"type":2,"invocationid":"456","item":%v}`, float64(i)*7.1))
+							time.Sleep(200 * time.Millisecond)
+						}
+						_, _ = conn.clientSend(`{"type":3,"invocationid":"456"}`)
+					}()
+				}()
+				u1 := 0
+				u2 := 5
+				loop:
+				for {
+					select {
+						case r := <-clientStreamingInvocationQueue:
+							switch{
+							case strings.HasPrefix(r, "u1"):
+								Expect(r).To(Equal(fmt.Sprintf("u1: %v", u1)))
+								u1++
+							case strings.HasPrefix(r, "u2"):
+								Expect(r).To(Equal(fmt.Sprintf("u2: %v", float64(u2)*7.1)))
+								u2++
+							case r == "Finished":
+								Expect(u1).To(Equal(10))
+								Expect(u2).To(Equal(10))
+								break loop
+							}
+						default:
+							if !conn.Connected() {
+								Fail("server disconnected")
+							}
+					}
 				}
-				recv := (<-conn.received).(completionMessage)
-				Expect(recv).NotTo(BeNil())
-				Expect(recv.InvocationID).To(Equal("zzz"))
-				Expect(recv.Result).To(BeNil())
-				Expect(recv.Error).To(Equal(""))
 			})
 		})
 	})

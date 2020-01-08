@@ -69,7 +69,8 @@ func (u *streamClient) receiveStreamItem(streamItem streamItemMessage) {
 }
 
 func (u *streamClient) receiveCompletionItem(completion completionMessage) {
-	channel := u.upstreamChannels[completion.InvocationID]
-	channel.Close()
-	delete(u.upstreamChannels, completion.InvocationID)
+	if channel, ok := u.upstreamChannels[completion.InvocationID]; ok {
+		channel.Close()
+		delete(u.upstreamChannels, completion.InvocationID)
+	}
 }
