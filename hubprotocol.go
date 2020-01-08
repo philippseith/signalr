@@ -2,7 +2,6 @@ package signalr
 
 import (
 	"bytes"
-	"github.com/go-kit/kit/log"
 	"io"
 )
 
@@ -15,7 +14,7 @@ type HubProtocol interface {
 	ReadMessage(buf *bytes.Buffer) (interface{}, bool, error)
 	WriteMessage(message interface{}, writer io.Writer) error
 	UnmarshalArgument(argument interface{}, value interface{}) error
-	SetDebugLogger(dbg log.Logger)
+	SetDebugLogger(dbg StructuredLogger)
 }
 
 // Protocol
