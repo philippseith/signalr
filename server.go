@@ -73,9 +73,12 @@ func (s *Server) Run(conn Connection) {
 		streamClient := newStreamClient()
 		s.getHub(hubConn).OnConnected(hubConn.GetConnectionID())
 		// Process messages
+		var message interface{}
+		var connErr error
+		messageLoop:
 		for hubConn.IsConnected() {
-			if message, err := hubConn.Receive(); err != nil {
-				_ = info.Log(evt, msgRecv, "error", err, msg, message, react, "disconnect")
+			if message, connErr = hubConn.Receive(); connErr != nil {
+				_ = info.Log(evt, msgRecv, "error", connErr, msg, message, react, "disconnect")
 				break
 			} else {
 				switch message.(type) {
@@ -127,6 +130,9 @@ func (s *Server) Run(conn Connection) {
 				case completionMessage:
 					_ = dbg.Log(evt, msgRecv, msg, message.(completionMessage))
 					streamClient.receiveCompletionItem(message.(completionMessage))
+				case closeMessage:
+					_ = dbg.Log(evt, msgRecv, msg, message.(closeMessage))
+					break messageLoop
 				case hubMessage:
 					_ = dbg.Log(evt, msgRecv, msg, message)
 					// Ping
@@ -137,9 +143,14 @@ func (s *Server) Run(conn Connection) {
 		}
 		s.getHub(hubConn).OnDisconnected(hubConn.GetConnectionID())
 		s.lifetimeManager.OnDisconnected(hubConn)
-		hubConn.Close("")
+		if connErr != nil {
+			hubConn.Close(connErr.Error())
+		} else {
+			hubConn.Close("")
+		}
 		// Wait for pings to complete
 		pings.Wait()
+		_ = dbg.Log(evt, "messageloop ended")
 	}
 }
 

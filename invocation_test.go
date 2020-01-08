@@ -75,6 +75,8 @@ var _ = Describe("Invocation", func() {
 
 	Describe("Invalid json", func() {
 		conn := connect(&invocationHub{})
+		// Disable error handling
+		conn.SetReceiveErrorHandler(func(err error) {})
 		Context("When the client sends invalid json", func() {
 			It("should not return any value", func() {
 				_, err := conn.clientSend(`{"type":1,"invocationId": "4444","target":"simpleint", arguments[CanNotParse]}`)
@@ -229,4 +231,5 @@ var _ = Describe("Invocation", func() {
 			})
 		})
 	})
+
 })

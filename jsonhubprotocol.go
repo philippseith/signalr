@@ -57,7 +57,7 @@ func (j *JSONHubProtocol) ReadMessage(buf *bytes.Buffer) (m interface{}, complet
 
 	message := hubMessage{}
 	err = json.Unmarshal(data, &message)
-
+	_ = j.dbg.Log(evt, "read", msg, string(data))
 	if err != nil {
 		return nil, true, &jsonError{string(data), err}
 	}
@@ -98,6 +98,12 @@ func (j *JSONHubProtocol) ReadMessage(buf *bytes.Buffer) (m interface{}, complet
 			err = &jsonError{string(data), err}
 		}
 		return invocation, true, err
+	case 7:
+		close := closeMessage{}
+		if err = json.Unmarshal(data, &close); err != nil {
+			err = &jsonError{string(data), err}
+		}
+		return close, true, err
 	default:
 		return message, true, nil
 	}
@@ -125,7 +131,7 @@ func (j *JSONHubProtocol) WriteMessage(message interface{}, writer io.Writer) er
 	if err := json.NewEncoder(&buf).Encode(message); err != nil {
 		return err
 	}
-	fmt.Printf("Message sent %v", string(buf.Bytes()))
+	_ = j.dbg.Log(evt, "write", msg, string(buf.Bytes()))
 
 	if err := buf.WriteByte(30); err != nil {
 		return err
