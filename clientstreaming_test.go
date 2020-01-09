@@ -92,7 +92,7 @@ var _ = Describe("ClientStreaming", func() {
 		})
 	})
 
-	PDescribe("Faulty stream invocation", func() {
+	Describe("Faulty stream invocation", func() {
 		conn := connect(&clientStreamHub{})
 		Context("When invoked by the client with streamids", func() {
 			It("should be invoked on the server, and receive stream items until the caller sends a completion. Unknown streamids should be ignored", func() {
@@ -101,16 +101,23 @@ var _ = Describe("ClientStreaming", func() {
 				Expect(<-clientStreamingInvocationQueue).To(Equal(fmt.Sprintf("f: %v", 5)))
 				// close the first stream
 				conn.clientSend(`{"type":3,"invocationid":"123"}`)
-				// Send one with correct streamid and one with invalid streamid
+				// Send one with correct streamid
 				conn.clientSend(fmt.Sprintf(`{"type":2,"invocationid":"456","item":%v}`, 7.1))
+				// and one with invalid streamid
 				conn.clientSend(fmt.Sprintf(`{"type":2,"invocationid":"WRONG_ID","item":%v}`, 8.3))
-
+				// close the second stream
 				conn.clientSend(`{"type":3,"invocationid":"456"}`)
-				for r := range clientStreamingInvocationQueue {
-					Expect(r).NotTo(Equal(fmt.Sprintf("u2: %v",8.3)))
+			loop:
+				for {
+					select {
+					case r := <-clientStreamingInvocationQueue:
+						// The value with the invalid stream id should not have reached the hub
+						Expect(r).NotTo(Equal(fmt.Sprintf("u2: %v", 8.3)))
+					case <-time.After(100 * time.Millisecond):
+						break loop
+					}
 				}
 			})
 		})
 	})
-
 })

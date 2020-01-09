@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/gomega"
 	"io"
 	"sync"
 	"time"
@@ -152,17 +153,17 @@ func (t *testingConnection) clientReceive() (string, error) {
 
 var _ = Describe("Connection", func() {
 
-	PDescribe("Connection closed", func() {
+	Describe("Connection closed", func() {
 		conn := connect(&Hub{})
 		Context("When the connection is closed", func() {
 			It("should not answer an invocation", func() {
 				conn.clientSend(`{"type":7}`)
 				conn.clientSend(`{"type":1,"invocationId": "123","target":"simple"}`)
-					// if the connection returns no error nothing should be received
+					// When the connection is closed, the server should either send a closeMessage or nothing at all
 					select {
 					case message := <-conn.received:
-						Fail(fmt.Sprintf("received an anwser %v", message))
-					case <-time.After(1 * time.Second):
+						Expect(message.(closeMessage)).NotTo(BeNil())
+					case <-time.After(100 * time.Millisecond):
 					}
 			})
 		})
