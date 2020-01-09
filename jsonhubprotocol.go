@@ -99,11 +99,11 @@ func (j *JSONHubProtocol) ReadMessage(buf *bytes.Buffer) (m interface{}, complet
 		}
 		return invocation, true, err
 	case 7:
-		close := closeMessage{}
-		if err = json.Unmarshal(data, &close); err != nil {
+		cm := closeMessage{}
+		if err = json.Unmarshal(data, &cm); err != nil {
 			err = &jsonError{string(data), err}
 		}
-		return close, true, err
+		return cm, true, err
 	default:
 		return message, true, nil
 	}

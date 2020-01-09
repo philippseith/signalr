@@ -125,8 +125,12 @@ func (s *Server) Run(conn Connection) {
 					_ = dbg.Log(evt, msgRecv, msg, message.(cancelInvocationMessage))
 					streamer.Stop(message.(cancelInvocationMessage).InvocationID)
 				case streamItemMessage:
-					_ = dbg.Log(evt, msgRecv, msg, message.(streamItemMessage))
-					streamClient.receiveStreamItem(message.(streamItemMessage))
+					streamItemMessage := message.(streamItemMessage)
+					_ = dbg.Log(evt, msgRecv, msg, streamItemMessage)
+					if err := streamClient.receiveStreamItem(streamItemMessage); err != nil {
+						hubConn.Completion(streamItemMessage.InvocationID, nil,
+							fmt.Sprintf(`stream item "%v" could not be received: %v`, streamItemMessage.Item, err))
+					}
 				case completionMessage:
 					_ = dbg.Log(evt, msgRecv, msg, message.(completionMessage))
 					streamClient.receiveCompletionItem(message.(completionMessage))
@@ -269,6 +273,9 @@ func buildMethodArguments(method reflect.Value, invocation invocationMessage,
 			}
 			arguments[i] = arg.Elem()
 		}
+	}
+	if len(invocation.StreamIds) > chanCount {
+		return arguments, chanCount > 0, errors.New(fmt.Sprintf("to many StreamIds for channel parameters of method %v", invocation.Target))
 	}
 	return arguments, chanCount > 0, nil
 }
