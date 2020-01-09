@@ -45,9 +45,21 @@ func (u *streamClient) receiveStreamItem(streamItem streamItemMessage) error {
 			case reflect.Array:
 				switch reflect.TypeOf(chanElm).Kind() {
 				case reflect.Slice:
-					fallthrough
-				case reflect.Array:
-					break
+					if sis, ok := streamItem.Item.([]interface{}); ok {
+						chanElmElmType := upChan.Type().Elem().Elem() // The type of the array elements in the channel
+						chanElm = reflect.Indirect(reflect.New(chanElmElmType)).Interface()
+						chanVals := make([]reflect.Value, len(sis))
+						for i, si := range sis {
+							if f, ok := si.(float64); ok {
+								if chanVal, ok := convertNumberToChannelType(chanElm, f); ok {
+									chanVals[i] = chanVal
+								}
+							}
+						}
+						chanSlice := reflect.Indirect(reflect.New(reflect.SliceOf(chanElmElmType)))
+						chanSlice =	reflect.Append(chanSlice, chanVals...)
+						upChan.Send(chanSlice)
+					}
 				default:
 					return fmt.Errorf("stream item of kind %v paired with channel of type %v", reflect.TypeOf(streamItem.Item).Kind(), reflect.TypeOf(chanElm))
 				}

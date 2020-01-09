@@ -263,13 +263,15 @@ var _ = Describe("ClientStreaming", func() {
 		})
 	})
 
-	PDescribe("Stream client with array channel", func() {
+	Describe("Stream client with array channel", func() {
 		conn := connect(&clientStreamHub{})
 		Context("When a func with an array channel is invoked by the client and stream items are send", func() {
-			It("should receive values anc end after", func() {
+			It("should receive values and end after that", func() {
 				conn.clientSend(`{"type":1,"invocationId":"UPA","target":"uploadarray","streamids":["aaa"]}`)
-				conn.clientSend(`{"type":2,"invocationid":"aaa","item":[1,2]}`)
-				<- clientStreamingInvocationQueue
+				conn.clientSend(`{"type":2,"invocationId":"aaa","item":[1,2]}`)
+				conn.clientSend(`{"type":3,"invocationId":"aaa"}`)
+				Expect(<- clientStreamingInvocationQueue).To(Equal("received [1 2]"))
+				Expect(<- clientStreamingInvocationQueue).To(Equal("UploadArray finished"))
 			})
 		})
 	})
