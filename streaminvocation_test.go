@@ -23,6 +23,22 @@ func (s *streamHub) SimpleStream() <-chan int {
 	return r
 }
 
+func (s *streamHub) SliceStream() <-chan []int {
+	r := make(chan []int)
+	go func() {
+		defer close(r)
+		for i := 1; i < 4; i++ {
+			s := make([]int, 2)
+			s[0] = i
+			s[1] = i * 2
+			r <- s
+		}
+	}()
+	streamInvocationQueue <- "SliceStream()"
+	return r
+}
+
+
 func (s *streamHub) SimpleInt() int {
 	streamInvocationQueue <- "SimpleInt()"
 	return -1
@@ -45,6 +61,30 @@ var _ = Describe("Streaminvocation", func() {
 				recv := (<-conn.received).(completionMessage)
 				Expect(recv).NotTo(BeNil())
 				Expect(recv.InvocationID).To(Equal("zzz"))
+				Expect(recv.Result).To(BeNil())
+				Expect(recv.Error).To(Equal(""))
+			})
+		})
+	})
+
+	Describe("Slice stream invocation", func() {
+		conn := connect(&streamHub{})
+		Context("When invoked by the client", func() {
+			It("should be invoked on the server, return stream items and a final completion without result", func() {
+				conn.clientSend(`{"type":4,"invocationId": "slice","target":"slicestream"}`)
+				Expect(<-streamInvocationQueue).To(Equal("SliceStream()"))
+				for i := 1; i < 4; i++ {
+					recv := (<-conn.received).(streamItemMessage)
+					Expect(recv).NotTo(BeNil())
+					Expect(recv.InvocationID).To(Equal("slice"))
+					exp := make([]interface{}, 0, 2)
+					exp = append(exp, float64(i))
+					exp = append(exp, float64(i*2))
+					Expect(recv.Item).To(Equal(exp))
+				}
+				recv := (<-conn.received).(completionMessage)
+				Expect(recv).NotTo(BeNil())
+				Expect(recv.InvocationID).To(Equal("slice"))
 				Expect(recv.Result).To(BeNil())
 				Expect(recv.Error).To(Equal(""))
 			})
