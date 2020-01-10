@@ -78,8 +78,9 @@ func (u *streamClient) receiveStreamItem(streamItem streamItemMessage) error {
 				return <- done
 			}
 		}
+		return nil
 	}
-	return nil
+	return fmt.Errorf(`unknown stream id "%v"`, streamItem.InvocationID)
 }
 
 func convertNumberToChannelType(chanElm interface{}, number float64) (chanVal reflect.Value, ok bool) {

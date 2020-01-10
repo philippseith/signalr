@@ -153,19 +153,15 @@ var _ = Describe("ClientStreaming", func() {
 				conn.clientSend(`{"type":3,"invocationid":"123"}`)
 				// Send one with correct streamid
 				conn.clientSend(fmt.Sprintf(`{"type":2,"invocationid":"456","item":%v}`, 7.1))
-				// and one with invalid streamid
-				conn.clientSend(fmt.Sprintf(`{"type":2,"invocationid":"WRONG_ID","item":%v}`, 8.3))
 				// close the second stream
 				conn.clientSend(`{"type":3,"invocationid":"456"}`)
 			loop:
 				for {
 					select {
-					case r := <-clientStreamingInvocationQueue:
-						// The value with the invalid stream id should not have reached the hub
-						Expect(r).NotTo(Equal(fmt.Sprintf("u2: %v", 8.3)))
+					case <-clientStreamingInvocationQueue:
 						break loop
 					case <-time.After(100 * time.Millisecond):
-						break loop
+						Fail("timed out")
 					}
 				}
 				// Read finished value from queue
@@ -175,29 +171,31 @@ var _ = Describe("ClientStreaming", func() {
 	})
 
 	Describe("Stream invocation with wrong count of streamid", func() {
-		conn := connect(&clientStreamHub{})
+
 		Context("When invoked by the client with to many streamids", func() {
-			It("should return a completion with error", func() {
+			It("should end the connection", func() {
+				conn := connect(&clientStreamHub{})
 				conn.clientSend(fmt.Sprintf(`{"type":1,"invocationId":"upstream","target":"uploadstreamsmoke","arguments":[%v],"streamids":["123","456","789"]}`, 5))
 				select {
 				case message := <-conn.received:
-					completionMessage, ok := message.(completionMessage)
+					closeMessage, ok := message.(closeMessage)
 					Expect(ok).To(BeTrue())
-					Expect(completionMessage.Error).NotTo(Equal(""))
+					Expect(closeMessage.Error).NotTo(Equal(""))
 				case <-time.After(1000 * time.Millisecond):
 					Fail("timed out")
 				}
 			})
 		})
 		Context("When invoked by the client with not enough streamids", func() {
-			It("should return a completion with error", func() {
+			It("should end the connection", func() {
+				conn := connect(&clientStreamHub{})
 				conn.clientSend(fmt.Sprintf(`{"type":1,"invocationId":"upstream","target":"uploadstreamsmoke","arguments":[%v],"streamids":["123"]}`, 5))
 				select {
 				case message := <-conn.received:
-					completionMessage, ok := message.(completionMessage)
+					closeMessage, ok := message.(closeMessage)
 					Expect(ok).To(BeTrue())
-					Expect(completionMessage.Error).NotTo(Equal(""))
-				case <-time.After(100 * time.Millisecond):
+					Expect(closeMessage.Error).NotTo(Equal(""))
+				case <-time.After(1000 * time.Millisecond):
 					Fail("timed out")
 				}
 			})
@@ -270,9 +268,100 @@ var _ = Describe("ClientStreaming", func() {
 				conn.clientSend(`{"type":1,"invocationId":"UPA","target":"uploadarray","streamids":["aaa"]}`)
 				conn.clientSend(`{"type":2,"invocationId":"aaa","item":[1,2]}`)
 				conn.clientSend(`{"type":3,"invocationId":"aaa"}`)
-				Expect(<- clientStreamingInvocationQueue).To(Equal("received [1 2]"))
-				Expect(<- clientStreamingInvocationQueue).To(Equal("UploadArray finished"))
+				Expect(<-clientStreamingInvocationQueue).To(Equal("received [1 2]"))
+				Expect(<-clientStreamingInvocationQueue).To(Equal("UploadArray finished"))
 			})
+		})
+	})
+
+	Describe("Client sending invalid streamitems", func() {
+		Context("When an invalid streamitem message with missing id and item is sent", func() {
+			conn := connect(&clientStreamHub{})
+			It("should end the connection with an error", func() {
+				// We are testing for error, so the connection should ignore it
+				conn.SetReceiveErrorHandler(func(error){})
+				conn.clientSend(`{"type":4,"invocationId": "nnn","target":"uploadstreamsmoke","arguments":[5.0],"streamids":["fff","ggg"]}`)
+				// Send invalid stream item message with missing id and item
+				conn.clientSend(`{"type":2}`)
+				select {
+				case message := <-conn.received:
+					Expect(message).To(BeAssignableToTypeOf(closeMessage{}))
+					Expect(message.(closeMessage).Error).NotTo(BeNil())
+				case <-time.After(1000 * time.Millisecond):
+					Fail("timed out")
+				}
+			})
+		})
+		Context("When an invalid streamitem message with missing item is sent", func() {
+			conn := connect(&clientStreamHub{})
+			It("should end the connection with an error", func() {
+				// We are testing for error, so the connection should ignore it
+				conn.SetReceiveErrorHandler(func(error){})
+				conn.clientSend(`{"type":4,"invocationId": "nnn","target":"uploadstreamsmoke","arguments":[5.0],"streamids":["fff","ggg"]}`)
+				// Send invalid stream item message with missing item
+				conn.clientSend(`{"type":2,"InvocationId":"iii"}`)
+				select {
+				case message := <-conn.received:
+					Expect(message).To(BeAssignableToTypeOf(closeMessage{}))
+					Expect(message.(closeMessage).Error).NotTo(BeNil())
+				case <-time.After(1000 * time.Millisecond):
+					Fail("timed out")
+				}
+			})
+		})
+		Context("When an invalid streamitem message with wrong itemtype is sent", func() {
+			conn := connect(&clientStreamHub{})
+			It("should return a completion with error", func() {
+				conn.clientSend(`{"type":4,"invocationId": "nnn","target":"uploadstreamsmoke","arguments":[5.0],"streamids":["fff","ggg"]}`)
+				// Send invalid stream item message
+				conn.clientSend(`{"type":2,"item":[42]}`)
+				select {
+				case message := <-conn.received:
+					Expect(message).To(BeAssignableToTypeOf(completionMessage{}))
+					completionMessage := message.(completionMessage)
+					Expect(completionMessage.Error).NotTo(BeNil())
+				case <-time.After(100 * time.Millisecond):
+					Fail("timed out")
+				}
+			})
+		})
+		Context("When an invalid streamitem message with invalid invocation id is sent", func() {
+			conn := connect(&clientStreamHub{})
+			It("should end the connection with an error", func() {
+				// We are testing for error, so the connection should ignore it
+				conn.SetReceiveErrorHandler(func(error){})
+				conn.clientSend(`{"type":4,"invocationId": "nnn","target":"uploadstreamsmoke","arguments":[5.0],"streamids":["fff","ggg"]}`)
+				// Send invalid stream item message with invalid invocation id
+				conn.clientSend(`{"type":2,"invocationId":1}`)
+				select {
+				case message := <-conn.received:
+					Expect(message).To(BeAssignableToTypeOf(closeMessage{}))
+					Expect(message.(closeMessage).Error).NotTo(BeNil())
+				case <-time.After(1000 * time.Millisecond):
+					Fail("timed out")
+				}
+			})
+		})
+	})
+
+	Describe("Client sending invalid completion", func() {
+		Context("When an invalid completion message with missing id is sent", func() {
+			conn := connect(&clientStreamHub{})
+			It("should end the connection with an error", func() {
+				// We are testing for error, so the connection should ignore it
+				conn.SetReceiveErrorHandler(func(error){})
+				conn.clientSend(`{"type":4,"invocationId": "nnn","target":"uploadstreamsmoke","arguments":[5.0],"streamids":["fff","ggg"]}`)
+				// Send invalid completion message with missing id
+				conn.clientSend(`{"type":3}`)
+				select {
+				case message := <-conn.received:
+					Expect(message).To(BeAssignableToTypeOf(closeMessage{}))
+					Expect(message.(closeMessage).Error).NotTo(BeNil())
+				case <-time.After(1000 * time.Millisecond):
+					Fail("timed out")
+				}
+			})
+
 		})
 	})
 })

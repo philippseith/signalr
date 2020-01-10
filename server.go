@@ -77,9 +77,30 @@ func (s *Server) Run(conn Connection) {
 		var connErr error
 		messageLoop:
 		for hubConn.IsConnected() {
-			if message, connErr = hubConn.Receive(); connErr != nil {
+			if message, connErr = hubConn.Receive(); connErr != nil && message == nil {
+				// It wasn't a message at all
 				_ = info.Log(evt, msgRecv, "error", connErr, msg, message, react, "disconnect")
 				break
+			} else if connErr != nil && message != nil {
+				// It's a message, but it is invalid
+				switch message.(type) {
+				case invocationMessage:
+					invocation := message.(invocationMessage)
+					_ = dbg.Log(evt, invalidMsgRecv, msg, invocation)
+					hubConn.Completion(invocation.InvocationID, nil, connErr.Error())
+				case streamItemMessage:
+					streamItemMessage := message.(streamItemMessage)
+					_ = dbg.Log(evt, invalidMsgRecv, msg, streamItemMessage)
+					if err := streamClient.receiveStreamItem(streamItemMessage); err != nil {
+						connErr = err
+						_ = info.Log(evt, msgRecv, "error", connErr, msg, message, react, "disconnect")
+						break messageLoop
+					}
+				default:
+					connErr = err
+					_ = info.Log(evt, msgRecv, "error", connErr, msg, message, react, "disconnect")
+					break messageLoop
+				}
 			} else {
 				switch message.(type) {
 				case invocationMessage:
@@ -128,8 +149,9 @@ func (s *Server) Run(conn Connection) {
 					streamItemMessage := message.(streamItemMessage)
 					_ = dbg.Log(evt, msgRecv, msg, streamItemMessage)
 					if err := streamClient.receiveStreamItem(streamItemMessage); err != nil {
-						hubConn.Completion(streamItemMessage.InvocationID, nil,
-							fmt.Sprintf(`stream item "%v" could not be received: %v`, streamItemMessage.Item, err))
+						connErr = err
+						_ = info.Log(evt, msgRecv, "error", connErr, msg, message, react, "disconnect")
+						break messageLoop
 					}
 				case completionMessage:
 					_ = dbg.Log(evt, msgRecv, msg, message.(completionMessage))
@@ -369,5 +391,6 @@ var protocolMap = map[string]HubProtocol{
 // const for logging
 const evt string = "event"
 const msgRecv string = "message received"
+const invalidMsgRecv string = "invalid message received"
 const msg string = "message"
 const react string = "reaction"

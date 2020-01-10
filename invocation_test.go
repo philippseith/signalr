@@ -72,6 +72,23 @@ var _ = Describe("Invocation", func() {
 		})
 	})
 
+	Describe("Invalid invocation", func() {
+		conn := connect(&invocationHub{})
+		Context("When an invalid invocation message is sent", func() {
+			It("should return a completion with error", func() {
+				// Invalid. invocationId should be a string
+				conn.clientSend(`{"type":1,"invocationId":1}`)
+				select {
+				case message := <-conn.received:
+					completionMessage := message.(completionMessage)
+					Expect(completionMessage).NotTo(BeNil())
+					Expect(completionMessage.Error).NotTo(BeNil())
+				case <-time.After(100 * time.Millisecond):
+				}
+			})
+		})
+	})
+
 	Describe("Invalid json", func() {
 		conn := connect(&invocationHub{})
 		// Disable error handling

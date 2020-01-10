@@ -3,6 +3,7 @@ package signalr
 import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	"time"
 )
 
 var streamInvocationQueue = make(chan string, 20)
@@ -37,7 +38,6 @@ func (s *streamHub) SliceStream() <-chan []int {
 	streamInvocationQueue <- "SliceStream()"
 	return r
 }
-
 
 func (s *streamHub) SimpleInt() int {
 	streamInvocationQueue <- "SimpleInt()"
@@ -141,5 +141,20 @@ var _ = Describe("Streaminvocation", func() {
 		})
 	})
 
+	Describe("invalid messages", func() {
+		conn := connect(&streamHub{})
+		Context("When an invalid stream invocation message is sent", func() {
+			It("should return a completion with error", func() {
+				conn.clientSend(`{"type":4}`)
+				select {
+				case message := <-conn.received:
+					completionMessage := message.(completionMessage)
+					Expect(completionMessage).NotTo(BeNil())
+					Expect(completionMessage.Error).NotTo(BeNil())
+				case <-time.After(100 * time.Millisecond):
+				}
+			})
+		})
+	})
 
 })

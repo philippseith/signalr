@@ -52,6 +52,7 @@ func (j *JSONHubProtocol) ReadMessage(buf *bytes.Buffer) (m interface{}, complet
 	case errors.Is(err, io.EOF):
 		return nil, false, err
 	case err != nil:
+		// Might never happen, because parseTextMessageFormat will only return err from bytes.Buffer.ReadBytes() which is always io.EOF or nil
 		return nil, true, err
 	}
 

@@ -105,11 +105,11 @@ func newTestingConnection() *testingConnection {
 						var closeMessage closeMessage
 						if err = json.Unmarshal([]byte(message), &closeMessage); err == nil {
 							conn.setConnected(false)
-							if closeMessage.Error == "" {
-								conn.received <- closeMessage
-							} else {
+							if closeMessage.Error != "" {
+								// Most time, a closeMessage with error is not whats expected by the tests
 								conn.errorHandler(errors.New(closeMessage.Error))
 							}
+							conn.received <- closeMessage
 						} else {
 							conn.errorHandler(err)
 						}
@@ -165,6 +165,24 @@ var _ = Describe("Connection", func() {
 						Expect(message.(closeMessage)).NotTo(BeNil())
 					case <-time.After(100 * time.Millisecond):
 					}
+			})
+		})
+	})
+})
+
+var _ = Describe("Protocol", func() {
+
+	Describe("Invalid messages", func() {
+		conn := connect(&Hub{})
+		Context("When a message with invalid id is sent", func() {
+			It("should be ignored", func() {
+				conn.clientSend(`{"type":99}`)
+				select {
+				case <-conn.received:
+					Fail("received message")
+				case <-time.After(100 * time.Millisecond):
+					// Timed out and thats ok
+				}
 			})
 		})
 	})
