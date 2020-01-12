@@ -15,9 +15,9 @@ func TestSignalR(t *testing.T) {
 }
 
 func connect(hubProto HubInterface) *testingConnection {
-	var server Server
-	if server, err := NewServer(SimpleHubFactory(hubProto),
-		Logger(log.NewLogfmtLogger(os.Stderr), false)); err != nil {
+	server, err := NewServer(SimpleHubFactory(hubProto),
+		Logger(log.NewLogfmtLogger(os.Stderr), false))
+	if err != nil {
 		Fail(err.Error())
 		return nil
 	}
