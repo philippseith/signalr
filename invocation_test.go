@@ -60,7 +60,7 @@ var _ = Describe("Invocation", func() {
 	Describe("Simple invocation", func() {
 		conn := connect(&invocationHub{})
 		Context("When invoked by the client", func() {
-			It("should be invoked", func() {
+			It("should be invoked and return a completion", func() {
 				conn.clientSend(`{"type":1,"invocationId": "123","target":"simple"}`)
 				Expect(<-invocationQueue).To(Equal("Simple()"))
 				recv := (<-conn.received).(completionMessage)
@@ -68,6 +68,23 @@ var _ = Describe("Invocation", func() {
 				Expect(recv.InvocationID).To(Equal("123"))
 				Expect(recv.Result).To(BeNil())
 				Expect(recv.Error).To(Equal(""))
+			})
+		})
+	})
+
+	Describe("Non blocking invocation", func() {
+		conn := connect(&invocationHub{})
+		Context("When invoked by the client", func() {
+			It("should be invoked and return no completion", func() {
+				conn.clientSend(`{"type":1,"target":"simple"}`)
+				Expect(<-invocationQueue).To(Equal("Simple()"))
+				select {
+				case message := <-conn.received:
+					if _, ok := message.(completionMessage); ok {
+					Fail("received completion ")
+				}
+				case <-time.After(1000 * time.Millisecond):
+				}
 			})
 		})
 	})
@@ -93,19 +110,15 @@ var _ = Describe("Invocation", func() {
 		conn := connect(&invocationHub{})
 		// Disable error handling
 		conn.SetReceiveErrorHandler(func(err error) {})
-		Context("When the client sends invalid json", func() {
-			It("should not return any value", func() {
+		Context("when invalid json is received", func() {
+			It("should close the connection with an error", func() {
 				conn.clientSend(`{"type":1,"invocationId": "4444","target":"simpleint", arguments[CanNotParse]}`)
-				// Strange: Even godoc states PipeReader/PipeWriter are blocking,
-				// clientSend returns before the server reads the pipe, so we have to poll.
-				// Did I get this right?
-				for i := 0; i < 5; i++ {
-					select {
-					case recv := <-conn.received:
-						Fail(fmt.Sprintf("server answered %v", recv))
-					default:
-					}
-					time.Sleep(time.Millisecond * 50)
+				select {
+				case message := <-conn.received:
+					Expect(message).To(BeAssignableToTypeOf(closeMessage{}))
+					Expect(message.(closeMessage).Error).NotTo(BeNil())
+				case <-time.After(1000 * time.Millisecond):
+					Fail("timed out")
 				}
 			})
 		})

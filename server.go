@@ -122,7 +122,9 @@ func (s *Server) Run(conn Connection) {
 							defer func() {
 								if err := recover(); err != nil {
 									_ = info.Log(evt, "recover", "error", err, "name", invocation.Target, react, "send completion with error")
-									hubConn.Completion(invocation.InvocationID, nil, fmt.Sprintf("%v\n%v", err, string(debug.Stack())))
+									if invocation.InvocationID != "" {
+										hubConn.Completion(invocation.InvocationID, nil, fmt.Sprintf("%v\n%v", err, string(debug.Stack())))
+									}
 								}
 							}()
 							method.Call(in)
@@ -134,7 +136,9 @@ func (s *Server) Run(conn Connection) {
 								defer func() {
 									if err := recover(); err != nil {
 										_ = info.Log(evt, "recover", "error", err, "name", invocation.Target, react, "send completion with error")
-										hubConn.Completion(invocation.InvocationID, nil, fmt.Sprintf("%v\n%v", err, string(debug.Stack())))
+										if invocation.InvocationID != "" {
+											hubConn.Completion(invocation.InvocationID, nil, fmt.Sprintf("%v\n%v", err, string(debug.Stack())))
+										}
 									}
 								}()
 								return method.Call(in)
@@ -155,7 +159,11 @@ func (s *Server) Run(conn Connection) {
 					}
 				case completionMessage:
 					_ = dbg.Log(evt, msgRecv, msg, message.(completionMessage))
-					streamClient.receiveCompletionItem(message.(completionMessage))
+					if err := streamClient.receiveCompletionItem(message.(completionMessage)); err != nil {
+					connErr = err
+					_ = info.Log(evt, msgRecv, "error", connErr, msg, message, react, "disconnect")
+					break messageLoop
+				}
 				case closeMessage:
 					_ = dbg.Log(evt, msgRecv, msg, message.(closeMessage))
 					break messageLoop
@@ -242,33 +250,36 @@ func getMethod(hub HubInterface, name string) (reflect.Value, bool) {
 }
 
 func returnInvocationResult(conn hubConnection, invocation invocationMessage, streamer *streamer, result []reflect.Value) {
-	// if the hub method returns a chan, it should be considered asynchronous or source for a stream
-	if len(result) == 1 && result[0].Kind() == reflect.Chan {
-		switch invocation.Type {
-		// Simple invocation
-		case 1:
-			go func() {
-				// Recv might block, so run continue in a goroutine
-				if chanResult, ok := result[0].Recv(); ok {
-					invokeConnection(conn, invocation, completion, []reflect.Value{chanResult})
-				} else {
-					conn.Completion(invocation.InvocationID, nil, "hub func returned closed chan")
-				}
-			}()
-		// StreamInvocation
-		case 4:
-			streamer.Start(invocation.InvocationID, result[0])
-		}
-	} else {
-		switch invocation.Type {
-		// Simple invocation
-		case 1:
-			invokeConnection(conn, invocation, completion, result)
-		case 4:
-			// Stream invocation of method with no stream result.
-			// Return a single StreamItem and an empty Completion
-			invokeConnection(conn, invocation, streamItem, result)
-			conn.Completion(invocation.InvocationID, nil, "")
+	// No invocation id, no completion
+	if invocation.InvocationID != "" {
+		// if the hub method returns a chan, it should be considered asynchronous or source for a stream
+		if len(result) == 1 && result[0].Kind() == reflect.Chan {
+			switch invocation.Type {
+			// Simple invocation
+			case 1:
+				go func() {
+					// Recv might block, so run continue in a goroutine
+					if chanResult, ok := result[0].Recv(); ok {
+						invokeConnection(conn, invocation, completion, []reflect.Value{chanResult})
+					} else {
+						conn.Completion(invocation.InvocationID, nil, "hub func returned closed chan")
+					}
+				}()
+			// StreamInvocation
+			case 4:
+				streamer.Start(invocation.InvocationID, result[0])
+			}
+		} else {
+			switch invocation.Type {
+			// Simple invocation
+			case 1:
+				invokeConnection(conn, invocation, completion, result)
+			case 4:
+				// Stream invocation of method with no stream result.
+				// Return a single StreamItem and an empty Completion
+				invokeConnection(conn, invocation, streamItem, result)
+				conn.Completion(invocation.InvocationID, nil, "")
+			}
 		}
 	}
 }

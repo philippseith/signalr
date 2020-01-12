@@ -6,11 +6,12 @@ import (
 )
 
 func newStreamClient() *streamClient {
-	return &streamClient{make(map[string]reflect.Value)}
+	return &streamClient{make(map[string]reflect.Value), make(map[string]bool)}
 }
 
 type streamClient struct {
 	upstreamChannels map[string]reflect.Value
+	runningStreams map[string]bool
 }
 
 func (u *streamClient) buildChannelArgument(invocation invocationMessage, argType reflect.Type, chanCount int) (arg reflect.Value, canClientStreaming bool, err error) {
@@ -29,6 +30,8 @@ func (u *streamClient) buildChannelArgument(invocation invocationMessage, argTyp
 
 func (u *streamClient) receiveStreamItem(streamItem streamItemMessage) error {
 	if upChan, ok := u.upstreamChannels[streamItem.InvocationID]; ok {
+		// Mark stream as running to detect illegal completion with result on this id
+		u.runningStreams[streamItem.InvocationID] = true
 		// Hack(?) for missing channel type information when the Protocol decodes StreamItem.Item
 		// Protocol specific, as only json has this inexact number type. Messagepack might cause different problems
 		chanElm := reflect.Indirect(reflect.New(upChan.Type().Elem())).Interface()
@@ -115,9 +118,26 @@ func convertNumberToChannelType(chanElm interface{}, number float64) (chanVal re
 	return reflect.ValueOf(number), false
 }
 
-func (u *streamClient) receiveCompletionItem(completion completionMessage) {
+func (u *streamClient) receiveCompletionItem(completion completionMessage) error {
 	if channel, ok := u.upstreamChannels[completion.InvocationID]; ok {
+		var err error
+		if completion.Result != nil {
+			if u.runningStreams[completion.InvocationID] {
+				err = fmt.Errorf("client side streaming: received completion with result %v", completion)
+			} else {
+				// handle result like a stream item
+				u.receiveStreamItem(streamItemMessage{
+					Type:         2,
+					InvocationID: completion.InvocationID,
+					Item:         completion.Result,
+				})
+			}
+		}
 		channel.Close()
 		delete(u.upstreamChannels, completion.InvocationID)
+		delete(u.runningStreams, completion.InvocationID)
+		return err
+	} else {
+		return fmt.Errorf("received completion with unknown id %v", completion.InvocationID)
 	}
 }
