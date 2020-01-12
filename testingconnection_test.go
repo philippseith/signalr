@@ -13,6 +13,7 @@ import (
 )
 
 type testingConnection struct {
+	connectionID string
 	srvWriter    io.Writer
 	srvReader    io.Reader
 	cliWriter    io.Writer
@@ -22,11 +23,18 @@ type testingConnection struct {
 	errorHandler func(error)
 	cnMutex      sync.Mutex
 	connected    bool
-	sendchan     chan string
+	cliSendChan  chan string
+	srvSendChan  chan []byte
 }
 
+var connNum = 0
+
 func (t *testingConnection) ConnectionID() string {
-	return "test"
+	if t.connectionID == "" {
+		connNum++
+		t.connectionID = fmt.Sprintf("test%v", connNum)
+	}
+	return t.connectionID
 }
 
 func (t *testingConnection) Read(b []byte) (n int, err error) {
@@ -34,7 +42,8 @@ func (t *testingConnection) Read(b []byte) (n int, err error) {
 }
 
 func (t *testingConnection) Write(b []byte) (n int, err error) {
-	return t.srvWriter.Write(b)
+	t.srvSendChan <- b
+	return len(b), nil
 }
 
 func (t *testingConnection) SetReceiveErrorHandler(errorHandler func(error)) {
@@ -70,8 +79,9 @@ func newTestingConnection() *testingConnection {
 		cliWriter:    cliWriter,
 		cliReader:    cliReader,
 		errorHandler: func(err error) { Fail(fmt.Sprintf("received invalid message from server %v", err.Error())) },
-		received:     make(chan interface{}, 0),
-		sendchan:     make(chan string, 20),
+		received:     make(chan interface{}, 20),
+		cliSendChan:  make(chan string, 20),
+		srvSendChan:  make(chan []byte, 20),
 	}
 	// Send initial Handshake
 	conn.clientSend(`{"protocol": "json","version": 1}`)
@@ -85,6 +95,13 @@ func newTestingConnection() *testingConnection {
 				var hubMessage hubMessage
 				if err = json.Unmarshal([]byte(message), &hubMessage); err == nil {
 					switch hubMessage.Type {
+					case 1, 4:
+						var invocationMessage invocationMessage
+						if err = json.Unmarshal([]byte(message), &invocationMessage); err == nil {
+							conn.received <- invocationMessage
+						} else {
+							conn.errorHandler(err)
+						}
 					case 2:
 						var streamItemMessage streamItemMessage
 						if err = json.Unmarshal([]byte(message), &streamItemMessage); err == nil {
@@ -118,17 +135,23 @@ func newTestingConnection() *testingConnection {
 			}
 		}
 	}()
-	// Send loop
+	// client send loop
 	go func() {
 		for {
-			_, _ = conn.cliWriter.Write(append([]byte(<-conn.sendchan), 30))
+			_, _ = conn.cliWriter.Write(append([]byte(<-conn.cliSendChan), 30))
+		}
+	}()
+	// server send loop
+	go func() {
+		for {
+			_, _ = conn.srvWriter.Write(<-conn.srvSendChan)
 		}
 	}()
 	return &conn
 }
 
 func (t *testingConnection) clientSend(message string) {
-	t.sendchan <- message
+	t.cliSendChan <- message
 }
 
 func (t *testingConnection) clientReceive() (string, error) {
@@ -152,9 +175,9 @@ func (t *testingConnection) clientReceive() (string, error) {
 var _ = Describe("Connection", func() {
 
 	Describe("Connection closed", func() {
-		conn := connect(&Hub{})
 		Context("When the connection is closed", func() {
 			It("should not answer an invocation", func() {
+				conn := connect(&Hub{})
 				conn.clientSend(`{"type":7}`)
 				conn.clientSend(`{"type":1,"invocationId": "123","target":"simple"}`)
 				// When the connection is closed, the server should either send a closeMessage or nothing at all
@@ -171,15 +194,18 @@ var _ = Describe("Connection", func() {
 var _ = Describe("Protocol", func() {
 
 	Describe("Invalid messages", func() {
-		conn := connect(&Hub{})
 		Context("When a message with invalid id is sent", func() {
-			It("should be ignored", func() {
+			It("should close the connection with an error", func() {
+				conn := connect(&Hub{})
+				// Disable error handling
+				conn.SetReceiveErrorHandler(func(err error) {})
 				conn.clientSend(`{"type":99}`)
 				select {
-				case <-conn.received:
-					Fail("received message")
-				case <-time.After(100 * time.Millisecond):
-					// Timed out and thats ok
+				case message := <-conn.received:
+					Expect(message).To(BeAssignableToTypeOf(closeMessage{}))
+					Expect(message.(closeMessage).Error).NotTo(BeNil())
+				case <-time.After(1000 * time.Millisecond):
+					Fail("timed out")
 				}
 			})
 		})

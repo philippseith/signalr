@@ -51,9 +51,8 @@ func (j *JSONHubProtocol) ReadMessage(buf *bytes.Buffer) (m interface{}, complet
 	switch {
 	case errors.Is(err, io.EOF):
 		return nil, false, err
-	case err != nil:
-		// Might never happen, because parseTextMessageFormat will only return err from bytes.Buffer.ReadBytes() which is always io.EOF or nil
-		return nil, true, err
+		// Other errors never happen, because parseTextMessageFormat will only return err
+		// from bytes.Buffer.ReadBytes() which is always io.EOF or nil
 	}
 
 	message := hubMessage{}
@@ -143,5 +142,5 @@ func (j *JSONHubProtocol) WriteMessage(message interface{}, writer io.Writer) er
 }
 
 func (j *JSONHubProtocol) setDebugLogger(dbg StructuredLogger) {
-	j.dbg = log.WithPrefix(dbg, "protocol", "JSON")
+	j.dbg = log.WithPrefix(dbg, "ts", log.DefaultTimestampUTC, "protocol", "JSON")
 }

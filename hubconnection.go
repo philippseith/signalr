@@ -67,7 +67,8 @@ func (c *defaultHubConnection) Close(error string) {
 		AllowReconnect: true,
 	}
 	if err := c.Protocol.WriteMessage(closeMessage, c.Connection); err != nil {
-		fmt.Printf("cannot close connection %v: %v", c.GetConnectionID(), err)
+		_ = c.info.Log(evt, "send invocation", "error",
+			fmt.Sprintf("cannot close connection %v: %v", c.GetConnectionID(), err))
 	}
 }
 
@@ -81,9 +82,9 @@ func (c *defaultHubConnection) SendInvocation(target string, args []interface{})
 		Target:    target,
 		Arguments: args,
 	}
-
 	if err := c.Protocol.WriteMessage(invocationMessage, c.Connection); err != nil {
-		fmt.Printf("cannot send invocation %v %v over connection %v: %v", target, args, c.GetConnectionID(), err)
+		_ = c.info.Log(evt, "send invocation", "error",
+			fmt.Sprintf("cannot send invocation %v %v over connection %v: %v", target, args, c.GetConnectionID(), err))
 	}
 }
 
@@ -91,9 +92,9 @@ func (c *defaultHubConnection) Ping() {
 	var pingMessage = hubMessage{
 		Type: 6,
 	}
-
 	if err := c.Protocol.WriteMessage(pingMessage, c.Connection); err != nil {
-		fmt.Printf("cannot ping over connection %v: %v", c.GetConnectionID(), err)
+		_ = c.info.Log(evt, "send invocation", "error",
+			fmt.Sprintf("cannot ping over connection %v: %v", c.GetConnectionID(), err))
 	}
 }
 
@@ -124,9 +125,9 @@ func (c *defaultHubConnection) Completion(id string, result interface{}, error s
 		Result:       result,
 		Error:        error,
 	}
-
 	if err := c.Protocol.WriteMessage(completionMessage, c.Connection); err != nil {
-		fmt.Printf("cannot send completion for invocation %v over connection %v: %v", id, c.GetConnectionID(), err)
+		_ = c.info.Log(evt, "send invocation", "error",
+			fmt.Sprintf("cannot send completion for invocation %v over connection %v: %v", id, c.GetConnectionID(), err))
 	}
 }
 
@@ -136,8 +137,8 @@ func (c *defaultHubConnection) StreamItem(id string, item interface{}) {
 		InvocationID: id,
 		Item:         item,
 	}
-
 	if err := c.Protocol.WriteMessage(streamItemMessage, c.Connection); err != nil {
-		fmt.Printf("cannot send stream item for invocation %v over connection %v: %v", id, c.GetConnectionID(), err)
+		_ = c.info.Log(evt, "send invocation", "error",
+			fmt.Sprintf("cannot send stream item for invocation %v over connection %v: %v", id, c.GetConnectionID(), err))
 	}
 }

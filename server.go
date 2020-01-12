@@ -19,7 +19,7 @@ import (
 type Server struct {
 	newHub            func() HubInterface
 	lifetimeManager   HubLifetimeManager
-	defaultHubClients HubClients
+	defaultHubClients *defaultHubClients
 	groupManager      GroupManager
 	info              log.Logger
 	dbg               log.Logger
@@ -105,7 +105,7 @@ func (s *Server) Run(conn Connection) {
 				switch message.(type) {
 				case invocationMessage:
 					invocation := message.(invocationMessage)
-					_ = dbg.Log(evt, msgRecv, msg, invocation)
+					_ = dbg.Log(evt, msgRecv, msg, fmt.Sprintf("%v", invocation))
 					// Transient hub
 					// Dispatch invocation here
 					if method, ok := getMethod(s.getHub(hubConn), invocation.Target); !ok {
@@ -169,9 +169,13 @@ func (s *Server) Run(conn Connection) {
 					break messageLoop
 				case hubMessage:
 					_ = dbg.Log(evt, msgRecv, msg, message)
+					hubMessage := message.(hubMessage)
 					// Ping
-				default:
-					_ = info.Log(evt, msgRecv, "error", err, msg, message, react, "ignore")
+					if hubMessage.Type != 6 {
+						connErr = fmt.Errorf("invalid message type %v", message)
+						_ = info.Log(evt, msgRecv, "error", connErr, msg, message, react, "disconnect")
+						break messageLoop
+					}
 				}
 			}
 		}
@@ -366,7 +370,7 @@ func (s *Server) processHandshake(conn Connection) (HubProtocol, error) {
 			continue
 		}
 
-		_ = dbg.Log(evt, "handshake received")
+		_ = dbg.Log(evt, "handshake received", "msg", string(rawHandshake))
 
 		request := handshakeRequest{}
 		err = json.Unmarshal(rawHandshake, &request)
@@ -380,7 +384,11 @@ func (s *Server) processHandshake(conn Connection) (HubProtocol, error) {
 
 		if ok {
 			// Send the handshake response
-			_, err = conn.Write([]byte(handshakeResponse))
+			if _, err = conn.Write([]byte(handshakeResponse)); err != nil {
+				_ = dbg.Log(evt, "handshake sent", "error", err)
+			} else {
+				_ = dbg.Log(evt, "handshake sent", "msg", handshakeResponse)
+			}
 		} else {
 			// Protocol not supported
 			_ = info.Log(evt, "protocol requested", "error", fmt.Sprintf("client requested unsupported protocol \"%s\" ", request.Protocol))
