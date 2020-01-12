@@ -10,11 +10,9 @@ import (
 )
 
 // MapHub used to register a SignalR Hub with the specified ServeMux
-func MapHub(mux *http.ServeMux, path string, hubProto HubInterface) {
+func MapHub(mux *http.ServeMux, path string, hubProto HubInterface) *Server {
 	mux.HandleFunc(fmt.Sprintf("%s/negotiate", path), negotiateHandler)
-	server := NewServer(func() HubInterface {
-		return CreateInstance(hubProto)
-	})
+	server, _ := NewServer(SimpleHubFactory(hubProto))
 	mux.Handle(path, websocket.Handler(func(ws *websocket.Conn) {
 		connectionID := ws.Request().URL.Query().Get("id")
 		if len(connectionID) == 0 {
@@ -23,6 +21,7 @@ func MapHub(mux *http.ServeMux, path string, hubProto HubInterface) {
 		}
 		server.Run(&webSocketConnection{ws, nil, connectionID})
 	}))
+	return server
 }
 
 func negotiateHandler(w http.ResponseWriter, req *http.Request) {
@@ -54,4 +53,14 @@ func getConnectionID() string {
 		fmt.Println(err)
 	}
 	return base64.StdEncoding.EncodeToString(bytes)
+}
+
+type availableTransport struct {
+	Transport       string   `json:"transport"`
+	TransferFormats []string `json:"transferFormats"`
+}
+
+type negotiateResponse struct {
+	ConnectionID        string               `json:"connectionId"`
+	AvailableTransports []availableTransport `json:"availableTransports"`
 }

@@ -3,7 +3,11 @@ package signalr
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"github.com/go-kit/kit/log"
+	"github.com/go-kit/kit/log/level"
+	"os"
 	"reflect"
 	"runtime/debug"
 	"strings"
@@ -17,14 +21,16 @@ type Server struct {
 	lifetimeManager   HubLifetimeManager
 	defaultHubClients HubClients
 	groupManager      GroupManager
+	info              log.Logger
+	dbg               log.Logger
 }
 
 // NewServer creates a new server for one type of hub
 // newHub is called each time a hub method is invoked by a client to create the transient hub instance
-func NewServer(newHub func() HubInterface) *Server {
+func NewServer(options ...func(*Server) error) (*Server, error) {
 	lifetimeManager := defaultHubLifetimeManager{}
-	return &Server{
-		newHub:          newHub,
+	i, d := buildInfoDebugLogger(log.NewLogfmtLogger(os.Stderr), false)
+	server := &Server{
 		lifetimeManager: &lifetimeManager,
 		defaultHubClients: &defaultHubClients{
 			lifetimeManager: &lifetimeManager,
@@ -33,78 +39,171 @@ func NewServer(newHub func() HubInterface) *Server {
 		groupManager: &defaultGroupManager{
 			lifetimeManager: &lifetimeManager,
 		},
+		info: i,
+		dbg:  d,
 	}
+	for _, option := range options {
+		if option != nil {
+			if err := option(server); err != nil {
+				return nil, err
+			}
+		}
+	}
+	if server.newHub == nil {
+		return server, errors.New("cannot determine hub type. Neither UseHub, HubFactory or SimpleHubFactory given as option")
+	}
+	return server, nil
 }
 
 // Run runs the server on one connection. The same server might be run on different connections in parallel
 func (s *Server) Run(conn Connection) {
-	if protocol, err := processHandshake(conn); err != nil {
-		fmt.Println(err)
+	info, dbg := s.prefixLogger()
+	if protocol, err := s.processHandshake(conn); err != nil {
+		_ = info.Log(evt, "processHandshake", "error", err, react, "do not connect")
 	} else {
-		hubConn := newHubConnection(conn, protocol)
+		// Copy protocol to set our own debug logger
+		protocol = reflect.New(reflect.ValueOf(protocol).Elem().Type()).Interface().(HubProtocol)
+		protocol.SetDebugLogger(s.dbg)
+		hubConn := newHubConnection(conn, protocol, s.info, s.dbg)
 		// start sending pings to the client
 		pings := startPingClientLoop(hubConn)
 		hubConn.Start()
 		s.lifetimeManager.OnConnected(hubConn)
 		streamer := newStreamer(hubConn)
 		streamClient := newStreamClient()
-		s.transientHub(hubConn).OnConnected(hubConn.GetConnectionID())
+		s.getHub(hubConn).OnConnected(hubConn.GetConnectionID())
 		// Process messages
+		var message interface{}
+		var connErr error
+		messageLoop:
 		for hubConn.IsConnected() {
-			if message, err := hubConn.Receive(); err != nil {
-				fmt.Println(err)
+			if message, connErr = hubConn.Receive(); connErr != nil && message == nil {
+				// It wasn't a message at all
+				_ = info.Log(evt, msgRecv, "error", connErr, msg, message, react, "disconnect")
 				break
-			} else {
-				fmt.Printf("Message received %v\n", message)
+			} else if connErr != nil && message != nil {
+				// It's a message, but it is invalid
 				switch message.(type) {
 				case invocationMessage:
 					invocation := message.(invocationMessage)
+					_ = dbg.Log(evt, invalidMsgRecv, msg, invocation)
+					hubConn.Completion(invocation.InvocationID, nil, connErr.Error())
+				case streamItemMessage:
+					streamItemMessage := message.(streamItemMessage)
+					_ = dbg.Log(evt, invalidMsgRecv, msg, streamItemMessage)
+					if err := streamClient.receiveStreamItem(streamItemMessage); err != nil {
+						connErr = err
+						_ = info.Log(evt, msgRecv, "error", connErr, msg, message, react, "disconnect")
+						break messageLoop
+					}
+				default:
+					connErr = err
+					_ = info.Log(evt, msgRecv, "error", connErr, msg, message, react, "disconnect")
+					break messageLoop
+				}
+			} else {
+				switch message.(type) {
+				case invocationMessage:
+					invocation := message.(invocationMessage)
+					_ = dbg.Log(evt, msgRecv, msg, invocation)
 					// Transient hub
 					// Dispatch invocation here
-					if method, ok := getMethod(s.transientHub(hubConn), invocation.Target); !ok {
+					if method, ok := getMethod(s.getHub(hubConn), invocation.Target); !ok {
 						// Unable to find the method
+						_ = info.Log(evt, "getMethod", "error", "missing method", "name", invocation.Target, react, "send completion with error")
 						hubConn.Completion(invocation.InvocationID, nil, fmt.Sprintf("Unknown method %s", invocation.Target))
 					} else if in, clientStreaming, err := buildMethodArguments(method, invocation, streamClient, protocol); err != nil {
 						// argument build failed
+						_ = info.Log(evt, "buildMethodArguments", "error", err, "name", invocation.Target, react, "send completion with error")
 						hubConn.Completion(invocation.InvocationID, nil, err.Error())
 					} else if clientStreaming {
 						// let the receiving method run independently
 						go func() {
 							defer func() {
 								if err := recover(); err != nil {
-									hubConn.Completion(invocation.InvocationID, nil, fmt.Sprintf("%v\n%v", err, string(debug.Stack())))
+									_ = info.Log(evt, "recover", "error", err, "name", invocation.Target, react, "send completion with error")
+									if invocation.InvocationID != "" {
+										hubConn.Completion(invocation.InvocationID, nil, fmt.Sprintf("%v\n%v", err, string(debug.Stack())))
+									}
 								}
 							}()
 							method.Call(in)
 						}()
 					} else {
-						result := func() []reflect.Value {
-							defer func() {
-								if err := recover(); err != nil {
-									hubConn.Completion(invocation.InvocationID, nil, fmt.Sprintf("%v\n%v", err, string(debug.Stack())))
-								}
+						// hub method might take a long time
+						go func() {
+							result := func() []reflect.Value {
+								defer func() {
+									if err := recover(); err != nil {
+										_ = info.Log(evt, "recover", "error", err, "name", invocation.Target, react, "send completion with error")
+										if invocation.InvocationID != "" {
+											hubConn.Completion(invocation.InvocationID, nil, fmt.Sprintf("%v\n%v", err, string(debug.Stack())))
+										}
+									}
+								}()
+								return method.Call(in)
 							}()
-							return method.Call(in)
+							returnInvocationResult(hubConn, invocation, streamer, result)
 						}()
-						returnInvocationResult(hubConn, invocation, streamer, result)
 					}
 				case cancelInvocationMessage:
+					_ = dbg.Log(evt, msgRecv, msg, message.(cancelInvocationMessage))
 					streamer.Stop(message.(cancelInvocationMessage).InvocationID)
 				case streamItemMessage:
-					streamClient.receiveStreamItem(message.(streamItemMessage))
+					streamItemMessage := message.(streamItemMessage)
+					_ = dbg.Log(evt, msgRecv, msg, streamItemMessage)
+					if err := streamClient.receiveStreamItem(streamItemMessage); err != nil {
+						connErr = err
+						_ = info.Log(evt, msgRecv, "error", connErr, msg, message, react, "disconnect")
+						break messageLoop
+					}
 				case completionMessage:
-					streamClient.receiveCompletionItem(message.(completionMessage))
+					_ = dbg.Log(evt, msgRecv, msg, message.(completionMessage))
+					if err := streamClient.receiveCompletionItem(message.(completionMessage)); err != nil {
+					connErr = err
+					_ = info.Log(evt, msgRecv, "error", connErr, msg, message, react, "disconnect")
+					break messageLoop
+				}
+				case closeMessage:
+					_ = dbg.Log(evt, msgRecv, msg, message.(closeMessage))
+					break messageLoop
 				case hubMessage:
+					_ = dbg.Log(evt, msgRecv, msg, message)
 					// Ping
+				default:
+					_ = info.Log(evt, msgRecv, "error", err, msg, message, react, "ignore")
 				}
 			}
 		}
-		s.transientHub(hubConn).OnDisconnected(hubConn.GetConnectionID())
+		s.getHub(hubConn).OnDisconnected(hubConn.GetConnectionID())
 		s.lifetimeManager.OnDisconnected(hubConn)
-		hubConn.Close("")
+		if connErr != nil {
+			hubConn.Close(connErr.Error())
+		} else {
+			hubConn.Close("")
+		}
 		// Wait for pings to complete
 		pings.Wait()
+		_ = dbg.Log(evt, "messageloop ended")
 	}
+}
+
+func (s *Server) prefixLogger() (info log.Logger, debug log.Logger) {
+	return log.WithPrefix(s.info, "ts", log.DefaultTimestampUTC,
+			"class", "Server",
+			"hub", reflect.ValueOf(s.newHub()).Elem().Type()),
+		log.WithPrefix(s.dbg, "ts", log.DefaultTimestampUTC,
+			"class", "Server",
+			"hub", reflect.ValueOf(s.newHub()).Elem().Type())
+}
+
+func buildInfoDebugLogger(logger log.Logger, debug bool) (log.Logger, log.Logger) {
+	if debug {
+		logger = level.NewFilter(logger, level.AllowDebug())
+	} else {
+		logger = level.NewFilter(logger, level.AllowInfo())
+	}
+	return level.Info(logger), log.With(level.Debug(logger), "caller", log.DefaultCaller)
 }
 
 func startPingClientLoop(conn hubConnection) *sync.WaitGroup {
@@ -121,12 +220,6 @@ func startPingClientLoop(conn hubConnection) *sync.WaitGroup {
 	return &waitgroup
 }
 
-// CreateInstance creates an instance of the underlying type of hubProto without initializing any fields
-// The function can be used as newHub argument for NewServer()
-func CreateInstance(hubProto HubInterface) HubInterface {
-	return reflect.New(reflect.ValueOf(hubProto).Elem().Type()).Interface().(HubInterface)
-}
-
 func (s *Server) newConnectionHubContext(conn hubConnection) HubContext {
 	return &connectionHubContext{
 		clients: &callerHubClients{
@@ -138,7 +231,7 @@ func (s *Server) newConnectionHubContext(conn hubConnection) HubContext {
 	}
 }
 
-func (s *Server) transientHub(conn hubConnection) HubInterface {
+func (s *Server) getHub(conn hubConnection) HubInterface {
 	hub := s.newHub()
 	hub.Initialize(s.newConnectionHubContext(conn))
 	return hub
@@ -157,33 +250,36 @@ func getMethod(hub HubInterface, name string) (reflect.Value, bool) {
 }
 
 func returnInvocationResult(conn hubConnection, invocation invocationMessage, streamer *streamer, result []reflect.Value) {
-	// if the hub method returns a chan, it should be considered asynchronous or source for a stream
-	if len(result) == 1 && result[0].Kind() == reflect.Chan {
-		switch invocation.Type {
-		// Simple invocation
-		case 1:
-			go func() {
-				// Recv might block, so run continue in a goroutine
-				if chanResult, ok := result[0].Recv(); ok {
-					invokeConnection(conn, invocation, completion, []reflect.Value{chanResult})
-				} else {
-					conn.Completion(invocation.InvocationID, nil, "hub func returned closed chan")
-				}
-			}()
-		// StreamInvocation
-		case 4:
-			streamer.Start(invocation.InvocationID, result[0])
-		}
-	} else {
-		switch invocation.Type {
-		// Simple invocation
-		case 1:
-			invokeConnection(conn, invocation, completion, result)
-		case 4:
-			// Stream invocation of method with no stream result.
-			// Return a single StreamItem and an empty Completion
-			invokeConnection(conn, invocation, streamItem, result)
-			conn.Completion(invocation.InvocationID, nil, "")
+	// No invocation id, no completion
+	if invocation.InvocationID != "" {
+		// if the hub method returns a chan, it should be considered asynchronous or source for a stream
+		if len(result) == 1 && result[0].Kind() == reflect.Chan {
+			switch invocation.Type {
+			// Simple invocation
+			case 1:
+				go func() {
+					// Recv might block, so run continue in a goroutine
+					if chanResult, ok := result[0].Recv(); ok {
+						invokeConnection(conn, invocation, completion, []reflect.Value{chanResult})
+					} else {
+						conn.Completion(invocation.InvocationID, nil, "hub func returned closed chan")
+					}
+				}()
+			// StreamInvocation
+			case 4:
+				streamer.Start(invocation.InvocationID, result[0])
+			}
+		} else {
+			switch invocation.Type {
+			// Simple invocation
+			case 1:
+				invokeConnection(conn, invocation, completion, result)
+			case 4:
+				// Stream invocation of method with no stream result.
+				// Return a single StreamItem and an empty Completion
+				invokeConnection(conn, invocation, streamItem, result)
+				conn.Completion(invocation.InvocationID, nil, "")
+			}
 		}
 	}
 }
@@ -210,6 +306,9 @@ func buildMethodArguments(method reflect.Value, invocation invocationMessage,
 			}
 			arguments[i] = arg.Elem()
 		}
+	}
+	if len(invocation.StreamIds) > chanCount {
+		return arguments, chanCount > 0, errors.New(fmt.Sprintf("to many StreamIds for channel parameters of method %v", invocation.Target))
 	}
 	return arguments, chanCount > 0, nil
 }
@@ -239,12 +338,13 @@ func invokeConnection(conn hubConnection, invocation invocationMessage, connFunc
 	}
 }
 
-func processHandshake(conn Connection) (HubProtocol, error) {
+func (s *Server) processHandshake(conn Connection) (HubProtocol, error) {
 	var err error
 	var protocol HubProtocol
 	var ok bool
 	const handshakeResponse = "{}\u001e"
 	const errorHandshakeResponse = "{\"error\":\"%s\"}\u001e"
+	info, dbg := s.prefixLogger()
 
 	// TODO 5 seconds to process the handshake
 	// ws.SetReadDeadline(time.Now().Add(5 * time.Second))
@@ -266,7 +366,7 @@ func processHandshake(conn Connection) (HubProtocol, error) {
 			continue
 		}
 
-		fmt.Println("Handshake received")
+		_ = dbg.Log(evt, "handshake received")
 
 		request := handshakeRequest{}
 		err = json.Unmarshal(rawHandshake, &request)
@@ -283,7 +383,7 @@ func processHandshake(conn Connection) (HubProtocol, error) {
 			_, err = conn.Write([]byte(handshakeResponse))
 		} else {
 			// Protocol not supported
-			fmt.Printf("\"%s\" is the only supported Protocol\n", request.Protocol)
+			_ = info.Log(evt, "protocol requested", "error", fmt.Sprintf("client requested unsupported protocol \"%s\" ", request.Protocol))
 			_, err = conn.Write([]byte(fmt.Sprintf(errorHandshakeResponse, fmt.Sprintf("Protocol \"%s\" not supported", request.Protocol))))
 		}
 		break
@@ -299,12 +399,9 @@ var protocolMap = map[string]HubProtocol{
 	"json": &JSONHubProtocol{},
 }
 
-type availableTransport struct {
-	Transport       string   `json:"transport"`
-	TransferFormats []string `json:"transferFormats"`
-}
-
-type negotiateResponse struct {
-	ConnectionID        string               `json:"connectionId"`
-	AvailableTransports []availableTransport `json:"availableTransports"`
-}
+// const for logging
+const evt string = "event"
+const msgRecv string = "message received"
+const invalidMsgRecv string = "invalid message received"
+const msg string = "message"
+const react string = "reaction"
