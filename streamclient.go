@@ -11,7 +11,7 @@ func newStreamClient() *streamClient {
 
 type streamClient struct {
 	upstreamChannels map[string]reflect.Value
-	runningStreams map[string]bool
+	runningStreams   map[string]bool
 }
 
 func (u *streamClient) buildChannelArgument(invocation invocationMessage, argType reflect.Type, chanCount int) (arg reflect.Value, canClientStreaming bool, err error) {
@@ -60,7 +60,7 @@ func (u *streamClient) receiveStreamItem(streamItem streamItemMessage) error {
 							}
 						}
 						chanSlice := reflect.Indirect(reflect.New(reflect.SliceOf(chanElmElmType)))
-						chanSlice =	reflect.Append(chanSlice, chanVals...)
+						chanSlice = reflect.Append(chanSlice, chanVals...)
 						upChan.Send(chanSlice)
 					}
 				default:
@@ -78,7 +78,7 @@ func (u *streamClient) receiveStreamItem(streamItem streamItemMessage) error {
 					upChan.Send(reflect.ValueOf(streamItem.Item))
 					done <- nil
 				}()
-				return <- done
+				return <-done
 			}
 		}
 		return nil

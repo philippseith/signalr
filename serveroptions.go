@@ -48,4 +48,3 @@ func Logger(logger StructuredLogger, debug bool) func(*Server) error {
 		return nil
 	}
 }
-

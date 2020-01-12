@@ -81,8 +81,8 @@ var _ = Describe("Invocation", func() {
 				select {
 				case message := <-conn.received:
 					if _, ok := message.(completionMessage); ok {
-					Fail("received completion ")
-				}
+						Fail("received completion ")
+					}
 				case <-time.After(1000 * time.Millisecond):
 				}
 			})

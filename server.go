@@ -75,7 +75,7 @@ func (s *Server) Run(conn Connection) {
 		// Process messages
 		var message interface{}
 		var connErr error
-		messageLoop:
+	messageLoop:
 		for hubConn.IsConnected() {
 			if message, connErr = hubConn.Receive(); connErr != nil && message == nil {
 				// It wasn't a message at all
@@ -160,10 +160,10 @@ func (s *Server) Run(conn Connection) {
 				case completionMessage:
 					_ = dbg.Log(evt, msgRecv, msg, message.(completionMessage))
 					if err := streamClient.receiveCompletionItem(message.(completionMessage)); err != nil {
-					connErr = err
-					_ = info.Log(evt, msgRecv, "error", connErr, msg, message, react, "disconnect")
-					break messageLoop
-				}
+						connErr = err
+						_ = info.Log(evt, msgRecv, "error", connErr, msg, message, react, "disconnect")
+						break messageLoop
+					}
 				case closeMessage:
 					_ = dbg.Log(evt, msgRecv, msg, message.(closeMessage))
 					break messageLoop

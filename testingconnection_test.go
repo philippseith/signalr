@@ -13,16 +13,16 @@ import (
 )
 
 type testingConnection struct {
-	srvWriter io.Writer
-	srvReader io.Reader
-	cliWriter io.Writer
-	cliReader io.Reader
-	received  chan interface{}
-	ehMutex sync.Mutex
+	srvWriter    io.Writer
+	srvReader    io.Reader
+	cliWriter    io.Writer
+	cliReader    io.Reader
+	received     chan interface{}
+	ehMutex      sync.Mutex
 	errorHandler func(error)
-	cnMutex sync.Mutex
-	connected bool
-	sendchan chan string
+	cnMutex      sync.Mutex
+	connected    bool
+	sendchan     chan string
 }
 
 func (t *testingConnection) ConnectionID() string {
@@ -55,29 +55,27 @@ func (t *testingConnection) Connected() bool {
 	return t.connected
 }
 
-
 func (t *testingConnection) setConnected(connected bool) {
 	t.cnMutex.Lock()
 	defer t.cnMutex.Unlock()
 	t.connected = connected
 }
 
-
 func newTestingConnection() *testingConnection {
 	cliReader, srvWriter := io.Pipe()
 	srvReader, cliWriter := io.Pipe()
 	conn := testingConnection{
-		srvWriter: srvWriter,
-		srvReader: srvReader,
-		cliWriter: cliWriter,
-		cliReader: cliReader,
-		errorHandler: func(err error) { Fail(fmt.Sprintf("received invalid message from server %v", err.Error()))},
-		received: make(chan interface{}, 0),
-		sendchan: make(chan string, 20),
+		srvWriter:    srvWriter,
+		srvReader:    srvReader,
+		cliWriter:    cliWriter,
+		cliReader:    cliReader,
+		errorHandler: func(err error) { Fail(fmt.Sprintf("received invalid message from server %v", err.Error())) },
+		received:     make(chan interface{}, 0),
+		sendchan:     make(chan string, 20),
 	}
 	// Send initial Handshake
-		conn.clientSend(`{"protocol": "json","version": 1}`)
-			conn.setConnected(true)
+	conn.clientSend(`{"protocol": "json","version": 1}`)
+	conn.setConnected(true)
 
 	// Receive loop
 	go func() {
@@ -159,12 +157,12 @@ var _ = Describe("Connection", func() {
 			It("should not answer an invocation", func() {
 				conn.clientSend(`{"type":7}`)
 				conn.clientSend(`{"type":1,"invocationId": "123","target":"simple"}`)
-					// When the connection is closed, the server should either send a closeMessage or nothing at all
-					select {
-					case message := <-conn.received:
-						Expect(message.(closeMessage)).NotTo(BeNil())
-					case <-time.After(100 * time.Millisecond):
-					}
+				// When the connection is closed, the server should either send a closeMessage or nothing at all
+				select {
+				case message := <-conn.received:
+					Expect(message.(closeMessage)).NotTo(BeNil())
+				case <-time.After(100 * time.Millisecond):
+				}
 			})
 		})
 	})

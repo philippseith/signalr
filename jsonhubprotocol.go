@@ -145,4 +145,3 @@ func (j *JSONHubProtocol) WriteMessage(message interface{}, writer io.Writer) er
 func (j *JSONHubProtocol) setDebugLogger(dbg StructuredLogger) {
 	j.dbg = log.WithPrefix(dbg, "protocol", "JSON")
 }
-

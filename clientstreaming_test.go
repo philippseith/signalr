@@ -279,7 +279,7 @@ var _ = Describe("ClientStreaming", func() {
 			conn := connect(&clientStreamHub{})
 			It("should end the connection with an error", func() {
 				// We are testing for error, so the connection should ignore it
-				conn.SetReceiveErrorHandler(func(error){})
+				conn.SetReceiveErrorHandler(func(error) {})
 				conn.clientSend(`{"type":4,"invocationId": "nnn","target":"uploadstreamsmoke","arguments":[5.0],"streamids":["fff","ggg"]}`)
 				<-clientStreamingInvocationQueue
 				// Send invalid stream item message with missing id and item
@@ -297,7 +297,7 @@ var _ = Describe("ClientStreaming", func() {
 			conn := connect(&clientStreamHub{})
 			It("should end the connection with an error", func() {
 				// We are testing for error, so the connection should ignore it
-				conn.SetReceiveErrorHandler(func(error){})
+				conn.SetReceiveErrorHandler(func(error) {})
 				conn.clientSend(`{"type":4,"invocationId": "nnn","target":"uploadstreamsmoke","arguments":[5.0],"streamids":["fff","ggg"]}`)
 				<-clientStreamingInvocationQueue
 				// Send invalid stream item message with missing item
@@ -313,7 +313,7 @@ var _ = Describe("ClientStreaming", func() {
 		})
 		Context("When an invalid streamitem message with wrong itemtype is received", func() {
 			conn := connect(&clientStreamHub{})
-			conn.SetReceiveErrorHandler(func(error){})
+			conn.SetReceiveErrorHandler(func(error) {})
 			It("should end the connection with an error", func() {
 				conn.clientSend(`{"type":4,"invocationId": "nnn","target":"uploadstreamsmoke","arguments":[5.0],"streamids":["fff","ggg"]}`)
 				<-clientStreamingInvocationQueue
@@ -332,7 +332,7 @@ var _ = Describe("ClientStreaming", func() {
 			conn := connect(&clientStreamHub{})
 			It("should end the connection with an error", func() {
 				// We are testing for error, so the connection should ignore it
-				conn.SetReceiveErrorHandler(func(error){})
+				conn.SetReceiveErrorHandler(func(error) {})
 				conn.clientSend(`{"type":4,"invocationId": "nnn","target":"uploadstreamsmoke","arguments":[5.0],"streamids":["fff","ggg"]}`)
 				<-clientStreamingInvocationQueue
 				// Send invalid stream item message with invalid invocation id
@@ -353,7 +353,7 @@ var _ = Describe("ClientStreaming", func() {
 			conn := connect(&clientStreamHub{})
 			It("should end the connection with an error", func() {
 				// We are testing for error, so the connection should ignore it
-				conn.SetReceiveErrorHandler(func(error){})
+				conn.SetReceiveErrorHandler(func(error) {})
 				conn.clientSend(`{"type":4,"invocationId": "nnn","target":"uploadstreamsmoke","arguments":[5.0],"streamids":["fff","ggg"]}`)
 				<-clientStreamingInvocationQueue
 				// Send invalid completion message with missing id
@@ -371,7 +371,7 @@ var _ = Describe("ClientStreaming", func() {
 			conn := connect(&clientStreamHub{})
 			It("should end the connection with an error", func() {
 				// We are testing for error, so the connection should ignore it
-				conn.SetReceiveErrorHandler(func(error){})
+				conn.SetReceiveErrorHandler(func(error) {})
 				conn.clientSend(`{"type":4,"invocationId":"nnn","target":"uploadstreamsmoke","arguments":[5.0],"streamids":["fff","ggg"]}`)
 				<-clientStreamingInvocationQueue
 				// Send invalid completion message with missing id
@@ -398,7 +398,7 @@ var _ = Describe("ClientStreaming", func() {
 			conn := connect(&clientStreamHub{})
 			It("should end the connection with an error", func() {
 				// We are testing for error, so the connection should ignore it
-				conn.SetReceiveErrorHandler(func(error){})
+				conn.SetReceiveErrorHandler(func(error) {})
 				conn.clientSend(`{"type":4,"invocationId":"nnn","target":"uploadstreamsmoke","arguments":[5.0],"streamids":["fff","ggg"]}`)
 				<-clientStreamingInvocationQueue
 				// Send stream item
