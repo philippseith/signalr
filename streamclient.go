@@ -137,7 +137,6 @@ func (u *streamClient) receiveCompletionItem(completion completionMessage) error
 		delete(u.upstreamChannels, completion.InvocationID)
 		delete(u.runningStreams, completion.InvocationID)
 		return err
-	} else {
-		return fmt.Errorf("received completion with unknown id %v", completion.InvocationID)
 	}
+	return fmt.Errorf("received completion with unknown id %v", completion.InvocationID)
 }

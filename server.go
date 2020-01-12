@@ -63,7 +63,7 @@ func (s *Server) Run(conn Connection) {
 	} else {
 		// Copy protocol to set our own debug logger
 		protocol = reflect.New(reflect.ValueOf(protocol).Elem().Type()).Interface().(HubProtocol)
-		protocol.SetDebugLogger(s.dbg)
+		protocol.setDebugLogger(s.dbg)
 		hubConn := newHubConnection(conn, protocol, s.info, s.dbg)
 		// start sending pings to the client
 		pings := startPingClientLoop(hubConn)
@@ -308,7 +308,7 @@ func buildMethodArguments(method reflect.Value, invocation invocationMessage,
 		}
 	}
 	if len(invocation.StreamIds) > chanCount {
-		return arguments, chanCount > 0, errors.New(fmt.Sprintf("to many StreamIds for channel parameters of method %v", invocation.Target))
+		return arguments, chanCount > 0, fmt.Errorf("to many StreamIds for channel parameters of method %v", invocation.Target)
 	}
 	return arguments, chanCount > 0, nil
 }

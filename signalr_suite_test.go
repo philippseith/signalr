@@ -15,13 +15,13 @@ func TestSignalR(t *testing.T) {
 }
 
 func connect(hubProto HubInterface) *testingConnection {
+	var server Server
 	if server, err := NewServer(SimpleHubFactory(hubProto),
 		Logger(log.NewLogfmtLogger(os.Stderr), false)); err != nil {
 		Fail(err.Error())
 		return nil
-	} else {
-		conn := newTestingConnection()
-		go server.Run(conn)
-		return conn
 	}
+	conn := newTestingConnection()
+	go server.Run(conn)
+	return conn
 }
