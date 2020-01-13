@@ -32,10 +32,6 @@ func (j *jsonError) Error() string {
 	return fmt.Sprintf("%v (source: %v)", j.err, j.raw)
 }
 
-func (j *jsonError) Unwrap() error {
-	return j.err
-}
-
 // UnmarshalArgument unmarshals a json.RawMessage depending of the specified value type into value
 func (j *JSONHubProtocol) UnmarshalArgument(argument interface{}, value interface{}) error {
 	if err := json.Unmarshal(argument.(json.RawMessage), value); err != nil {
@@ -51,9 +47,8 @@ func (j *JSONHubProtocol) ReadMessage(buf *bytes.Buffer) (m interface{}, complet
 	switch {
 	case errors.Is(err, io.EOF):
 		return nil, false, err
-	case err != nil:
-		// Might never happen, because parseTextMessageFormat will only return err from bytes.Buffer.ReadBytes() which is always io.EOF or nil
-		return nil, true, err
+		// Other errors never happen, because parseTextMessageFormat will only return err
+		// from bytes.Buffer.ReadBytes() which is always io.EOF or nil
 	}
 
 	message := hubMessage{}
@@ -143,5 +138,5 @@ func (j *JSONHubProtocol) WriteMessage(message interface{}, writer io.Writer) er
 }
 
 func (j *JSONHubProtocol) setDebugLogger(dbg StructuredLogger) {
-	j.dbg = log.WithPrefix(dbg, "protocol", "JSON")
+	j.dbg = log.WithPrefix(dbg, "ts", log.DefaultTimestampUTC, "protocol", "JSON")
 }

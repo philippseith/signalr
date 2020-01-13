@@ -17,10 +17,6 @@ type defaultHubClients struct {
 	allCache        allClientProxy
 }
 
-func (c *defaultHubClients) Caller() ClientProxy {
-	panic("call only on callerHubClients")
-}
-
 func (c *defaultHubClients) All() ClientProxy {
 	return &c.allCache
 }
@@ -34,7 +30,7 @@ func (c *defaultHubClients) Group(groupName string) ClientProxy {
 }
 
 type callerHubClients struct {
-	defaultHubClients HubClients
+	defaultHubClients *defaultHubClients
 	connectionID      string
 }
 

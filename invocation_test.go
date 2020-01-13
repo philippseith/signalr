@@ -58,9 +58,9 @@ func (i *invocationHub) Panic() {
 var _ = Describe("Invocation", func() {
 
 	Describe("Simple invocation", func() {
-		conn := connect(&invocationHub{})
 		Context("When invoked by the client", func() {
 			It("should be invoked and return a completion", func() {
+				conn := connect(&invocationHub{})
 				conn.clientSend(`{"type":1,"invocationId": "123","target":"simple"}`)
 				Expect(<-invocationQueue).To(Equal("Simple()"))
 				recv := (<-conn.received).(completionMessage)
@@ -73,9 +73,9 @@ var _ = Describe("Invocation", func() {
 	})
 
 	Describe("Non blocking invocation", func() {
-		conn := connect(&invocationHub{})
 		Context("When invoked by the client", func() {
 			It("should be invoked and return no completion", func() {
+				conn := connect(&invocationHub{})
 				conn.clientSend(`{"type":1,"target":"simple"}`)
 				Expect(<-invocationQueue).To(Equal("Simple()"))
 				select {
@@ -90,28 +90,30 @@ var _ = Describe("Invocation", func() {
 	})
 
 	Describe("Invalid invocation", func() {
-		conn := connect(&invocationHub{})
 		Context("When an invalid invocation message is sent", func() {
-			It("should return a completion with error", func() {
+			It("close the connection with error", func() {
+				conn := connect(&invocationHub{})
+				// Disable error handling
+				conn.SetReceiveErrorHandler(func(err error) {})
 				// Invalid. invocationId should be a string
 				conn.clientSend(`{"type":1,"invocationId":1}`)
 				select {
 				case message := <-conn.received:
-					completionMessage := message.(completionMessage)
-					Expect(completionMessage).NotTo(BeNil())
-					Expect(completionMessage.Error).NotTo(BeNil())
-				case <-time.After(100 * time.Millisecond):
+					Expect(message).To(BeAssignableToTypeOf(closeMessage{}))
+					Expect(message.(closeMessage).Error).NotTo(BeNil())
+				case <-time.After(1000 * time.Millisecond):
+					Fail("timed out")
 				}
 			})
 		})
 	})
 
 	Describe("Invalid json", func() {
-		conn := connect(&invocationHub{})
-		// Disable error handling
-		conn.SetReceiveErrorHandler(func(err error) {})
 		Context("when invalid json is received", func() {
 			It("should close the connection with an error", func() {
+				conn := connect(&invocationHub{})
+				// Disable error handling
+				conn.SetReceiveErrorHandler(func(err error) {})
 				conn.clientSend(`{"type":1,"invocationId": "4444","target":"simpleint", arguments[CanNotParse]}`)
 				select {
 				case message := <-conn.received:
@@ -125,9 +127,9 @@ var _ = Describe("Invocation", func() {
 	})
 
 	Describe("SimpleInt invocation", func() {
-		conn := connect(&invocationHub{})
 		Context("When invoked by the client", func() {
 			It("should be invoked on the server, get an int and return an int", func() {
+				conn := connect(&invocationHub{})
 				var value int
 				value = 314
 				conn.clientSend(fmt.Sprintf(
@@ -143,9 +145,9 @@ var _ = Describe("Invocation", func() {
 	})
 
 	Describe("SimpleInt invocation with invalid argument", func() {
-		conn := connect(&invocationHub{})
 		Context("When invoked by the client with an invalid argument", func() {
 			It("should not be invoked on the server and return an error", func() {
+				conn := connect(&invocationHub{})
 				conn.clientSend(
 					`{"type":1,"invocationId": "555","target":"simpleint","arguments":["CantParse"]}`)
 				recv := (<-conn.received).(completionMessage)
@@ -157,9 +159,9 @@ var _ = Describe("Invocation", func() {
 	})
 
 	Describe("SimpleFloat invocation", func() {
-		conn := connect(&invocationHub{})
 		Context("When invoked by the client", func() {
 			It("should be invoked on the server, get a float and return a two floats", func() {
+				conn := connect(&invocationHub{})
 				var value float64
 				value = 3.1415
 				conn.clientSend(fmt.Sprintf(
@@ -175,9 +177,9 @@ var _ = Describe("Invocation", func() {
 	})
 
 	Describe("SimpleString invocation", func() {
-		conn := connect(&invocationHub{})
 		Context("When invoked by the client", func() {
 			It("should be invoked on the server, get two strings and return a string", func() {
+				conn := connect(&invocationHub{})
 				value1 := "Camel"
 				value2 := "Cased"
 				conn.clientSend(fmt.Sprintf(
@@ -193,9 +195,9 @@ var _ = Describe("Invocation", func() {
 	})
 
 	Describe("Async invocation", func() {
-		conn := connect(&invocationHub{})
 		Context("When invoked by the client", func() {
 			It("should be invoked on the server and return true asynchronously", func() {
+				conn := connect(&invocationHub{})
 				conn.clientSend(`{"type":1,"invocationId": "mfg","target":"async"}`)
 				Expect(<-invocationQueue).To(Equal("Async()"))
 				recv := (<-conn.received).(completionMessage)
@@ -208,9 +210,9 @@ var _ = Describe("Invocation", func() {
 	})
 
 	Describe("Async invocation with buggy server method which returns a closed channel", func() {
-		conn := connect(&invocationHub{})
 		Context("When invoked by the client", func() {
 			It("should be invoked on the server and return an error", func() {
+				conn := connect(&invocationHub{})
 				conn.clientSend(`{"type":1,"invocationId": "ouch","target":"asyncclosedchan"}`)
 				Expect(<-invocationQueue).To(Equal("AsyncClosedChan()"))
 				recv := (<-conn.received).(completionMessage)
@@ -223,9 +225,9 @@ var _ = Describe("Invocation", func() {
 	})
 
 	Describe("Panic in invoked func", func() {
-		conn := connect(&invocationHub{})
 		Context("When a func is invoked by the client and panics", func() {
 			It("should be invoked on the server and return an error but no result", func() {
+				conn := connect(&invocationHub{})
 				conn.clientSend(`{"type":1,"invocationId": "???","target":"panic"}`)
 				Expect(<-invocationQueue).To(Equal("Panic()"))
 				recv := (<-conn.received).(completionMessage)
@@ -238,9 +240,9 @@ var _ = Describe("Invocation", func() {
 	})
 
 	Describe("Missing method invocation", func() {
-		conn := connect(&invocationHub{})
 		Context("When a missing server method invoked by the client", func() {
 			It("should return an error", func() {
+				conn := connect(&invocationHub{})
 				conn.clientSend(`{"type":1,"invocationId": "0000","target":"missing"}`)
 				recv := (<-conn.received).(completionMessage)
 				Expect(recv).NotTo(BeNil())

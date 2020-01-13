@@ -2,6 +2,7 @@ package signalr
 
 import (
 	"reflect"
+	"time"
 )
 
 // UseHub sets the hub instance used by the server
@@ -30,6 +31,16 @@ func SimpleHubFactory(hubProto HubInterface) func(*Server) error {
 		func() HubInterface {
 			return reflect.New(reflect.ValueOf(hubProto).Elem().Type()).Interface().(HubInterface)
 		})
+}
+
+// HubChanReceiveTimeout is the timeout for receiving stream items from the client.
+// If the hub method is not able to receive a stream item during the timeout duration,
+// the server will send a completion with error
+func HubChanReceiveTimeout(duration time.Duration) func(*Server) error {
+	return func(s *Server) error {
+		s.hubChanReceiveTimeout = duration
+		return nil
+	}
 }
 
 // StructuredLogger is the simplest logging interface for structured logging.

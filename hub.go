@@ -27,6 +27,11 @@ func (h *Hub) Groups() GroupManager {
 	return h.context.Groups()
 }
 
+// Items returns the items for this connection
+func (h *Hub) Items() map[string]interface{} {
+	return h.context.Items()
+}
+
 // OnConnected is called when the hub is connected
 func (h *Hub) OnConnected(string) {}
 
