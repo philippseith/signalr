@@ -176,9 +176,24 @@ var _ = Describe("Connection", func() {
 
 	Describe("Connection closed", func() {
 		Context("When the connection is closed", func() {
-			It("should not answer an invocation", func() {
+			It("should close the connection and not answer an invocation", func() {
 				conn := connect(&Hub{})
 				conn.clientSend(`{"type":7}`)
+				conn.clientSend(`{"type":1,"invocationId": "123","target":"simple"}`)
+				// When the connection is closed, the server should either send a closeMessage or nothing at all
+				select {
+				case message := <-conn.received:
+					Expect(message.(closeMessage)).NotTo(BeNil())
+				case <-time.After(100 * time.Millisecond):
+				}
+			})
+		})
+		Context("When the connection is closed with an invalid close message", func() {
+			It("should close the connection and not should not answer an invocation", func() {
+				conn := connect(&Hub{})
+				// Disable error handling
+				conn.SetReceiveErrorHandler(func(err error) {})
+				conn.clientSend(`{"type":7,"error":1}`)
 				conn.clientSend(`{"type":1,"invocationId": "123","target":"simple"}`)
 				// When the connection is closed, the server should either send a closeMessage or nothing at all
 				select {
@@ -204,7 +219,7 @@ var _ = Describe("Protocol", func() {
 				case message := <-conn.received:
 					Expect(message).To(BeAssignableToTypeOf(closeMessage{}))
 					Expect(message.(closeMessage).Error).NotTo(BeNil())
-				case <-time.After(1000 * time.Millisecond):
+				case <-time.After(100 * time.Millisecond):
 					Fail("timed out")
 				}
 			})

@@ -134,6 +134,34 @@ var _ = Describe("Streaminvocation", func() {
 		})
 	})
 
+	Describe("Invalid CancelInvocation", func() {
+		Context("When invoked by the client and receiving an invalid CancelInvocation", func() {
+			It("should close the connection with an error", func() {
+				conn := connect(&streamHub{})
+				// Disable error handling
+				conn.SetReceiveErrorHandler(func(err error) {})
+				conn.clientSend(`{"type":4,"invocationId": "xxx","target":"endlessstream"}`)
+				Expect(<-streamInvocationQueue).To(Equal("EndlessStream()"))
+				recv := (<-conn.received).(streamItemMessage)
+				Expect(recv).NotTo(BeNil())
+				Expect(recv.InvocationID).To(Equal("xxx"))
+				Expect(recv.Item).To(Equal(float64(1)))
+				// try to stop it, but do not get it right
+				conn.clientSend(`{"type":5,"invocationId":1}`)
+				loop:
+				for {
+					message := <-conn.received
+					switch message.(type) {
+					case closeMessage:
+						Expect(message.(closeMessage).Error).NotTo(BeNil())
+						break loop
+					default:
+					}
+				}
+			})
+		})
+	})
+
 	Describe("Stream invocation of method with no stream result", func() {
 		Context("When invoked by the client", func() {
 			It("should be invoked on the server, return one stream item with the \"no stream\" result and a final completion without result", func() {

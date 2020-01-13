@@ -444,7 +444,7 @@ var _ = Describe("ClientStreaming", func() {
 				conn.SetReceiveErrorHandler(func(error) {})
 				conn.clientSend(`{"type":4,"invocationId":"nnn","target":"uploadstreamsmoke","arguments":[5.0],"streamids":["fff","ggg"]}`)
 				<-clientStreamingInvocationQueue
-				// Send invalid completion message with missing id
+				// Send invalid completion message with unknown id
 				conn.clientSend(`{"type":3,"invocationId":"qqq"}`)
 				select {
 				case message := <-conn.received:
@@ -466,6 +466,23 @@ var _ = Describe("ClientStreaming", func() {
 			})
 		})
 
+		Context("When an invalid completion message is sent", func() {
+			It("should close the connection with an error", func() {
+				conn := connect(&clientStreamHub{})
+				// We are testing for error, so the connection should ignore it
+				conn.SetReceiveErrorHandler(func(error) {})
+				conn.clientSend(`{"type":1,"invocationId":"UPA","target":"uploadarray","streamids":["aaa"]}`)
+				conn.clientSend(`{"type":3,"invocationId":1}`)
+				select {
+				case message := <-conn.received:
+					Expect(message).To(BeAssignableToTypeOf(closeMessage{}))
+					Expect(message.(closeMessage).Error).NotTo(BeNil())
+				case <-time.After(100 * time.Millisecond):
+					Fail("timed out")
+				}
+			})
+		})
+
 		Context("When an completion message with an result is sent after a stream item was received", func() {
 			It("should end the connection with an error", func() {
 				conn := connect(&clientStreamHub{})
@@ -481,7 +498,7 @@ var _ = Describe("ClientStreaming", func() {
 				case message := <-conn.received:
 					Expect(message).To(BeAssignableToTypeOf(closeMessage{}))
 					Expect(message.(closeMessage).Error).NotTo(BeNil())
-				case <-time.After(1000 * time.Millisecond):
+				case <-time.After(100 * time.Millisecond):
 					Fail("timed out")
 				}
 			})
@@ -500,7 +517,7 @@ var _ = Describe("ClientStreaming", func() {
 				case message := <-conn.received:
 					Expect(message).To(BeAssignableToTypeOf(closeMessage{}))
 					Expect(message.(closeMessage).Error).NotTo(BeNil())
-				case <-time.After(1000 * time.Millisecond):
+				case <-time.After(100 * time.Millisecond):
 					Fail("timed out")
 				}
 			})
@@ -519,7 +536,7 @@ var _ = Describe("ClientStreaming", func() {
 				case message := <-conn.received:
 					Expect(message).To(BeAssignableToTypeOf(closeMessage{}))
 					Expect(message.(closeMessage).Error).NotTo(BeNil())
-				case <-time.After(1000 * time.Millisecond):
+				case <-time.After(100 * time.Millisecond):
 					Fail("timed out")
 				}
 			})

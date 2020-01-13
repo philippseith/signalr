@@ -66,10 +66,7 @@ func (c *defaultHubConnection) Close(error string) {
 		Error:          error,
 		AllowReconnect: true,
 	}
-	if err := c.Protocol.WriteMessage(closeMessage, c.Connection); err != nil {
-		_ = c.info.Log(evt, "send invocation", "error",
-			fmt.Sprintf("cannot close connection %v: %v", c.GetConnectionID(), err))
-	}
+	c.writeMessage(closeMessage)
 }
 
 func (c *defaultHubConnection) GetConnectionID() string {
@@ -82,20 +79,14 @@ func (c *defaultHubConnection) SendInvocation(target string, args []interface{})
 		Target:    target,
 		Arguments: args,
 	}
-	if err := c.Protocol.WriteMessage(invocationMessage, c.Connection); err != nil {
-		_ = c.info.Log(evt, "send invocation", "error",
-			fmt.Sprintf("cannot send invocation %v %v over connection %v: %v", target, args, c.GetConnectionID(), err))
-	}
+	c.writeMessage(invocationMessage)
 }
 
 func (c *defaultHubConnection) Ping() {
 	var pingMessage = hubMessage{
 		Type: 6,
 	}
-	if err := c.Protocol.WriteMessage(pingMessage, c.Connection); err != nil {
-		_ = c.info.Log(evt, "send invocation", "error",
-			fmt.Sprintf("cannot ping over connection %v: %v", c.GetConnectionID(), err))
-	}
+	c.writeMessage(pingMessage)
 }
 
 func (c *defaultHubConnection) Receive() (interface{}, error) {
@@ -125,10 +116,7 @@ func (c *defaultHubConnection) Completion(id string, result interface{}, error s
 		Result:       result,
 		Error:        error,
 	}
-	if err := c.Protocol.WriteMessage(completionMessage, c.Connection); err != nil {
-		_ = c.info.Log(evt, "send invocation", "error",
-			fmt.Sprintf("cannot send completion for invocation %v over connection %v: %v", id, c.GetConnectionID(), err))
-	}
+	c.writeMessage(completionMessage)
 }
 
 func (c *defaultHubConnection) StreamItem(id string, item interface{}) {
@@ -137,8 +125,12 @@ func (c *defaultHubConnection) StreamItem(id string, item interface{}) {
 		InvocationID: id,
 		Item:         item,
 	}
-	if err := c.Protocol.WriteMessage(streamItemMessage, c.Connection); err != nil {
+	c.writeMessage(streamItemMessage)
+}
+
+func (c *defaultHubConnection) writeMessage(message interface{}) {
+	if err := c.Protocol.WriteMessage(message, c.Connection); err != nil {
 		_ = c.info.Log(evt, "send invocation", "error",
-			fmt.Sprintf("cannot send stream item for invocation %v over connection %v: %v", id, c.GetConnectionID(), err))
+			fmt.Sprintf("cannot send message %v over connection %v: %v", message, c.GetConnectionID(), err))
 	}
 }

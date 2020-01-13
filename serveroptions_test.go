@@ -136,6 +136,7 @@ var _ = Describe("Server options", func() {
 				Expect(conn).NotTo(BeNil())
 				go server.Run(conn)
 				conn.clientSend(`{"type":1,"invocationId": "123","target":"simple"}`)
+				<-invocationQueue
 				select {
 				case logEntry := <-cw.Chan():
 					Fail(fmt.Sprintf("log entry written: %v", string(logEntry)))
@@ -154,6 +155,7 @@ var _ = Describe("Server options", func() {
 				Expect(conn).NotTo(BeNil())
 				go server.Run(conn)
 				conn.clientSend(`{"type":1,"invocationId": "123","target":"simple"}`)
+				<-invocationQueue
 				select {
 				case <-cw.Chan():
 					break
