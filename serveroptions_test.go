@@ -1,6 +1,7 @@
 package signalr
 
 import (
+	"errors"
 	"fmt"
 	"github.com/go-kit/kit/log"
 	"github.com/google/uuid"
@@ -180,6 +181,18 @@ var _ = Describe("Server options", func() {
 				case <-time.After(1000 * time.Millisecond):
 					Fail("timed out")
 				}
+			})
+		})
+		Context("When no option which sets the hub type is used, NewServer", func() {
+			It("should return an error", func() {
+				_, err := NewServer()
+				Expect(err).NotTo(BeNil())
+			})
+		})
+		Context("When an option returns an error, NewServer", func() {
+			It("should return an error", func() {
+				_, err := NewServer(func(*Server) error { return errors.New("bad option")})
+				Expect(err).NotTo(BeNil())
 			})
 		})
 	})
