@@ -35,6 +35,32 @@ func (c *contextHub) CallClient(connectionID string) {
 	hubContextInvocationQueue <- "CallClient()"
 }
 
+func (c *contextHub) BuildGroup(connectionID1 string, connectionID2 string) {
+	c.Groups().AddToGroup("local", connectionID1)
+	c.Groups().AddToGroup("local", connectionID2)
+	hubContextInvocationQueue <- "BuildGroup()"
+}
+
+func (c *contextHub) RemoveFromGroup(connectionID string) {
+	c.Groups().RemoveFromGroup("local", connectionID)
+	hubContextInvocationQueue <- "RemoveFromGroup()"
+}
+
+func (c *contextHub) CallGroup() {
+	c.Clients().Group("local").Send("clientFunc")
+	hubContextInvocationQueue <- "CallGroup()"
+}
+
+func (c *contextHub) AddItem(key string, value interface{}) {
+	c.Items()[key] = value
+	hubContextInvocationQueue <- "AddItem()"
+}
+
+func (c *contextHub) GetItem(key string) interface{} {
+	hubContextInvocationQueue <- "GetItem()"
+	return c.Items()[key]
+}
+
 var hubContextInvocationQueue = make(chan string, 10)
 
 func connectMany() []*testingConnection {
@@ -67,18 +93,18 @@ var _ = Describe("HubContext", func() {
 				msg := <-conns[0].received
 				if _, ok := msg.(completionMessage); ok {
 					msg = <-conns[0].received
-					expectInvocation(msg, callCount, done)
+					expectInvocation(msg, callCount, done, 3)
 				} else {
-					expectInvocation(msg, callCount, done)
+					expectInvocation(msg, callCount, done, 3)
 				}
 			}(conns, callCount, done)
 			go func(conns []*testingConnection, callCount chan int, done chan bool) {
 				msg := <-conns[1].received
-				expectInvocation(msg, callCount, done)
+				expectInvocation(msg, callCount, done, 3)
 			}(conns, callCount, done)
 			go func(conns []*testingConnection, callCount chan int, done chan bool) {
 				msg := <-conns[2].received
-				expectInvocation(msg, callCount, done)
+				expectInvocation(msg, callCount, done, 3)
 			}(conns, callCount, done)
 			Expect(<-hubContextInvocationQueue).To(Equal("CallAll()"))
 			select {
@@ -95,17 +121,15 @@ var _ = Describe("HubContext", func() {
 			conns := connectMany()
 			conns[0].clientSend(`{"type":1,"invocationId": "123","target":"callcaller"}`)
 			done := make(chan bool)
+			callCount := make(chan int, 1)
+			callCount <- 0
 			go func(conns []*testingConnection, done chan bool) {
 				msg := <-conns[0].received
 				if _, ok := msg.(completionMessage); ok {
 					msg = <-conns[0].received
-					Expect(msg).To(BeAssignableToTypeOf(invocationMessage{}))
-					Expect(strings.ToLower(msg.(invocationMessage).Target)).To(Equal("clientfunc"))
-					done <- true
+					expectInvocation(msg, callCount, done, 1)
 				} else {
-					Expect(msg).To(BeAssignableToTypeOf(invocationMessage{}))
-					Expect(strings.ToLower(msg.(invocationMessage).Target)).To(Equal("clientfunc"))
-					done <- true
+					expectInvocation(msg, callCount, done, 1)
 				}
 			}(conns, done)
 			go func(conns []*testingConnection) {
@@ -170,14 +194,125 @@ var _ = Describe("HubContext", func() {
 		})
 	})
 
+	Context("Clients().Group()", func() {
+		It("should invoke only the clients in the group", func() {
+			conns := connectMany()
+			conns[0].clientSend(fmt.Sprintf(`{"type":1,"invocationId": "123","target":"buildgroup","arguments":["%v","%v"]}`, conns[1].ConnectionID(), conns[2].ConnectionID()))
+			<-hubContextInvocationQueue
+			<-conns[0].received
+			conns[0].clientSend(`{"type":1,"invocationId": "123","target":"callgroup"}`)
+			callCount := make(chan int, 1)
+			callCount <- 0
+			done := make(chan bool)
+			go func(conns []*testingConnection) {
+				msg := <-conns[0].received
+				if _, ok := msg.(completionMessage); ok {
+					msg = <-conns[0].received
+					if _, ok := msg.(completionMessage); ok {
+						Fail(fmt.Sprintf("wrong client received %v", msg))
+					}
+				} else {
+					if _, ok := msg.(completionMessage); ok {
+						Fail(fmt.Sprintf("wrong client received %v", msg))
+					}
+				}
+			}(conns)
+			go func(conns []*testingConnection) {
+				msg := <-conns[1].received
+				expectInvocation(msg, callCount, done, 2)
+			}(conns)
+			go func(conns []*testingConnection, done chan bool) {
+				msg := <-conns[2].received
+				expectInvocation(msg, callCount, done, 2)
+			}(conns, done)
+			Expect(<-hubContextInvocationQueue).To(Equal("CallGroup()"))
+			select {
+			case <-done:
+				break
+			case <-time.After(3000 * time.Millisecond):
+				Fail("timed out")
+			}
+		})
+	})
+
+	Context("RemoveFromGroup should remove clients from the group", func() {
+		It("should invoke only the clients in the group", func() {
+			conns := connectMany()
+			conns[0].clientSend(fmt.Sprintf(`{"type":1,"invocationId": "123","target":"buildgroup","arguments":["%v","%v"]}`, conns[1].ConnectionID(), conns[2].ConnectionID()))
+			Expect(<-hubContextInvocationQueue).To(Equal("BuildGroup()"))
+			<-conns[0].received
+			conns[2].clientSend(fmt.Sprintf(`{"type":1,"invocationId": "123","target":"removefromgroup","arguments":["%v"]}`, conns[2].ConnectionID()))
+			Expect(<-hubContextInvocationQueue).To(Equal("RemoveFromGroup()"))
+			<-conns[2].received
+			// Now only conns[1] should be invoked
+			conns[0].clientSend(`{"type":1,"invocationId": "123","target":"callgroup"}`)
+			callCount := make(chan int, 1)
+			callCount <- 0
+			done := make(chan bool)
+			go func(conns []*testingConnection) {
+				msg := <-conns[0].received
+				if _, ok := msg.(completionMessage); ok {
+					msg = <-conns[0].received
+					if _, ok := msg.(completionMessage); ok {
+						Fail(fmt.Sprintf("wrong client received %v", msg))
+					}
+				} else {
+					if _, ok := msg.(completionMessage); ok {
+						Fail(fmt.Sprintf("wrong client received %v", msg))
+					}
+				}
+			}(conns)
+			go func(conns []*testingConnection) {
+				msg := <-conns[1].received
+				expectInvocation(msg, callCount, done, 1)
+			}(conns)
+			go func(conns []*testingConnection, done chan bool) {
+				msg := <-conns[2].received
+				if _, ok := msg.(completionMessage); ok {
+					Fail(fmt.Sprintf("wrong client received %v", msg))
+				}
+			}(conns, done)
+			Expect(<-hubContextInvocationQueue).To(Equal("CallGroup()"))
+			select {
+			case <-done:
+				break
+			case <-time.After(3000 * time.Millisecond):
+				Fail("timed out")
+			}
+		})
+	})
+
+	Context("Items()", func() {
+		It("should hold Items connection wise", func() {
+			conns := connectMany()
+			conns[0].clientSend(`{"type":1,"invocationId": "123","target":"additem","arguments":["first",1]}`)
+			// Wait for execution
+			Expect(<-hubContextInvocationQueue).To(Equal("AddItem()"))
+			// Read completion
+			<-conns[0].received
+			conns[0].clientSend(`{"type":1,"invocationId": "123","target":"getitem","arguments":["first"]}`)
+			// Wait for execution
+			Expect(<-hubContextInvocationQueue).To(Equal("GetItem()"))
+			msg := <-conns[0].received
+			Expect(msg).To(BeAssignableToTypeOf(completionMessage{}))
+			Expect(msg.(completionMessage).Result).To(Equal(float64(1)))
+			// Ask on other connection
+			conns[1].clientSend(`{"type":1,"invocationId": "123","target":"getitem","arguments":["first"]}`)
+			// Wait for execution
+			Expect(<-hubContextInvocationQueue).To(Equal("GetItem()"))
+			msg = <-conns[1].received
+			Expect(msg).To(BeAssignableToTypeOf(completionMessage{}))
+			Expect(msg.(completionMessage).Result).To(BeNil())
+		})
+	})
 })
 
-func expectInvocation(msg interface{}, callCount chan int, done chan bool) {
+func expectInvocation(msg interface{}, callCount chan int, done chan bool, doneCount int) {
 	Expect(msg).To(BeAssignableToTypeOf(invocationMessage{}))
 	Expect(strings.ToLower(msg.(invocationMessage).Target)).To(Equal("clientfunc"))
 	d := <-callCount
 	d++
-	if d == 3 {
+	if d == doneCount {
 		done <- true
 	} else {
 		callCount <- d

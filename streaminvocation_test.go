@@ -24,6 +24,18 @@ func (s *streamHub) SimpleStream() <-chan int {
 	return r
 }
 
+func (s *streamHub) EndlessStream() <-chan int {
+	r := make(chan int)
+	go func() {
+		defer close(r)
+		for i := 1; ; i++ {
+			r <- i
+		}
+	}()
+	streamInvocationQueue <- "EndlessStream()"
+	return r
+}
+
 func (s *streamHub) SliceStream() <-chan []int {
 	r := make(chan []int)
 	go func() {
@@ -95,8 +107,8 @@ var _ = Describe("Streaminvocation", func() {
 		Context("When invoked by the client and stop after one result", func() {
 			It("should be invoked on the server, return stream one item and a final completion without result", func() {
 				conn := connect(&streamHub{})
-				conn.clientSend(`{"type":4,"invocationId": "xxx","target":"simplestream"}`)
-				Expect(<-streamInvocationQueue).To(Equal("SimpleStream()"))
+				conn.clientSend(`{"type":4,"invocationId": "xxx","target":"endlessstream"}`)
+				Expect(<-streamInvocationQueue).To(Equal("EndlessStream()"))
 				recv := (<-conn.received).(streamItemMessage)
 				Expect(recv).NotTo(BeNil())
 				Expect(recv.InvocationID).To(Equal("xxx"))

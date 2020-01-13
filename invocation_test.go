@@ -91,16 +91,18 @@ var _ = Describe("Invocation", func() {
 
 	Describe("Invalid invocation", func() {
 		Context("When an invalid invocation message is sent", func() {
-			It("should return a completion with error", func() {
+			It("close the connection with error", func() {
 				conn := connect(&invocationHub{})
+				// Disable error handling
+				conn.SetReceiveErrorHandler(func(err error) {})
 				// Invalid. invocationId should be a string
 				conn.clientSend(`{"type":1,"invocationId":1}`)
 				select {
 				case message := <-conn.received:
-					completionMessage := message.(completionMessage)
-					Expect(completionMessage).NotTo(BeNil())
-					Expect(completionMessage.Error).NotTo(BeNil())
-				case <-time.After(100 * time.Millisecond):
+					Expect(message).To(BeAssignableToTypeOf(closeMessage{}))
+					Expect(message.(closeMessage).Error).NotTo(BeNil())
+				case <-time.After(1000 * time.Millisecond):
+					Fail("timed out")
 				}
 			})
 		})

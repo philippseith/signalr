@@ -17,12 +17,13 @@ import (
 
 // Server is a SignalR server for one type of hub
 type Server struct {
-	newHub            func() HubInterface
-	lifetimeManager   HubLifetimeManager
-	defaultHubClients *defaultHubClients
-	groupManager      GroupManager
-	info              log.Logger
-	dbg               log.Logger
+	newHub                func() HubInterface
+	lifetimeManager       HubLifetimeManager
+	defaultHubClients     *defaultHubClients
+	groupManager          GroupManager
+	info                  log.Logger
+	dbg                   log.Logger
+	hubChanReceiveTimeout time.Duration
 }
 
 // NewServer creates a new server for one type of hub
@@ -39,8 +40,9 @@ func NewServer(options ...func(*Server) error) (*Server, error) {
 		groupManager: &defaultGroupManager{
 			lifetimeManager: &lifetimeManager,
 		},
-		info: i,
-		dbg:  d,
+		info:                  i,
+		dbg:                   d,
+		hubChanReceiveTimeout: time.Millisecond * 5000,
 	}
 	for _, option := range options {
 		if option != nil {
@@ -70,44 +72,22 @@ func (s *Server) Run(conn Connection) {
 		hubConn.Start()
 		s.lifetimeManager.OnConnected(hubConn)
 		streamer := newStreamer(hubConn)
-		streamClient := newStreamClient()
+		streamClient := newStreamClient(s.hubChanReceiveTimeout)
 		s.getHub(hubConn).OnConnected(hubConn.GetConnectionID())
 		// Process messages
 		var message interface{}
 		var connErr error
 	messageLoop:
 		for hubConn.IsConnected() {
-			if message, connErr = hubConn.Receive(); connErr != nil && message == nil {
-				// It wasn't a message at all
+			if message, connErr = hubConn.Receive(); connErr != nil {
 				_ = info.Log(evt, msgRecv, "error", connErr, msg, message, react, "disconnect")
-				break
-			} else if connErr != nil && message != nil {
-				// It's a message, but it is invalid
-				switch message.(type) {
-				case invocationMessage:
-					invocation := message.(invocationMessage)
-					_ = dbg.Log(evt, invalidMsgRecv, msg, invocation)
-					hubConn.Completion(invocation.InvocationID, nil, connErr.Error())
-				case streamItemMessage:
-					streamItemMessage := message.(streamItemMessage)
-					_ = dbg.Log(evt, invalidMsgRecv, msg, streamItemMessage)
-					if err := streamClient.receiveStreamItem(streamItemMessage); err != nil {
-						connErr = err
-						_ = info.Log(evt, msgRecv, "error", connErr, msg, message, react, "disconnect")
-						break messageLoop
-					}
-				default:
-					connErr = err
-					_ = info.Log(evt, msgRecv, "error", connErr, msg, message, react, "disconnect")
-					break messageLoop
-				}
+				break messageLoop
 			} else {
 				switch message.(type) {
 				case invocationMessage:
 					invocation := message.(invocationMessage)
 					_ = dbg.Log(evt, msgRecv, msg, fmt.Sprintf("%v", invocation))
-					// Transient hub
-					// Dispatch invocation here
+					// Transient hub, dispatch invocation here
 					if method, ok := getMethod(s.getHub(hubConn), invocation.Target); !ok {
 						// Unable to find the method
 						_ = info.Log(evt, "getMethod", "error", "missing method", "name", invocation.Target, react, "send completion with error")
@@ -153,9 +133,14 @@ func (s *Server) Run(conn Connection) {
 					streamItemMessage := message.(streamItemMessage)
 					_ = dbg.Log(evt, msgRecv, msg, streamItemMessage)
 					if err := streamClient.receiveStreamItem(streamItemMessage); err != nil {
-						connErr = err
-						_ = info.Log(evt, msgRecv, "error", connErr, msg, message, react, "disconnect")
-						break messageLoop
+						switch t := err.(type) {
+						case *hubChanTimeoutError:
+							hubConn.Completion(streamItemMessage.InvocationID, nil, t.Error())
+						default:
+							connErr = err
+							_ = info.Log(evt, msgRecv, "error", connErr, msg, message, react, "disconnect")
+							break messageLoop
+						}
 					}
 				case completionMessage:
 					_ = dbg.Log(evt, msgRecv, msg, message.(completionMessage))
@@ -410,6 +395,5 @@ var protocolMap = map[string]HubProtocol{
 // const for logging
 const evt string = "event"
 const msgRecv string = "message received"
-const invalidMsgRecv string = "invalid message received"
 const msg string = "message"
 const react string = "reaction"
