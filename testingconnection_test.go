@@ -56,6 +56,14 @@ func (t *testingConnection) SetConnected(connected bool) {
 }
 
 func newTestingConnection() *testingConnection {
+	conn := newTestingConnectionBeforeHandshake()
+	// Send initial Handshake
+	conn.ClientSend(`{"protocol": "json","version": 1}`)
+	conn.SetConnected(true)
+	return conn
+}
+
+func newTestingConnectionBeforeHandshake() *testingConnection {
 	cliReader, srvWriter := io.Pipe()
 	srvReader, cliWriter := io.Pipe()
 	conn := testingConnection{
@@ -67,11 +75,7 @@ func newTestingConnection() *testingConnection {
 		cliSendChan: make(chan string, 20),
 		srvSendChan: make(chan []byte, 20),
 	}
-	// Send initial Handshake
-	conn.ClientSend(`{"protocol": "json","version": 1}`)
-	conn.SetConnected(true)
-
-	// Receive loop
+	// client receive loop
 	go receiveLoop(&conn)()
 	// client send loop
 	go func() {
@@ -214,6 +218,22 @@ var _ = Describe("Protocol", func() {
 					Fail("timed out")
 				}
 			})
+		})
+	})
+})
+
+var _ = Describe("Handshake", func() {
+
+	Context("When the handshake is sent as partial message to the server", func() {
+		FIt("should be connected", func() {
+			server, _ := NewServer(SimpleHubFactory(&invocationHub{}))
+			conn := newTestingConnectionBeforeHandshake()
+			go server.Run(conn)
+			conn.ClientSend(`{"protocol"`)
+			conn.ClientSend(`{: "json","version": 1}`)
+			conn.SetConnected(true)
+			conn.ClientSend(`{"type":1,"invocationId": "123","target":"simple"}`)
+			Expect(<-invocationQueue).To(Equal("Simple()"))
 		})
 	})
 })
