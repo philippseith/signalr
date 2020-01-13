@@ -85,7 +85,7 @@ var _ = Describe("HubContext", func() {
 	Context("Clients().All()", func() {
 		It("should invoke all clients", func() {
 			conns := connectMany()
-			conns[0].clientSend(`{"type":1,"invocationId": "123","target":"callall"}`)
+			conns[0].ClientSend(`{"type":1,"invocationId": "123","target":"callall"}`)
 			callCount := make(chan int, 1)
 			callCount <- 0
 			done := make(chan bool)
@@ -119,7 +119,7 @@ var _ = Describe("HubContext", func() {
 	Context("Clients().Caller()", func() {
 		It("should invoke only the caller", func() {
 			conns := connectMany()
-			conns[0].clientSend(`{"type":1,"invocationId": "123","target":"callcaller"}`)
+			conns[0].ClientSend(`{"type":1,"invocationId": "123","target":"callcaller"}`)
 			done := make(chan bool)
 			callCount := make(chan int, 1)
 			callCount <- 0
@@ -157,7 +157,7 @@ var _ = Describe("HubContext", func() {
 	Context("Clients().Client()", func() {
 		It("should invoke only the client which was addressed", func() {
 			conns := connectMany()
-			conns[0].clientSend(fmt.Sprintf(`{"type":1,"invocationId": "123","target":"callclient","arguments":["%v"]}`, conns[2].ConnectionID()))
+			conns[0].ClientSend(fmt.Sprintf(`{"type":1,"invocationId": "123","target":"callclient","arguments":["%v"]}`, conns[2].ConnectionID()))
 			done := make(chan bool)
 			go func(conns []*testingConnection) {
 				msg := <-conns[0].received
@@ -197,10 +197,10 @@ var _ = Describe("HubContext", func() {
 	Context("Clients().Group()", func() {
 		It("should invoke only the clients in the group", func() {
 			conns := connectMany()
-			conns[0].clientSend(fmt.Sprintf(`{"type":1,"invocationId": "123","target":"buildgroup","arguments":["%v","%v"]}`, conns[1].ConnectionID(), conns[2].ConnectionID()))
+			conns[0].ClientSend(fmt.Sprintf(`{"type":1,"invocationId": "123","target":"buildgroup","arguments":["%v","%v"]}`, conns[1].ConnectionID(), conns[2].ConnectionID()))
 			<-hubContextInvocationQueue
 			<-conns[0].received
-			conns[0].clientSend(`{"type":1,"invocationId": "123","target":"callgroup"}`)
+			conns[0].ClientSend(`{"type":1,"invocationId": "123","target":"callgroup"}`)
 			callCount := make(chan int, 1)
 			callCount <- 0
 			done := make(chan bool)
@@ -238,14 +238,14 @@ var _ = Describe("HubContext", func() {
 	Context("RemoveFromGroup should remove clients from the group", func() {
 		It("should invoke only the clients in the group", func() {
 			conns := connectMany()
-			conns[0].clientSend(fmt.Sprintf(`{"type":1,"invocationId": "123","target":"buildgroup","arguments":["%v","%v"]}`, conns[1].ConnectionID(), conns[2].ConnectionID()))
+			conns[0].ClientSend(fmt.Sprintf(`{"type":1,"invocationId": "123","target":"buildgroup","arguments":["%v","%v"]}`, conns[1].ConnectionID(), conns[2].ConnectionID()))
 			Expect(<-hubContextInvocationQueue).To(Equal("BuildGroup()"))
 			<-conns[0].received
-			conns[2].clientSend(fmt.Sprintf(`{"type":1,"invocationId": "123","target":"removefromgroup","arguments":["%v"]}`, conns[2].ConnectionID()))
+			conns[2].ClientSend(fmt.Sprintf(`{"type":1,"invocationId": "123","target":"removefromgroup","arguments":["%v"]}`, conns[2].ConnectionID()))
 			Expect(<-hubContextInvocationQueue).To(Equal("RemoveFromGroup()"))
 			<-conns[2].received
 			// Now only conns[1] should be invoked
-			conns[0].clientSend(`{"type":1,"invocationId": "123","target":"callgroup"}`)
+			conns[0].ClientSend(`{"type":1,"invocationId": "123","target":"callgroup"}`)
 			callCount := make(chan int, 1)
 			callCount <- 0
 			done := make(chan bool)
@@ -285,19 +285,19 @@ var _ = Describe("HubContext", func() {
 	Context("Items()", func() {
 		It("should hold Items connection wise", func() {
 			conns := connectMany()
-			conns[0].clientSend(`{"type":1,"invocationId": "123","target":"additem","arguments":["first",1]}`)
+			conns[0].ClientSend(`{"type":1,"invocationId": "123","target":"additem","arguments":["first",1]}`)
 			// Wait for execution
 			Expect(<-hubContextInvocationQueue).To(Equal("AddItem()"))
 			// Read completion
 			<-conns[0].received
-			conns[0].clientSend(`{"type":1,"invocationId": "123","target":"getitem","arguments":["first"]}`)
+			conns[0].ClientSend(`{"type":1,"invocationId": "123","target":"getitem","arguments":["first"]}`)
 			// Wait for execution
 			Expect(<-hubContextInvocationQueue).To(Equal("GetItem()"))
 			msg := <-conns[0].received
 			Expect(msg).To(BeAssignableToTypeOf(completionMessage{}))
 			Expect(msg.(completionMessage).Result).To(Equal(float64(1)))
 			// Ask on other connection
-			conns[1].clientSend(`{"type":1,"invocationId": "123","target":"getitem","arguments":["first"]}`)
+			conns[1].ClientSend(`{"type":1,"invocationId": "123","target":"getitem","arguments":["first"]}`)
 			// Wait for execution
 			Expect(<-hubContextInvocationQueue).To(Equal("GetItem()"))
 			msg = <-conns[1].received

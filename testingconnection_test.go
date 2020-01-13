@@ -3,7 +3,6 @@ package signalr
 import (
 	"bytes"
 	"encoding/json"
-	"errors"
 	"fmt"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -19,8 +18,6 @@ type testingConnection struct {
 	cliWriter    io.Writer
 	cliReader    io.Reader
 	received     chan interface{}
-	ehMutex      sync.Mutex
-	errorHandler func(error)
 	cnMutex      sync.Mutex
 	connected    bool
 	cliSendChan  chan string
@@ -46,25 +43,13 @@ func (t *testingConnection) Write(b []byte) (n int, err error) {
 	return len(b), nil
 }
 
-func (t *testingConnection) SetReceiveErrorHandler(errorHandler func(error)) {
-	t.ehMutex.Lock()
-	defer t.ehMutex.Unlock()
-	t.errorHandler = errorHandler
-}
-
-func (t *testingConnection) callErrorHandler(err error) {
-	t.ehMutex.Lock()
-	defer t.ehMutex.Unlock()
-	t.errorHandler(err)
-}
-
 func (t *testingConnection) Connected() bool {
 	t.cnMutex.Lock()
 	defer t.cnMutex.Unlock()
 	return t.connected
 }
 
-func (t *testingConnection) setConnected(connected bool) {
+func (t *testingConnection) SetConnected(connected bool) {
 	t.cnMutex.Lock()
 	defer t.cnMutex.Unlock()
 	t.connected = connected
@@ -74,67 +59,20 @@ func newTestingConnection() *testingConnection {
 	cliReader, srvWriter := io.Pipe()
 	srvReader, cliWriter := io.Pipe()
 	conn := testingConnection{
-		srvWriter:    srvWriter,
-		srvReader:    srvReader,
-		cliWriter:    cliWriter,
-		cliReader:    cliReader,
-		errorHandler: func(err error) { Fail(fmt.Sprintf("received invalid message from server %v", err.Error())) },
-		received:     make(chan interface{}, 20),
-		cliSendChan:  make(chan string, 20),
-		srvSendChan:  make(chan []byte, 20),
+		srvWriter:   srvWriter,
+		srvReader:   srvReader,
+		cliWriter:   cliWriter,
+		cliReader:   cliReader,
+		received:    make(chan interface{}, 20),
+		cliSendChan: make(chan string, 20),
+		srvSendChan: make(chan []byte, 20),
 	}
 	// Send initial Handshake
-	conn.clientSend(`{"protocol": "json","version": 1}`)
-	conn.setConnected(true)
+	conn.ClientSend(`{"protocol": "json","version": 1}`)
+	conn.SetConnected(true)
 
 	// Receive loop
-	go func() {
-		defer GinkgoRecover()
-		for {
-			if message, err := conn.clientReceive(); err == nil {
-				var hubMessage hubMessage
-				if err = json.Unmarshal([]byte(message), &hubMessage); err == nil {
-					switch hubMessage.Type {
-					case 1, 4:
-						var invocationMessage invocationMessage
-						if err = json.Unmarshal([]byte(message), &invocationMessage); err == nil {
-							conn.received <- invocationMessage
-						} else {
-							conn.errorHandler(err)
-						}
-					case 2:
-						var streamItemMessage streamItemMessage
-						if err = json.Unmarshal([]byte(message), &streamItemMessage); err == nil {
-							conn.received <- streamItemMessage
-						} else {
-							conn.errorHandler(err)
-						}
-					case 3:
-						var completionMessage completionMessage
-						if err = json.Unmarshal([]byte(message), &completionMessage); err == nil {
-							conn.received <- completionMessage
-						} else {
-							conn.errorHandler(err)
-						}
-					case 7:
-						var closeMessage closeMessage
-						if err = json.Unmarshal([]byte(message), &closeMessage); err == nil {
-							conn.setConnected(false)
-							if closeMessage.Error != "" {
-								// Most time, a closeMessage with error is not whats expected by the tests
-								conn.errorHandler(errors.New(closeMessage.Error))
-							}
-							conn.received <- closeMessage
-						} else {
-							conn.errorHandler(err)
-						}
-					}
-				} else {
-					conn.errorHandler(err)
-				}
-			}
-		}
-	}()
+	go receiveLoop(&conn)()
 	// client send loop
 	go func() {
 		for {
@@ -150,11 +88,11 @@ func newTestingConnection() *testingConnection {
 	return &conn
 }
 
-func (t *testingConnection) clientSend(message string) {
+func (t *testingConnection) ClientSend(message string) {
 	t.cliSendChan <- message
 }
 
-func (t *testingConnection) clientReceive() (string, error) {
+func (t *testingConnection) ClientReceive() (string, error) {
 	var buf bytes.Buffer
 	var data = make([]byte, 1<<15) // 32K
 	var n int
@@ -172,14 +110,71 @@ func (t *testingConnection) clientReceive() (string, error) {
 	}
 }
 
+func (t *testingConnection) ReceiveChan() chan interface{} {
+	return t.received
+}
+
+type clientReceiver interface {
+	ClientReceive() (string, error)
+	ReceiveChan() chan interface{}
+	SetConnected(bool)
+}
+
+func receiveLoop(conn clientReceiver) func() {
+	return func() {
+		defer GinkgoRecover()
+		errorHandler := func(err error) { Fail(fmt.Sprintf("received invalid message from server %v", err.Error())) }
+		for {
+			if message, err := conn.ClientReceive(); err == nil {
+				var hubMessage hubMessage
+				if err = json.Unmarshal([]byte(message), &hubMessage); err == nil {
+					switch hubMessage.Type {
+					case 1, 4:
+						var invocationMessage invocationMessage
+						if err = json.Unmarshal([]byte(message), &invocationMessage); err == nil {
+							conn.ReceiveChan() <- invocationMessage
+						} else {
+							errorHandler(err)
+						}
+					case 2:
+						var streamItemMessage streamItemMessage
+						if err = json.Unmarshal([]byte(message), &streamItemMessage); err == nil {
+							conn.ReceiveChan() <- streamItemMessage
+						} else {
+							errorHandler(err)
+						}
+					case 3:
+						var completionMessage completionMessage
+						if err = json.Unmarshal([]byte(message), &completionMessage); err == nil {
+							conn.ReceiveChan() <- completionMessage
+						} else {
+							errorHandler(err)
+						}
+					case 7:
+						var closeMessage closeMessage
+						if err = json.Unmarshal([]byte(message), &closeMessage); err == nil {
+							conn.SetConnected(false)
+							conn.ReceiveChan() <- closeMessage
+						} else {
+							errorHandler(err)
+						}
+					}
+				} else {
+					errorHandler(err)
+				}
+			}
+		}
+	}
+}
+
 var _ = Describe("Connection", func() {
 
 	Describe("Connection closed", func() {
 		Context("When the connection is closed", func() {
 			It("should close the connection and not answer an invocation", func() {
 				conn := connect(&Hub{})
-				conn.clientSend(`{"type":7}`)
-				conn.clientSend(`{"type":1,"invocationId": "123","target":"simple"}`)
+				conn.ClientSend(`{"type":7}`)
+				conn.ClientSend(`{"type":1,"invocationId": "123","target":"simple"}`)
 				// When the connection is closed, the server should either send a closeMessage or nothing at all
 				select {
 				case message := <-conn.received:
@@ -191,10 +186,8 @@ var _ = Describe("Connection", func() {
 		Context("When the connection is closed with an invalid close message", func() {
 			It("should close the connection and not should not answer an invocation", func() {
 				conn := connect(&Hub{})
-				// Disable error handling
-				conn.SetReceiveErrorHandler(func(err error) {})
-				conn.clientSend(`{"type":7,"error":1}`)
-				conn.clientSend(`{"type":1,"invocationId": "123","target":"simple"}`)
+				conn.ClientSend(`{"type":7,"error":1}`)
+				conn.ClientSend(`{"type":1,"invocationId": "123","target":"simple"}`)
 				// When the connection is closed, the server should either send a closeMessage or nothing at all
 				select {
 				case message := <-conn.received:
@@ -212,9 +205,7 @@ var _ = Describe("Protocol", func() {
 		Context("When a message with invalid id is sent", func() {
 			It("should close the connection with an error", func() {
 				conn := connect(&Hub{})
-				// Disable error handling
-				conn.SetReceiveErrorHandler(func(err error) {})
-				conn.clientSend(`{"type":99}`)
+				conn.ClientSend(`{"type":99}`)
 				select {
 				case message := <-conn.received:
 					Expect(message).To(BeAssignableToTypeOf(closeMessage{}))
