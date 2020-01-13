@@ -52,7 +52,7 @@ var _ = Describe("Server options", func() {
 				<-singleHubMsg
 				// Call GetId twice. If different instances used the results are different
 				var uuid string
-				conn1.clientSend(`{"type":1,"invocationId": "123","target":"getuuid"}`)
+				conn1.ClientSend(`{"type":1,"invocationId": "123","target":"getuuid"}`)
 				<-singleHubMsg
 				select {
 				case message := <-conn1.received:
@@ -61,7 +61,7 @@ var _ = Describe("Server options", func() {
 				case <-time.After(1000 * time.Millisecond):
 					Fail("timed out")
 				}
-				conn1.clientSend(`{"type":1,"invocationId": "456","target":"getuuid"}`)
+				conn1.ClientSend(`{"type":1,"invocationId": "456","target":"getuuid"}`)
 				<-singleHubMsg
 				select {
 				case message := <-conn1.received:
@@ -71,7 +71,7 @@ var _ = Describe("Server options", func() {
 					Fail("timed out")
 				}
 				// Even on another connection, the uuid should be the same
-				conn2.clientSend(`{"type":1,"invocationId": "456","target":"getuuid"}`)
+				conn2.ClientSend(`{"type":1,"invocationId": "456","target":"getuuid"}`)
 				<-singleHubMsg
 				select {
 				case message := <-conn2.received:
@@ -100,7 +100,7 @@ var _ = Describe("Server options", func() {
 				} else {
 					uuids[uuid] = nil
 				}
-				conn.clientSend(`{"type":1,"invocationId": "123","target":"getuuid"}`)
+				conn.ClientSend(`{"type":1,"invocationId": "123","target":"getuuid"}`)
 				select {
 				case uuid = <-singleHubMsg:
 					if _, ok := uuids[uuid]; ok {
@@ -111,7 +111,7 @@ var _ = Describe("Server options", func() {
 				case <-time.After(1000 * time.Millisecond):
 					Fail("timed out")
 				}
-				conn.clientSend(`{"type":1,"invocationId": "456","target":"getuuid"}`)
+				conn.ClientSend(`{"type":1,"invocationId": "456","target":"getuuid"}`)
 				select {
 				case uuid = <-singleHubMsg:
 					if _, ok := uuids[uuid]; ok {
@@ -136,7 +136,7 @@ var _ = Describe("Server options", func() {
 				conn := newTestingConnection()
 				Expect(conn).NotTo(BeNil())
 				go server.Run(conn)
-				conn.clientSend(`{"type":1,"invocationId": "123","target":"simple"}`)
+				conn.ClientSend(`{"type":1,"invocationId": "123","target":"simple"}`)
 				<-invocationQueue
 				select {
 				case logEntry := <-cw.Chan():
@@ -155,7 +155,7 @@ var _ = Describe("Server options", func() {
 				conn := newTestingConnection()
 				Expect(conn).NotTo(BeNil())
 				go server.Run(conn)
-				conn.clientSend(`{"type":1,"invocationId": "123","target":"simple"}`)
+				conn.ClientSend(`{"type":1,"invocationId": "123","target":"simple"}`)
 				<-invocationQueue
 				select {
 				case <-cw.Chan():
@@ -174,7 +174,7 @@ var _ = Describe("Server options", func() {
 				conn := newTestingConnection()
 				Expect(conn).NotTo(BeNil())
 				go server.Run(conn)
-				conn.clientSend(`{"type":1,"invocationId": "123","target":"sumple is simple with typo"}`)
+				conn.ClientSend(`{"type":1,"invocationId": "123","target":"sumple is simple with typo"}`)
 				select {
 				case <-cw.Chan():
 					break
@@ -191,7 +191,7 @@ var _ = Describe("Server options", func() {
 		})
 		Context("When an option returns an error, NewServer", func() {
 			It("should return an error", func() {
-				_, err := NewServer(func(*Server) error { return errors.New("bad option")})
+				_, err := NewServer(func(*Server) error { return errors.New("bad option") })
 				Expect(err).NotTo(BeNil())
 			})
 		})
