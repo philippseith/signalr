@@ -225,15 +225,53 @@ var _ = Describe("Protocol", func() {
 var _ = Describe("Handshake", func() {
 
 	Context("When the handshake is sent as partial message to the server", func() {
-		FIt("should be connected", func() {
+		It("should be connected", func() {
 			server, _ := NewServer(SimpleHubFactory(&invocationHub{}))
 			conn := newTestingConnectionBeforeHandshake()
 			go server.Run(conn)
-			conn.ClientSend(`{"protocol"`)
-			conn.ClientSend(`{: "json","version": 1}`)
+			conn.cliWriter.Write([]byte(`{"protocol"`))
+			conn.ClientSend(`: "json","version": 1}`)
 			conn.SetConnected(true)
 			conn.ClientSend(`{"type":1,"invocationId": "123","target":"simple"}`)
 			Expect(<-invocationQueue).To(Equal("Simple()"))
+		})
+	})
+	Context("When an invalid handshake is sent as partial message to the server", func() {
+		It("should not be connected", func() {
+			server, _ := NewServer(SimpleHubFactory(&invocationHub{}))
+			conn := newTestingConnectionBeforeHandshake()
+			go server.Run(conn)
+			conn.cliWriter.Write([]byte(`{"protocol"`))
+			// Opening curly brace is invalid
+			conn.ClientSend(`{: "json","version": 1}`)
+			conn.SetConnected(true)
+			conn.ClientSend(`{"type":1,"invocationId": "123","target":"simple"}`)
+			select {
+			case <-invocationQueue:
+				Fail("server connected with invalid handshake")
+			case <-time.After(100 * time.Millisecond):
+			}
+		})
+	})
+	Context("When a handshake is sent with an unsupported protocol", func() {
+		It("should return an error handshake response and be not connected", func() {
+			server, _ := NewServer(SimpleHubFactory(&invocationHub{}))
+			conn := newTestingConnectionBeforeHandshake()
+			go server.Run(conn)
+			conn.ClientSend(`{"protocol": "bson","version": 1}`)
+			response, err := conn.ClientReceive()
+			Expect(err).To(BeNil())
+			Expect(response).NotTo(BeNil())
+			jsonMap := make(map[string]interface{})
+			err = json.Unmarshal([]byte(response), &jsonMap)
+			Expect(err).To(BeNil())
+			Expect(jsonMap["error"]).NotTo(BeNil())
+			conn.ClientSend(`{"type":1,"invocationId": "123","target":"simple"}`)
+			select {
+			case <-invocationQueue:
+				Fail("server connected with invalid handshake")
+			case <-time.After(100 * time.Millisecond):
+			}
 		})
 	})
 })

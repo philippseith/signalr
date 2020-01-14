@@ -341,50 +341,43 @@ func (s *Server) processHandshake(conn Connection) (HubProtocol, error) {
 	var buf bytes.Buffer
 	data := make([]byte, 1<<12)
 	for {
-		n, err := conn.Read(data)
-		if err != nil {
+		var n int
+		if n, err = conn.Read(data); err != nil {
 			break
-		}
-
-		buf.Write(data[:n])
-
-		rawHandshake, err := parseTextMessageFormat(&buf)
-
-		if err != nil {
-			// Partial message, read more data
-			continue
-		}
-
-		_ = dbg.Log(evt, "handshake received", "msg", string(rawHandshake))
-
-		request := handshakeRequest{}
-		err = json.Unmarshal(rawHandshake, &request)
-
-		if err != nil {
-			// Malformed handshake
-			break
-		}
-
-		protocol, ok = protocolMap[request.Protocol]
-
-		if ok {
-			// Send the handshake response
-			if _, err = conn.Write([]byte(handshakeResponse)); err != nil {
-				_ = dbg.Log(evt, "handshake sent", "error", err)
-			} else {
-				_ = dbg.Log(evt, "handshake sent", "msg", handshakeResponse)
-			}
 		} else {
-			// Protocol not supported
-			_ = info.Log(evt, "protocol requested", "error", fmt.Sprintf("client requested unsupported protocol \"%s\" ", request.Protocol))
-			_, err = conn.Write([]byte(fmt.Sprintf(errorHandshakeResponse, fmt.Sprintf("Protocol \"%s\" not supported", request.Protocol))))
+			buf.Write(data[:n])
+			var rawHandshake []byte
+			if rawHandshake, err = parseTextMessageFormat(&buf); err != nil {
+				// Partial message, read more data
+				buf.Write(data[:n])
+			} else {
+				_ = dbg.Log(evt, "handshake received", "msg", string(rawHandshake))
+				request := handshakeRequest{}
+				if err = json.Unmarshal(rawHandshake, &request); err != nil {
+					// Malformed handshake
+					break
+				}
+				if protocol, ok = protocolMap[request.Protocol]; ok {
+					// Send the handshake response
+					if _, err = conn.Write([]byte(handshakeResponse)); err != nil {
+						_ = dbg.Log(evt, "handshake sent", "error", err)
+					} else {
+						_ = dbg.Log(evt, "handshake sent", "msg", handshakeResponse)
+					}
+				} else {
+					err = fmt.Errorf("protocol %v not supported", request.Protocol)
+					_ = info.Log(evt, "protocol requested", "error", err)
+					if _, respErr := conn.Write([]byte(fmt.Sprintf(errorHandshakeResponse, err))); respErr != nil {
+						_ = dbg.Log(evt, "handshake sent", "error", respErr)
+						err = respErr
+					}
+				}
+				break
+			}
 		}
-		break
 	}
-
 	// TODO Disable the timeout (either we already timeout out or)
 	//ws.SetReadDeadline(time.Time{})
-
 	return protocol, err
 }
 
