@@ -14,7 +14,7 @@ type hubConnection interface {
 	Close(error string)
 	GetConnectionID() string
 	Receive() (interface{}, error)
-	SendInvocation(target string, args []interface{})
+	SendInvocation(target string, args ...interface{})
 	StreamItem(id string, item interface{})
 	Completion(id string, result interface{}, error string)
 	Ping()
@@ -73,7 +73,7 @@ func (c *defaultHubConnection) GetConnectionID() string {
 	return c.Connection.ConnectionID()
 }
 
-func (c *defaultHubConnection) SendInvocation(target string, args []interface{}) {
+func (c *defaultHubConnection) SendInvocation(target string, args ...interface{}) {
 	var invocationMessage = sendOnlyHubInvocationMessage{
 		Type:      1,
 		Target:    target,
