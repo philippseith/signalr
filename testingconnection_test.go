@@ -3,6 +3,7 @@ package signalr
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -23,6 +24,8 @@ type testingConnection struct {
 	connected    bool
 	cliSendChan  chan string
 	srvSendChan  chan []byte
+	failRead	bool
+	failWrite bool
 }
 
 var connNum = 0
@@ -44,10 +47,18 @@ func (t *testingConnection) ConnectionID() string {
 }
 
 func (t *testingConnection) Read(b []byte) (n int, err error) {
+	if t.failRead {
+		t.failRead = false
+		return 0, errors.New("test fail")
+	}
 	return t.srvReader.Read(b)
 }
 
 func (t *testingConnection) Write(b []byte) (n int, err error) {
+	if t.failWrite {
+		t.failWrite = false
+		return 0, errors.New("test fail")
+	}
 	t.srvSendChan <- b
 	return len(b), nil
 }
@@ -99,6 +110,14 @@ func newTestingConnectionBeforeHandshake() *testingConnection {
 		}
 	}()
 	return &conn
+}
+
+func (t *testingConnection) FailReadOnce() {
+	t.failRead = true
+}
+
+func (t *testingConnection) FailWriteOnce() {
+	t.failWrite = true
 }
 
 func (t *testingConnection) ClientSend(message string) {
