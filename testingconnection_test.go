@@ -220,6 +220,20 @@ var _ = Describe("Protocol", func() {
 			})
 		})
 	})
+
+	Describe("Ping", func() {
+		Context("When a ping is received", func() {
+			It("should ignore it", func() {
+				conn := connect(&Hub{})
+				conn.ClientSend(`{"type":6}`)
+				select {
+				case <-conn.received:
+						Fail("ping not ignored")
+				case <-time.After(100 * time.Millisecond):
+				}
+			})
+		})
+	})
 })
 
 var _ = Describe("Handshake", func() {

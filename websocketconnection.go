@@ -7,7 +7,6 @@ import (
 
 type webSocketConnection struct {
 	ws           *websocket.Conn
-	r            *bytes.Reader
 	connectionID string
 }
 
@@ -20,13 +19,9 @@ func (w *webSocketConnection) Write(p []byte) (n int, err error) {
 }
 
 func (w *webSocketConnection) Read(p []byte) (n int, err error) {
-	if w.r == nil || w.r.Len() == 0 {
-		var data []byte
-		if err = websocket.Message.Receive(w.ws, &data); err != nil {
-			return 0, err
-		}
-		w.r = bytes.NewReader(data)
-		return w.r.Read(p)
+	var data []byte
+	if err = websocket.Message.Receive(w.ws, &data); err != nil {
+		return 0, err
 	}
-	return w.r.Read(p)
+	return bytes.NewReader(data).Read(p)
 }
