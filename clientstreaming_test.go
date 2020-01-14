@@ -341,7 +341,7 @@ var _ = Describe("ClientStreaming", func() {
 		Context("When an invalid streamitem message with missing id and item is sent", func() {
 			It("should end the connection with an error", func() {
 				conn := connect(&clientStreamHub{})
-				conn.ClientSend(`{"type":4,"invocationId": "nnn","target":"uploadstreamsmoke","arguments":[5.0],"streamids":["fff","ggg"]}`)
+				conn.ClientSend(`{"type":4,"invocationId": "nnn","target":"uploadstreamsmoke","arguments":[5.0],"streamids":["ff2","ggg"]}`)
 				<-clientStreamingInvocationQueue
 				// Send invalid stream item message with missing id and item
 				conn.ClientSend(`{"type":2}`)
@@ -357,7 +357,7 @@ var _ = Describe("ClientStreaming", func() {
 		Context("When an invalid streamitem message with missing item is received", func() {
 			It("should end the connection with an error", func() {
 				conn := connect(&clientStreamHub{})
-				conn.ClientSend(`{"type":4,"invocationId": "nnn","target":"uploadstreamsmoke","arguments":[5.0],"streamids":["fff","ggg"]}`)
+				conn.ClientSend(`{"type":4,"invocationId": "nnn","target":"uploadstreamsmoke","arguments":[5.0],"streamids":["ff3","ggg"]}`)
 				<-clientStreamingInvocationQueue
 				// Send invalid stream item message with missing item
 				conn.ClientSend(`{"type":2,"InvocationId":"iii"}`)
@@ -373,10 +373,10 @@ var _ = Describe("ClientStreaming", func() {
 		Context("When an invalid streamitem message with wrong itemtype is received", func() {
 			It("should end the connection with an error", func() {
 				conn := connect(&clientStreamHub{})
-				conn.ClientSend(`{"type":4,"invocationId": "nnn","target":"uploadstreamsmoke","arguments":[5.0],"streamids":["fff","ggg"]}`)
+				conn.ClientSend(`{"type":4,"invocationId": "nnn","target":"uploadstreamsmoke","arguments":[5.0],"streamids":["ff1","ggg"]}`)
 				<-clientStreamingInvocationQueue
 				// Send invalid stream item message
-				conn.ClientSend(`{"type":2,"invocationid":"fff","item":[42]}`)
+				conn.ClientSend(`{"type":2,"invocationid":"ff1","item":[42]}`)
 				select {
 				case message := <-conn.received:
 					Expect(message).To(BeAssignableToTypeOf(closeMessage{}))
@@ -389,7 +389,7 @@ var _ = Describe("ClientStreaming", func() {
 		Context("When an invalid streamitem message with invalid invocation id is sent", func() {
 			It("should end the connection with an error", func() {
 				conn := connect(&clientStreamHub{})
-				conn.ClientSend(`{"type":4,"invocationId": "nnn","target":"uploadstreamsmoke","arguments":[5.0],"streamids":["fff","ggg"]}`)
+				conn.ClientSend(`{"type":4,"invocationId": "nnn","target":"uploadstreamsmoke","arguments":[5.0],"streamids":["ff4","ggg"]}`)
 				<-clientStreamingInvocationQueue
 				// Send invalid stream item message with invalid invocation id
 				conn.ClientSend(`{"type":2,"invocationId":1}`)
@@ -408,7 +408,7 @@ var _ = Describe("ClientStreaming", func() {
 		Context("When an invalid completion message with missing id is sent", func() {
 			It("should end the connection with an error", func() {
 				conn := connect(&clientStreamHub{})
-				conn.ClientSend(`{"type":4,"invocationId": "nnn","target":"uploadstreamsmoke","arguments":[5.0],"streamids":["fff","ggg"]}`)
+				conn.ClientSend(`{"type":4,"invocationId": "nnn","target":"uploadstreamsmoke","arguments":[5.0],"streamids":["ff5","ggg"]}`)
 				<-clientStreamingInvocationQueue
 				// Send invalid completion message with missing id
 				conn.ClientSend(`{"type":3}`)
@@ -425,7 +425,7 @@ var _ = Describe("ClientStreaming", func() {
 		Context("When an invalid completion message with unknown id is sent", func() {
 			It("should end the connection with an error", func() {
 				conn := connect(&clientStreamHub{})
-				conn.ClientSend(`{"type":4,"invocationId":"nnn","target":"uploadstreamsmoke","arguments":[5.0],"streamids":["fff","ggg"]}`)
+				conn.ClientSend(`{"type":4,"invocationId":"nnn","target":"uploadstreamsmoke","arguments":[5.0],"streamids":["ff6","ggg"]}`)
 				<-clientStreamingInvocationQueue
 				// Send invalid completion message with unknown id
 				conn.ClientSend(`{"type":3,"invocationId":"qqq"}`)
