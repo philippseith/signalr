@@ -10,6 +10,7 @@ import (
 	. "github.com/onsi/gomega"
 	"golang.org/x/net/websocket"
 	"io/ioutil"
+	"net"
 	"net/http"
 	"os"
 	"time"
@@ -30,9 +31,10 @@ var _ = Describe("Websocket server", func() {
 			// Start server
 			router := http.NewServeMux()
 			MapHub(router, "/hub", &webSocketHub{})
-			go http.ListenAndServe("127.0.0.1:6502", router)
+			port := freePort()
+			go http.ListenAndServe(fmt.Sprintf("127.0.0.1:%v", port), router)
 			// Negotiate
-			negResp := negotiateWebSocketTestServer()
+			negResp := negotiateWebSocketTestServer(port)
 			Expect(negResp["connectionId"]).NotTo(BeNil())
 			Expect(negResp["availableTransports"]).To(BeAssignableToTypeOf([]interface{}{}))
 			avt := negResp["availableTransports"].([]interface{})
@@ -52,9 +54,11 @@ var _ = Describe("Websocket server", func() {
 			// Start server
 			router := http.NewServeMux()
 			MapHub(router, "/hub", &webSocketHub{})
-			go http.ListenAndServe("127.0.0.1:6502", router)
+			port := freePort()
+			go http.ListenAndServe(fmt.Sprintf("127.0.0.1:%v", port), router)
 			// Negotiate the wrong way
-			resp, err := http.Get("http://127.0.0.1:6502/hub/negotiateWebSocketTestServer")
+			time.Sleep(500)
+			resp, err := http.Get(fmt.Sprintf("http://127.0.0.1:%v/hub/negotiateWebSocketTestServer", port))
 			Expect(err).To(BeNil())
 			Expect(resp).NotTo(BeNil())
 			Expect(resp.StatusCode).ToNot(Equal(200))
@@ -66,8 +70,9 @@ var _ = Describe("Websocket server", func() {
 			// Start server
 			router := http.NewServeMux()
 			MapHub(router, "/hub", &webSocketHub{})
-			go http.ListenAndServe("127.0.0.1:6502", router)
-			handShakeAndCallWebSocketTestServer("")
+			port := freePort()
+			go http.ListenAndServe(fmt.Sprintf("127.0.0.1:%v", port), router)
+			handShakeAndCallWebSocketTestServer(port, "")
 		})
 	})
 
@@ -76,16 +81,18 @@ var _ = Describe("Websocket server", func() {
 			// Start server
 			router := http.NewServeMux()
 			MapHub(router, "/hub", &webSocketHub{})
-			go http.ListenAndServe("127.0.0.1:6502", router)
-			jsonMap := negotiateWebSocketTestServer()
-			handShakeAndCallWebSocketTestServer(fmt.Sprint(jsonMap["connectionId"]))
+			port := freePort()
+			go http.ListenAndServe(fmt.Sprintf("127.0.0.1:%v", port), router)
+			jsonMap := negotiateWebSocketTestServer(port)
+			handShakeAndCallWebSocketTestServer(port, fmt.Sprint(jsonMap["connectionId"]))
 		})
 	})
 })
 
-func negotiateWebSocketTestServer() map[string]interface{} {
+func negotiateWebSocketTestServer(port int) map[string]interface{} {
+	time.Sleep(500)
 	buf := bytes.Buffer{}
-	resp, err := http.Post("http://127.0.0.1:6502/hub/negotiateWebSocketTestServer", "text/plain;charset=UTF-8", &buf)
+	resp, err := http.Post(fmt.Sprintf("http://127.0.0.1:%v/hub/negotiateWebSocketTestServer", port), "text/plain;charset=UTF-8", &buf)
 	Expect(err).To(BeNil())
 	Expect(resp).ToNot(BeNil())
 	defer resp.Body.Close()
@@ -98,11 +105,12 @@ func negotiateWebSocketTestServer() map[string]interface{} {
 	return response
 }
 
-func handShakeAndCallWebSocketTestServer(connectionID string) {
+func handShakeAndCallWebSocketTestServer(port int, connectionID string) {
+	time.Sleep(500)
 	logger := log.NewLogfmtLogger(os.Stderr)
 	protocol := JSONHubProtocol{}
 	protocol.setDebugLogger(level.Debug(logger))
-	ws, err := websocket.Dial(fmt.Sprintf("ws://127.0.0.1:6502/hub?id=%v", connectionID), "json", "http://127.0.0.1")
+	ws, err := websocket.Dial(fmt.Sprintf("ws://127.0.0.1:%v/hub?id=%v", port, connectionID), "json", "http://127.0.0.1")
 	Expect(err).To(BeNil())
 	defer ws.Close()
 	wsConn := webSocketConnection{ws, connectionID}
@@ -127,4 +135,14 @@ func handShakeAndCallWebSocketTestServer(connectionID string) {
 	case <-time.After(1000 * time.Millisecond):
 		Fail("timed out")
 	}
+}
+
+func freePort() int {
+	if addr, err := net.ResolveTCPAddr("tcp", "localhost:0"); err == nil {
+		if listener, err := net.ListenTCP("tcp", addr); err == nil {
+			defer listener.Close()
+			return listener.Addr().(*net.TCPAddr).Port
+		}
+	}
+	return 0
 }
