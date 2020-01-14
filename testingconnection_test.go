@@ -12,6 +12,7 @@ import (
 )
 
 type testingConnection struct {
+	timeout time.Duration
 	connectionID string
 	srvWriter    io.Writer
 	srvReader    io.Reader
@@ -25,6 +26,14 @@ type testingConnection struct {
 }
 
 var connNum = 0
+
+func (t *testingConnection) SetTimeout(timeout time.Duration) {
+	t.timeout = timeout
+}
+
+func (t *testingConnection) Timeout() time.Duration {
+	return t.timeout
+}
 
 func (t *testingConnection) ConnectionID() string {
 	if t.connectionID == "" {

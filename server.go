@@ -9,8 +9,6 @@ import (
 	"github.com/go-kit/kit/log/level"
 	"os"
 	"reflect"
-	"strings"
-	"sync"
 	"time"
 )
 
@@ -84,20 +82,6 @@ func buildInfoDebugLogger(logger log.Logger, debug bool) (log.Logger, log.Logger
 	return level.Info(logger), log.With(level.Debug(logger), "caller", log.DefaultCaller)
 }
 
-func startPingClientLoop(conn hubConnection) *sync.WaitGroup {
-	var waitgroup sync.WaitGroup
-	waitgroup.Add(1)
-	go func(waitGroup *sync.WaitGroup, conn hubConnection) {
-		defer waitGroup.Done()
-
-		for conn.IsConnected() {
-			conn.Ping()
-			time.Sleep(5 * time.Second)
-		}
-	}(&waitgroup, conn)
-	return &waitgroup
-}
-
 func (s *Server) newConnectionHubContext(conn hubConnection) HubContext {
 	return &connectionHubContext{
 		clients: &callerHubClients{
@@ -115,72 +99,6 @@ func (s *Server) getHub(conn hubConnection) HubInterface {
 	return hub
 }
 
-func getMethod(hub HubInterface, name string) (reflect.Value, bool) {
-	hubType := reflect.TypeOf(hub)
-	hubValue := reflect.ValueOf(hub)
-	name = strings.ToLower(name)
-	for i := 0; i < hubType.NumMethod(); i++ {
-		if m := hubType.Method(i); strings.ToLower(m.Name) == name {
-			return hubValue.Method(i), true
-		}
-	}
-	return reflect.Value{}, false
-}
-
-func buildMethodArguments(method reflect.Value, invocation invocationMessage,
-	streamClient *streamClient, protocol HubProtocol) (arguments []reflect.Value, clientStreaming bool, err error) {
-	arguments = make([]reflect.Value, method.Type().NumIn())
-	chanCount := 0
-	for i := 0; i < method.Type().NumIn(); i++ {
-		t := method.Type().In(i)
-		// Is it a channel for client streaming?
-		if arg, clientStreaming, err := streamClient.buildChannelArgument(invocation, t, chanCount); err != nil {
-			// it is, but channel count in invocation and method mismatch
-			return nil, false, err
-		} else if clientStreaming {
-			// it is
-			chanCount++
-			arguments[i] = arg
-		} else {
-			// it is not, so do the normal thing
-			arg := reflect.New(t)
-			if err := protocol.UnmarshalArgument(invocation.Arguments[i-chanCount], arg.Interface()); err != nil {
-				return arguments, chanCount > 0, err
-			}
-			arguments[i] = arg.Elem()
-		}
-	}
-	if len(invocation.StreamIds) > chanCount {
-		return arguments, chanCount > 0, fmt.Errorf("to many StreamIds for channel parameters of method %v", invocation.Target)
-	}
-	return arguments, chanCount > 0, nil
-}
-
-type connFunc func(conn hubConnection, invocation invocationMessage, value interface{})
-
-func completion(conn hubConnection, invocation invocationMessage, value interface{}) {
-	conn.Completion(invocation.InvocationID, value, "")
-}
-
-func streamItem(conn hubConnection, invocation invocationMessage, value interface{}) {
-	conn.StreamItem(invocation.InvocationID, value)
-}
-
-func invokeConnection(conn hubConnection, invocation invocationMessage, connFunc connFunc, result []reflect.Value) {
-	values := make([]interface{}, len(result))
-	for i, rv := range result {
-		values[i] = rv.Interface()
-	}
-	switch len(result) {
-	case 0:
-		conn.Completion(invocation.InvocationID, nil, "")
-	case 1:
-		connFunc(conn, invocation, values[0])
-	default:
-		connFunc(conn, invocation, values)
-	}
-}
-
 func (s *Server) processHandshake(conn Connection) (HubProtocol, error) {
 	var err error
 	var protocol HubProtocol
@@ -189,8 +107,8 @@ func (s *Server) processHandshake(conn Connection) (HubProtocol, error) {
 	const errorHandshakeResponse = "{\"error\":\"%s\"}\u001e"
 	info, dbg := s.prefixLogger()
 
-	// TODO 5 seconds to process the handshake
-	// ws.SetReadDeadline(time.Now().Add(5 * time.Second))
+	defer conn.SetTimeout(0)
+	conn.SetTimeout(time.Second * 5)
 
 	var buf bytes.Buffer
 	data := make([]byte, 1<<12)
@@ -230,8 +148,6 @@ func (s *Server) processHandshake(conn Connection) (HubProtocol, error) {
 			}
 		}
 	}
-	// TODO Disable the timeout (either we already timeout out or)
-	//ws.SetReadDeadline(time.Time{})
 	return protocol, err
 }
 

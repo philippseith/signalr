@@ -113,10 +113,14 @@ func handShakeAndCallWebSocketTestServer(port int, connectionID string) {
 	logger := log.NewLogfmtLogger(os.Stderr)
 	protocol := JSONHubProtocol{}
 	protocol.setDebugLogger(level.Debug(logger))
-	ws, err := websocket.Dial(fmt.Sprintf("ws://127.0.0.1:%v/hub?id=%v", port, connectionID), "json", "http://127.0.0.1")
+	var urlParam string
+	if connectionID != "" {
+		urlParam = fmt.Sprintf("?id=%v", connectionID)
+	}
+	ws, err := websocket.Dial(fmt.Sprintf("ws://127.0.0.1:%v/hub%v", port, urlParam), "json", "http://127.0.0.1")
 	Expect(err).To(BeNil())
 	defer ws.Close()
-	wsConn := webSocketConnection{ws, connectionID}
+	wsConn := webSocketConnection{ws, connectionID, 0}
 	cliConn := newHubConnection(&wsConn, &protocol, level.Info(logger), level.Debug(logger))
 	wsConn.Write(append([]byte(`{"protocol": "json","version": 1}`), 30))
 	wsConn.Write(append([]byte(`{"type":1,"invocationId":"666","target":"add2","arguments":[1]}`), 30))

@@ -5,7 +5,9 @@ import (
 	"github.com/go-kit/kit/log"
 	"reflect"
 	"runtime/debug"
+	"strings"
 	"sync"
+	"time"
 )
 
 type serverLoop struct {
@@ -189,4 +191,83 @@ func recoverInvocationPanic(info log.Logger, invocation invocationMessage, hubCo
 	}
 }
 
+func buildMethodArguments(method reflect.Value, invocation invocationMessage,
+	streamClient *streamClient, protocol HubProtocol) (arguments []reflect.Value, clientStreaming bool, err error) {
+	arguments = make([]reflect.Value, method.Type().NumIn())
+	chanCount := 0
+	for i := 0; i < method.Type().NumIn(); i++ {
+		t := method.Type().In(i)
+		// Is it a channel for client streaming?
+		if arg, clientStreaming, err := streamClient.buildChannelArgument(invocation, t, chanCount); err != nil {
+			// it is, but channel count in invocation and method mismatch
+			return nil, false, err
+		} else if clientStreaming {
+			// it is
+			chanCount++
+			arguments[i] = arg
+		} else {
+			// it is not, so do the normal thing
+			arg := reflect.New(t)
+			if err := protocol.UnmarshalArgument(invocation.Arguments[i-chanCount], arg.Interface()); err != nil {
+				return arguments, chanCount > 0, err
+			}
+			arguments[i] = arg.Elem()
+		}
+	}
+	if len(invocation.StreamIds) > chanCount {
+		return arguments, chanCount > 0, fmt.Errorf("to many StreamIds for channel parameters of method %v", invocation.Target)
+	}
+	return arguments, chanCount > 0, nil
+}
+
+func startPingClientLoop(conn hubConnection) *sync.WaitGroup {
+	var waitgroup sync.WaitGroup
+	waitgroup.Add(1)
+	go func(waitGroup *sync.WaitGroup, conn hubConnection) {
+		defer waitGroup.Done()
+
+		for conn.IsConnected() {
+			conn.Ping()
+			time.Sleep(5 * time.Second)
+		}
+	}(&waitgroup, conn)
+	return &waitgroup
+}
+
+func getMethod(hub HubInterface, name string) (reflect.Value, bool) {
+	hubType := reflect.TypeOf(hub)
+	hubValue := reflect.ValueOf(hub)
+	name = strings.ToLower(name)
+	for i := 0; i < hubType.NumMethod(); i++ {
+		if m := hubType.Method(i); strings.ToLower(m.Name) == name {
+			return hubValue.Method(i), true
+		}
+	}
+	return reflect.Value{}, false
+}
+
+type connFunc func(conn hubConnection, invocation invocationMessage, value interface{})
+
+func completion(conn hubConnection, invocation invocationMessage, value interface{}) {
+	conn.Completion(invocation.InvocationID, value, "")
+}
+
+func streamItem(conn hubConnection, invocation invocationMessage, value interface{}) {
+	conn.StreamItem(invocation.InvocationID, value)
+}
+
+func invokeConnection(conn hubConnection, invocation invocationMessage, connFunc connFunc, result []reflect.Value) {
+	values := make([]interface{}, len(result))
+	for i, rv := range result {
+		values[i] = rv.Interface()
+	}
+	switch len(result) {
+	case 0:
+		conn.Completion(invocation.InvocationID, nil, "")
+	case 1:
+		connFunc(conn, invocation, values[0])
+	default:
+		connFunc(conn, invocation, values)
+	}
+}
 
