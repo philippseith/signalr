@@ -471,6 +471,7 @@ var _ = Describe("ClientStreaming", func() {
 				<-clientStreamingInvocationQueue
 				// Send stream item
 				conn.ClientSend(`{"type":2,"invocationId":"fff","item":1}`)
+				<-clientStreamingInvocationQueue
 				// Send completion message with result
 				conn.ClientSend(`{"type":3,"invocationId":"fff","result":1}`)
 				select {

@@ -102,7 +102,7 @@ type hubChanTimeoutError struct {
 }
 
 func (h *hubChanTimeoutError) Error() string {
-	return msg
+	return h.msg
 }
 
 func convertNumberToChannelType(chanElm interface{}, number float64) (chanVal reflect.Value, err error) {
