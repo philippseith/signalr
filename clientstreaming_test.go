@@ -197,7 +197,7 @@ var _ = Describe("ClientStreaming", func() {
 				case message := <-conn.received:
 					Expect(message).To(BeAssignableToTypeOf(completionMessage{}))
 					Expect(message.(completionMessage).Error).NotTo(BeNil())
-				case <-time.After(500 * time.Millisecond):
+				case <-time.After(1000 * time.Millisecond):
 					Fail("timed out")
 				}
 			})
