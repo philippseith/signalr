@@ -84,7 +84,7 @@ func (j *JSONHubProtocol) ReadMessage(buf *bytes.Buffer) (m interface{}, complet
 		return streamItem, true, err
 	case 3:
 		completion := completionMessage{}
-		if err := json.Unmarshal(data, &completion); err != nil {
+		if err = json.Unmarshal(data, &completion); err != nil {
 			err = &jsonError{string(data), err}
 		}
 		return completion, true, err

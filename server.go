@@ -99,28 +99,14 @@ func (s *Server) Run(conn Connection) {
 					} else if clientStreaming {
 						// let the receiving method run independently
 						go func() {
-							defer func() {
-								if err := recover(); err != nil {
-									_ = info.Log(evt, "recover", "error", err, "name", invocation.Target, react, "send completion with error")
-									if invocation.InvocationID != "" {
-										hubConn.Completion(invocation.InvocationID, nil, fmt.Sprintf("%v\n%v", err, string(debug.Stack())))
-									}
-								}
-							}()
+							defer recoverInvocationPanic(info, invocation, hubConn)
 							method.Call(in)
 						}()
 					} else {
 						// hub method might take a long time
 						go func() {
 							result := func() []reflect.Value {
-								defer func() {
-									if err := recover(); err != nil {
-										_ = info.Log(evt, "recover", "error", err, "name", invocation.Target, react, "send completion with error")
-										if invocation.InvocationID != "" {
-											hubConn.Completion(invocation.InvocationID, nil, fmt.Sprintf("%v\n%v", err, string(debug.Stack())))
-										}
-									}
-								}()
+								defer recoverInvocationPanic(info, invocation, hubConn)
 								return method.Call(in)
 							}()
 							returnInvocationResult(hubConn, invocation, streamer, result)
@@ -174,6 +160,15 @@ func (s *Server) Run(conn Connection) {
 		// Wait for pings to complete
 		pings.Wait()
 		_ = dbg.Log(evt, "messageloop ended")
+	}
+}
+
+func recoverInvocationPanic(info log.Logger, invocation invocationMessage, hubConn hubConnection) {
+	if err := recover(); err != nil {
+		_ = info.Log(evt, "recover", "error", err, "name", invocation.Target, react, "send completion with error")
+		if invocation.InvocationID != "" {
+			hubConn.Completion(invocation.InvocationID, nil, fmt.Sprintf("%v\n%v", err, string(debug.Stack())))
+		}
 	}
 }
 
