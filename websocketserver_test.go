@@ -56,8 +56,8 @@ var _ = Describe("Websocket server", func() {
 			MapHub(router, "/hub", &webSocketHub{})
 			port := freePort()
 			go http.ListenAndServe(fmt.Sprintf("127.0.0.1:%v", port), router)
+			waitForPort(port)
 			// Negotiate the wrong way
-			time.Sleep(500)
 			resp, err := http.Get(fmt.Sprintf("http://127.0.0.1:%v/hub/negotiateWebSocketTestServer", port))
 			Expect(err).To(BeNil())
 			Expect(resp).NotTo(BeNil())
@@ -72,6 +72,7 @@ var _ = Describe("Websocket server", func() {
 			MapHub(router, "/hub", &webSocketHub{})
 			port := freePort()
 			go http.ListenAndServe(fmt.Sprintf("127.0.0.1:%v", port), router)
+			waitForPort(port)
 			handShakeAndCallWebSocketTestServer(port, "")
 		})
 	})
@@ -89,8 +90,10 @@ var _ = Describe("Websocket server", func() {
 	})
 })
 
+
+
 func negotiateWebSocketTestServer(port int) map[string]interface{} {
-	time.Sleep(500)
+	waitForPort(port)
 	buf := bytes.Buffer{}
 	resp, err := http.Post(fmt.Sprintf("http://127.0.0.1:%v/hub/negotiateWebSocketTestServer", port), "text/plain;charset=UTF-8", &buf)
 	Expect(err).To(BeNil())
@@ -106,7 +109,7 @@ func negotiateWebSocketTestServer(port int) map[string]interface{} {
 }
 
 func handShakeAndCallWebSocketTestServer(port int, connectionID string) {
-	time.Sleep(500)
+	waitForPort(port)
 	logger := log.NewLogfmtLogger(os.Stderr)
 	protocol := JSONHubProtocol{}
 	protocol.setDebugLogger(level.Debug(logger))
@@ -145,4 +148,13 @@ func freePort() int {
 		}
 	}
 	return 0
+}
+
+func waitForPort(port int) {
+	for {
+		if _, err := net.Dial("tcp", fmt.Sprintf("127.0.0.1:%v", port)); err == nil {
+			return
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
 }
