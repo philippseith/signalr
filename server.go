@@ -127,41 +127,6 @@ func getMethod(hub HubInterface, name string) (reflect.Value, bool) {
 	return reflect.Value{}, false
 }
 
-func returnInvocationResult(conn hubConnection, invocation invocationMessage, streamer *streamer, result []reflect.Value) {
-	// No invocation id, no completion
-	if invocation.InvocationID != "" {
-		// if the hub method returns a chan, it should be considered asynchronous or source for a stream
-		if len(result) == 1 && result[0].Kind() == reflect.Chan {
-			switch invocation.Type {
-			// Simple invocation
-			case 1:
-				go func() {
-					// Recv might block, so run continue in a goroutine
-					if chanResult, ok := result[0].Recv(); ok {
-						invokeConnection(conn, invocation, completion, []reflect.Value{chanResult})
-					} else {
-						conn.Completion(invocation.InvocationID, nil, "hub func returned closed chan")
-					}
-				}()
-			// StreamInvocation
-			case 4:
-				streamer.Start(invocation.InvocationID, result[0])
-			}
-		} else {
-			switch invocation.Type {
-			// Simple invocation
-			case 1:
-				invokeConnection(conn, invocation, completion, result)
-			case 4:
-				// Stream invocation of method with no stream result.
-				// Return a single StreamItem and an empty Completion
-				invokeConnection(conn, invocation, streamItem, result)
-				conn.Completion(invocation.InvocationID, nil, "")
-			}
-		}
-	}
-}
-
 func buildMethodArguments(method reflect.Value, invocation invocationMessage,
 	streamClient *streamClient, protocol HubProtocol) (arguments []reflect.Value, clientStreaming bool, err error) {
 	arguments = make([]reflect.Value, method.Type().NumIn())
