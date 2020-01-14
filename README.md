@@ -2,6 +2,8 @@
 
 [![Actions Status](https://github.com/philippseith/signalr/workflows/Build%20and%20Test/badge.svg)](https://github.com/philippseith/signalr/actions)
 [![codecov](https://codecov.io/gh/philippseith/signalr/branch/master/graph/badge.svg)](https://codecov.io/gh/philippseith/signalr)
+[![GoDoc](https://godoc.org/github.com/philippseith/signalr?status.svg)](https://godoc.org/github.com/philippseith/signalr)
+[![Go Report Card](https://goreportcard.com/badge/github.com/philippseith/signalr)](https://goreportcard.com/report/github.com/philippseith/signalr)
 
 SignalR is an open-source library that simplifies adding real-time web functionality to apps. 
 Real-time web functionality enables server-side code to push content to clients instantly.
