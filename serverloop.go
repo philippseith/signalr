@@ -152,4 +152,3 @@ func recoverInvocationPanic(info log.Logger, invocation invocationMessage, hubCo
 		}
 	}
 }
-

@@ -228,7 +228,7 @@ var _ = Describe("Protocol", func() {
 				conn.ClientSend(`{"type":6}`)
 				select {
 				case <-conn.received:
-						Fail("ping not ignored")
+					Fail("ping not ignored")
 				case <-time.After(100 * time.Millisecond):
 				}
 			})

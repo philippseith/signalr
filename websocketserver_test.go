@@ -98,14 +98,14 @@ func negotiateWebSocketTestServer() map[string]interface{} {
 	return response
 }
 
-func handShakeAndCallWebSocketTestServer(connectionId string) {
+func handShakeAndCallWebSocketTestServer(connectionID string) {
 	logger := log.NewLogfmtLogger(os.Stderr)
 	protocol := JSONHubProtocol{}
 	protocol.setDebugLogger(level.Debug(logger))
-	ws, err := websocket.Dial(fmt.Sprintf("ws://127.0.0.1:6502/hub?id=%v", connectionId), "json", "http://127.0.0.1")
+	ws, err := websocket.Dial(fmt.Sprintf("ws://127.0.0.1:6502/hub?id=%v", connectionID), "json", "http://127.0.0.1")
 	Expect(err).To(BeNil())
 	defer ws.Close()
-	wsConn := webSocketConnection{ws, connectionId}
+	wsConn := webSocketConnection{ws, connectionID}
 	cliConn := newHubConnection(&wsConn, &protocol, level.Info(logger), level.Debug(logger))
 	wsConn.Write(append([]byte(`{"protocol": "json","version": 1}`), 30))
 	wsConn.Write(append([]byte(`{"type":1,"invocationId":"666","target":"add2","arguments":[1]}`), 30))
@@ -122,9 +122,9 @@ func handShakeAndCallWebSocketTestServer(connectionId string) {
 		}
 	}()
 	select {
-	case r:= <- result:
+	case r := <-result:
 		Expect(r).To(Equal(3.0))
-	case <- time.After(1000 * time.Millisecond):
+	case <-time.After(1000 * time.Millisecond):
 		Fail("timed out")
 	}
 }
