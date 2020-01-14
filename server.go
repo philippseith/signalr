@@ -9,7 +9,6 @@ import (
 	"github.com/go-kit/kit/log/level"
 	"os"
 	"reflect"
-	"runtime/debug"
 	"strings"
 	"sync"
 	"time"
@@ -59,116 +58,11 @@ func NewServer(options ...func(*Server) error) (*Server, error) {
 
 // Run runs the server on one connection. The same server might be run on different connections in parallel
 func (s *Server) Run(conn Connection) {
-	info, dbg := s.prefixLogger()
 	if protocol, err := s.processHandshake(conn); err != nil {
+		info, _ := s.prefixLogger()
 		_ = info.Log(evt, "processHandshake", "error", err, react, "do not connect")
 	} else {
-		// Copy protocol to set our own debug logger
-		protocol = reflect.New(reflect.ValueOf(protocol).Elem().Type()).Interface().(HubProtocol)
-		protocol.setDebugLogger(s.dbg)
-		hubConn := newHubConnection(conn, protocol, s.info, s.dbg)
-		// start sending pings to the client
-		pings := startPingClientLoop(hubConn)
-		hubConn.Start()
-		s.lifetimeManager.OnConnected(hubConn)
-		streamer := newStreamer(hubConn)
-		streamClient := newStreamClient(s.hubChanReceiveTimeout)
-		s.getHub(hubConn).OnConnected(hubConn.GetConnectionID())
-		// Process messages
-		var message interface{}
-		var connErr error
-	messageLoop:
-		for hubConn.IsConnected() {
-			if message, connErr = hubConn.Receive(); connErr != nil {
-				_ = info.Log(evt, msgRecv, "error", connErr, msg, message, react, "disconnect")
-				break messageLoop
-			} else {
-				switch message.(type) {
-				case invocationMessage:
-					invocation := message.(invocationMessage)
-					_ = dbg.Log(evt, msgRecv, msg, fmt.Sprintf("%v", invocation))
-					// Transient hub, dispatch invocation here
-					if method, ok := getMethod(s.getHub(hubConn), invocation.Target); !ok {
-						// Unable to find the method
-						_ = info.Log(evt, "getMethod", "error", "missing method", "name", invocation.Target, react, "send completion with error")
-						hubConn.Completion(invocation.InvocationID, nil, fmt.Sprintf("Unknown method %s", invocation.Target))
-					} else if in, clientStreaming, err := buildMethodArguments(method, invocation, streamClient, protocol); err != nil {
-						// argument build failed
-						_ = info.Log(evt, "buildMethodArguments", "error", err, "name", invocation.Target, react, "send completion with error")
-						hubConn.Completion(invocation.InvocationID, nil, err.Error())
-					} else if clientStreaming {
-						// let the receiving method run independently
-						go func() {
-							defer recoverInvocationPanic(info, invocation, hubConn)
-							method.Call(in)
-						}()
-					} else {
-						// hub method might take a long time
-						go func() {
-							result := func() []reflect.Value {
-								defer recoverInvocationPanic(info, invocation, hubConn)
-								return method.Call(in)
-							}()
-							returnInvocationResult(hubConn, invocation, streamer, result)
-						}()
-					}
-				case cancelInvocationMessage:
-					_ = dbg.Log(evt, msgRecv, msg, message.(cancelInvocationMessage))
-					streamer.Stop(message.(cancelInvocationMessage).InvocationID)
-				case streamItemMessage:
-					streamItemMessage := message.(streamItemMessage)
-					_ = dbg.Log(evt, msgRecv, msg, streamItemMessage)
-					if err := streamClient.receiveStreamItem(streamItemMessage); err != nil {
-						switch t := err.(type) {
-						case *hubChanTimeoutError:
-							hubConn.Completion(streamItemMessage.InvocationID, nil, t.Error())
-						default:
-							connErr = err
-							_ = info.Log(evt, msgRecv, "error", connErr, msg, message, react, "disconnect")
-							break messageLoop
-						}
-					}
-				case completionMessage:
-					_ = dbg.Log(evt, msgRecv, msg, message.(completionMessage))
-					if err := streamClient.receiveCompletionItem(message.(completionMessage)); err != nil {
-						connErr = err
-						_ = info.Log(evt, msgRecv, "error", connErr, msg, message, react, "disconnect")
-						break messageLoop
-					}
-				case closeMessage:
-					_ = dbg.Log(evt, msgRecv, msg, message.(closeMessage))
-					break messageLoop
-				case hubMessage:
-					_ = dbg.Log(evt, msgRecv, msg, message)
-					hubMessage := message.(hubMessage)
-					// Ping
-					if hubMessage.Type != 6 {
-						connErr = fmt.Errorf("invalid message type %v", message)
-						_ = info.Log(evt, msgRecv, "error", connErr, msg, message, react, "disconnect")
-						break messageLoop
-					}
-				}
-			}
-		}
-		s.getHub(hubConn).OnDisconnected(hubConn.GetConnectionID())
-		s.lifetimeManager.OnDisconnected(hubConn)
-		if connErr != nil {
-			hubConn.Close(connErr.Error())
-		} else {
-			hubConn.Close("")
-		}
-		// Wait for pings to complete
-		pings.Wait()
-		_ = dbg.Log(evt, "messageloop ended")
-	}
-}
-
-func recoverInvocationPanic(info log.Logger, invocation invocationMessage, hubConn hubConnection) {
-	if err := recover(); err != nil {
-		_ = info.Log(evt, "recover", "error", err, "name", invocation.Target, react, "send completion with error")
-		if invocation.InvocationID != "" {
-			hubConn.Completion(invocation.InvocationID, nil, fmt.Sprintf("%v\n%v", err, string(debug.Stack())))
-		}
+		s.newServerLoop(conn, protocol).Run()
 	}
 }
 
