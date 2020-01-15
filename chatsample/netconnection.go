@@ -31,22 +31,22 @@ func (w *netConnection) ConnectionID() string {
 
 func (w *netConnection) Write(p []byte) (n int, err error) {
 	if w.timeout > 0 {
-		defer w.conn.SetWriteDeadline(time.Time{})
-		w.conn.SetWriteDeadline(time.Now().Add(w.timeout))
+		defer func() { _ = w.conn.SetWriteDeadline(time.Time{}) }()
+		_ = w.conn.SetWriteDeadline(time.Now().Add(w.timeout))
 	}
 	return w.conn.Write(p)
 }
 
 func (w *netConnection) Read(p []byte) (n int, err error) {
 	if w.timeout > 0 {
-		defer w.conn.SetReadDeadline(time.Time{})
-		w.conn.SetReadDeadline(time.Now().Add(w.timeout))
+		defer func() { _ = w.conn.SetReadDeadline(time.Time{}) }()
+		_ = w.conn.SetReadDeadline(time.Now().Add(w.timeout))
 	}
 	return w.conn.Read(p)
 }
 
 func getConnectionID() string {
 	bytes := make([]byte, 16)
-	rand.Read(bytes)
+	_, _ = rand.Read(bytes)
 	return base64.StdEncoding.EncodeToString(bytes)
 }
