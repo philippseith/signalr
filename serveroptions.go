@@ -33,12 +33,86 @@ func SimpleHubFactory(hubProto HubInterface) func(*Server) error {
 		})
 }
 
-// HubChanReceiveTimeout is the timeout for receiving stream items from the client.
-// If the hub method is not able to receive a stream item during the timeout duration,
-// the server will send a completion with error
-func HubChanReceiveTimeout(duration time.Duration) func(*Server) error {
+// AllowReconnect allows clients with automatic reconnects enabled
+// that they attempt to reconnect after receiving the message.
+// Default is true.
+func AllowReconnect(allow bool) func(*Server) error {
 	return func(s *Server) error {
-		s.hubChanReceiveTimeout = duration
+		s.allowReconnect = allow
+		return nil
+	}
+}
+
+// ClientTimeoutInterval: The server will consider the client disconnected
+// if it hasn't received a message (including keep-alive) in this interval.
+// The recommended value is double the KeepAliveInterval value.
+// Default is 30 seconds.
+func ClientTimeoutInterval(timeout time.Duration) func(*Server) error {
+	return func(s *Server) error {
+		s.clientTimeoutInterval = timeout
+		return nil
+	}
+}
+
+// HandshakeTimeout: If the client doesn't send an initial handshake message within this time interval,
+// the connection is closed. This is an advanced setting that should only be modified
+// if handshake timeout errors are occurring due to severe network latency.
+// For more detail on the handshake process,
+// see https://github.com/dotnet/aspnetcore/blob/master/src/SignalR/docs/specs/HubProtocol.md
+func HandshakeTimeout(timeout time.Duration) func(*Server) error {
+	return func(s *Server) error {
+		s.handshakeTimeout = timeout
+		return nil
+	}
+}
+
+// KeepAliveInterval: If the server hasn't sent a message within this interval,
+// a ping message is sent automatically to keep the connection open.
+// When changing KeepAliveInterval, change the ServerTimeout/serverTimeoutInMilliseconds setting on the client.
+// The recommended ServerTimeout/serverTimeoutInMilliseconds value is double the KeepAliveInterval value.
+// Default is 15 seconds.
+func KeepAliveInterval(timeout time.Duration) func(*Server) error {
+	return func(s *Server) error {
+		s.keepAliveInterval = timeout
+		return nil
+	}
+}
+
+// EnableDetailedErrors: If true, detailed exception messages are returned to clients when an exception is thrown in a Hub method.
+// The default is false, as these exception messages can contain sensitive information.
+func EnableDetailedErrors(enable bool) func(*Server) error {
+	return func(s *Server) error {
+		s.enableDetailedErrors = enable
+		return nil
+	}
+}
+
+// StreamBufferCapacity is the maximum number of items that can be buffered for client upload streams.
+// If this limit is reached, the processing of invocations is blocked until the the server processes stream items.
+// Default is 10.
+func StreamBufferCapacity(capacity int) func(*Server) error {
+	return func(s *Server) error {
+		s.streamBufferCapacity = capacity
+		return nil
+	}
+}
+
+// MaximumReceiveMessageSize is the maximum size of a single incoming hub message.
+// Default is 32KB
+func MaximumReceiveMessageSize(size int) func(*Server) error {
+	return func(s *Server) error {
+		s.maximumReceiveMessageSize = size
+		return nil
+	}
+}
+
+// HubChanReceiveTimeout is the timeout for processing stream items from the client, after StreamBufferCapacity was reached
+// If the hub method is not able to process a stream item during the timeout duration,
+// the server will send a completion with error.
+// Default is 5 seconds.
+func HubChanReceiveTimeout(timeout time.Duration) func(*Server) error {
+	return func(s *Server) error {
+		s.hubChanReceiveTimeout = timeout
 		return nil
 	}
 }

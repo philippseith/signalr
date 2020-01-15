@@ -119,7 +119,7 @@ func handShakeAndCallWebSocketTestServer(port int, connectionID string) {
 	Expect(err).To(BeNil())
 	defer ws.Close()
 	wsConn := webSocketConnection{ws, connectionID, 0}
-	cliConn := newHubConnection(&wsConn, &protocol, level.Info(logger), level.Debug(logger))
+	cliConn := newHubConnection(&wsConn, &protocol, 1<<15, level.Info(logger), level.Debug(logger))
 	wsConn.Write(append([]byte(`{"protocol": "json","version": 1}`), 30))
 	wsConn.Write(append([]byte(`{"type":1,"invocationId":"666","target":"add2","arguments":[1]}`), 30))
 	cliConn.Start()

@@ -25,7 +25,7 @@ func (s *Server) newServerLoop(conn Connection, protocol HubProtocol) *serverLoo
 	info, dbg := s.prefixLogger()
 	protocol = reflect.New(reflect.ValueOf(protocol).Elem().Type()).Interface().(HubProtocol)
 	protocol.setDebugLogger(s.dbg)
-	hubConn := newHubConnection(conn, protocol, s.info, s.dbg)
+	hubConn := newHubConnection(conn, protocol, s.maximumReceiveMessageSize, s.info, s.dbg)
 	return &serverLoop{
 		server:       s,
 		info:         info,
@@ -34,7 +34,7 @@ func (s *Server) newServerLoop(conn Connection, protocol HubProtocol) *serverLoo
 		hubConn:      hubConn,
 		pings:        startPingClientLoop(hubConn),
 		streamer:     newStreamer(hubConn),
-		streamClient: newStreamClient(s.hubChanReceiveTimeout),
+		streamClient: s.newStreamClient(),
 	}
 }
 

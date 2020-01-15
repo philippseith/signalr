@@ -14,13 +14,20 @@ import (
 
 // Server is a SignalR server for one type of hub
 type Server struct {
-	newHub                func() HubInterface
-	lifetimeManager       HubLifetimeManager
-	defaultHubClients     *defaultHubClients
-	groupManager          GroupManager
-	info                  log.Logger
-	dbg                   log.Logger
-	hubChanReceiveTimeout time.Duration
+	newHub                    func() HubInterface
+	lifetimeManager           HubLifetimeManager
+	defaultHubClients         *defaultHubClients
+	groupManager              GroupManager
+	info                      log.Logger
+	dbg                       log.Logger
+	hubChanReceiveTimeout     time.Duration
+	allowReconnect            bool
+	clientTimeoutInterval     time.Duration
+	handshakeTimeout          time.Duration
+	keepAliveInterval         time.Duration
+	enableDetailedErrors      bool
+	streamBufferCapacity      int
+	maximumReceiveMessageSize int
 }
 
 // NewServer creates a new server for one type of hub
@@ -37,9 +44,16 @@ func NewServer(options ...func(*Server) error) (*Server, error) {
 		groupManager: &defaultGroupManager{
 			lifetimeManager: &lifetimeManager,
 		},
-		info:                  i,
-		dbg:                   d,
-		hubChanReceiveTimeout: time.Millisecond * 5000,
+		info:                      i,
+		dbg:                       d,
+		hubChanReceiveTimeout:     time.Second * 5,
+		allowReconnect:            false, // TODO default should be true
+		clientTimeoutInterval:     time.Second * 30,
+		handshakeTimeout:          time.Second * 15,
+		keepAliveInterval:         time.Second * 15,
+		enableDetailedErrors:      false,
+		streamBufferCapacity:      10,
+		maximumReceiveMessageSize: 1 << 15, // 32KB
 	}
 	for _, option := range options {
 		if option != nil {
@@ -56,11 +70,16 @@ func NewServer(options ...func(*Server) error) (*Server, error) {
 
 // Run runs the server on one connection. The same server might be run on different connections in parallel
 func (s *Server) Run(conn Connection) {
-	if protocol, err := s.processHandshake(conn); err != nil {
-		info, _ := s.prefixLogger()
-		_ = info.Log(evt, "processHandshake", "error", err, react, "do not connect")
-	} else {
-		s.newServerLoop(conn, protocol).Run()
+	for {
+		if protocol, err := s.processHandshake(conn); err != nil {
+			info, _ := s.prefixLogger()
+			_ = info.Log(evt, "processHandshake", "connectionId", conn.ConnectionID(), "error", err, react, "do not connect")
+		} else {
+			s.newServerLoop(conn, protocol).Run() // TODO Add return value to to allow breaking out of the outer loop
+		}
+		if !s.allowReconnect {
+			break
+		}
 	}
 }
 

@@ -6,14 +6,20 @@ import (
 	"time"
 )
 
-func newStreamClient(hubChanReceiveTimeout time.Duration) *streamClient {
-	return &streamClient{make(map[string]reflect.Value), make(map[string]bool), hubChanReceiveTimeout}
+func (s *Server) newStreamClient() *streamClient {
+	return &streamClient{
+		upstreamChannels:      make(map[string]reflect.Value),
+		runningStreams:        make(map[string]bool),
+		hubChanReceiveTimeout: s.hubChanReceiveTimeout,
+		streamBufferCapacity:  s.streamBufferCapacity,
+	}
 }
 
 type streamClient struct {
 	upstreamChannels      map[string]reflect.Value
 	runningStreams        map[string]bool
 	hubChanReceiveTimeout time.Duration
+	streamBufferCapacity  int
 }
 
 func (c *streamClient) buildChannelArgument(invocation invocationMessage, argType reflect.Type, chanCount int) (arg reflect.Value, canClientStreaming bool, err error) {
