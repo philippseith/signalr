@@ -8,7 +8,7 @@ import (
 )
 
 type netConnection struct {
-	timeout time.Duration
+	timeout      time.Duration
 	conn         net.Conn
 	connectionID string
 }

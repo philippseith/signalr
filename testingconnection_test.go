@@ -13,7 +13,7 @@ import (
 )
 
 type testingConnection struct {
-	timeout time.Duration
+	timeout      time.Duration
 	connectionID string
 	srvWriter    io.Writer
 	srvReader    io.Reader
@@ -24,8 +24,8 @@ type testingConnection struct {
 	connected    bool
 	cliSendChan  chan string
 	srvSendChan  chan []byte
-	failRead	bool
-	failWrite bool
+	failRead     bool
+	failWrite    bool
 }
 
 var connNum = 0

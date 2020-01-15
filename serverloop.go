@@ -145,7 +145,6 @@ func returnInvocationResult(conn hubConnection, invocation invocationMessage, st
 	}
 }
 
-
 func (sl *serverLoop) handleStreamItemMessage(message interface{}) error {
 	streamItemMessage := message.(streamItemMessage)
 	_ = sl.dbg.Log(evt, msgRecv, msg, streamItemMessage)
@@ -270,4 +269,3 @@ func invokeConnection(conn hubConnection, invocation invocationMessage, connFunc
 		connFunc(conn, invocation, values)
 	}
 }
-

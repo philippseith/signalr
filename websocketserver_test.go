@@ -90,8 +90,6 @@ var _ = Describe("Websocket server", func() {
 	})
 })
 
-
-
 func negotiateWebSocketTestServer(port int) map[string]interface{} {
 	waitForPort(port)
 	buf := bytes.Buffer{}
