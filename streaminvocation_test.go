@@ -118,15 +118,13 @@ var _ = Describe("Streaminvocation", func() {
 				for {
 					recv := <-conn.received
 					Expect(recv).NotTo(BeNil())
-					switch recv.(type) {
+					switch recv := recv.(type) {
 					case streamItemMessage:
-						srecv := recv.(streamItemMessage)
-						Expect(srecv.InvocationID).To(Equal("xxx"))
+						Expect(recv.InvocationID).To(Equal("xxx"))
 					case completionMessage:
-						crecv := recv.(completionMessage)
-						Expect(crecv.InvocationID).To(Equal("xxx"))
-						Expect(crecv.Result).To(BeNil())
-						Expect(crecv.Error).To(Equal(""))
+						Expect(recv.InvocationID).To(Equal("xxx"))
+						Expect(recv.Result).To(BeNil())
+						Expect(recv.Error).To(Equal(""))
 						return
 					}
 				}
@@ -149,9 +147,9 @@ var _ = Describe("Streaminvocation", func() {
 			loop:
 				for {
 					message := <-conn.received
-					switch message.(type) {
+					switch message := message.(type) {
 					case closeMessage:
-						Expect(message.(closeMessage).Error).NotTo(BeNil())
+						Expect(message.Error).NotTo(BeNil())
 						break loop
 					default:
 					}

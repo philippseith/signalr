@@ -271,7 +271,7 @@ var _ = Describe("Handshake", func() {
 			server, _ := NewServer(SimpleHubFactory(&invocationHub{}))
 			conn := newTestingConnectionBeforeHandshake()
 			go server.Run(conn)
-			conn.cliWriter.Write([]byte(`{"protocol"`))
+			_, _ = conn.cliWriter.Write([]byte(`{"protocol"`))
 			conn.ClientSend(`: "json","version": 1}`)
 			conn.SetConnected(true)
 			conn.ClientSend(`{"type":1,"invocationId": "123","target":"simple"}`)
@@ -283,7 +283,7 @@ var _ = Describe("Handshake", func() {
 			server, _ := NewServer(SimpleHubFactory(&invocationHub{}))
 			conn := newTestingConnectionBeforeHandshake()
 			go server.Run(conn)
-			conn.cliWriter.Write([]byte(`{"protocol"`))
+			_, _ = conn.cliWriter.Write([]byte(`{"protocol"`))
 			// Opening curly brace is invalid
 			conn.ClientSend(`{: "json","version": 1}`)
 			conn.SetConnected(true)
