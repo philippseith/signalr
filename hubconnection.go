@@ -15,7 +15,7 @@ type hubConnection interface {
 	SendInvocation(target string, args ...interface{}) (sendOnlyHubInvocationMessage, error)
 	StreamItem(id string, item interface{}) (streamItemMessage, error)
 	Completion(id string, result interface{}, error string) (completionMessage, error)
-	Close(error string) (closeMessage, error)
+	Close(error string, allowReconnect bool) (closeMessage, error)
 	Ping() (hubMessage, error)
 	Items() *sync.Map
 	Context() context.Context
@@ -56,12 +56,12 @@ func (c *defaultHubConnection) IsConnected() bool {
 	return atomic.LoadInt32(&c.Connected) == 1
 }
 
-func (c *defaultHubConnection) Close(error string) (closeMessage, error) {
+func (c *defaultHubConnection) Close(error string, allowReconnect bool) (closeMessage, error) {
 	defer c.Abort()
 	var closeMessage = closeMessage{
 		Type:           7,
 		Error:          error,
-		AllowReconnect: true,
+		AllowReconnect: allowReconnect,
 	}
 	return closeMessage, c.writeMessage(closeMessage)
 }

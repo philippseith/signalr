@@ -11,13 +11,14 @@ import (
 )
 
 type serverLoop struct {
-	server       *Server
-	info         StructuredLogger
-	dbg          StructuredLogger
-	protocol     HubProtocol
-	hubConn      hubConnection
-	streamer     *streamer
-	streamClient *streamClient
+	server         *Server
+	info           StructuredLogger
+	dbg            StructuredLogger
+	protocol       HubProtocol
+	hubConn        hubConnection
+	allowReconnect bool
+	streamer       *streamer
+	streamClient   *streamClient
 }
 
 func (s *Server) newServerLoop(conn Connection, protocol HubProtocol, parentContext context.Context) *serverLoop {
@@ -26,13 +27,14 @@ func (s *Server) newServerLoop(conn Connection, protocol HubProtocol, parentCont
 	info, dbg := s.prefixLogger()
 	hubConn := newHubConnection(conn, protocol, s.maximumReceiveMessageSize, parentContext)
 	return &serverLoop{
-		server:       s,
-		protocol:     protocol,
-		hubConn:      hubConn,
-		streamer:     newStreamer(hubConn),
-		streamClient: s.newStreamClient(),
-		info:         info,
-		dbg:          dbg,
+		server:         s,
+		protocol:       protocol,
+		hubConn:        hubConn,
+		allowReconnect: true,
+		streamer:       newStreamer(hubConn),
+		streamClient:   s.newStreamClient(),
+		info:           info,
+		dbg:            dbg,
 	}
 }
 
@@ -40,7 +42,10 @@ func (sl *serverLoop) Run() {
 	sl.hubConn.Start()
 	pings := sl.startPingClientLoop()
 	sl.server.lifetimeManager.OnConnected(sl.hubConn)
-	sl.server.getHub(sl.hubConn).OnConnected(sl.hubConn.ConnectionID())
+	go func() {
+		defer sl.recoverHubLifeCyclePanic()
+		sl.server.getHub(sl.hubConn).OnConnected(sl.hubConn.ConnectionID())
+	}()
 	// Process messages
 	var message interface{}
 	var connErr error
@@ -71,9 +76,12 @@ messageLoop:
 			}
 		}
 	}
-	sl.server.getHub(sl.hubConn).OnDisconnected(sl.hubConn.ConnectionID())
+	go func() {
+		defer sl.recoverHubLifeCyclePanic()
+		sl.server.getHub(sl.hubConn).OnDisconnected(sl.hubConn.ConnectionID())
+	}()
 	sl.server.lifetimeManager.OnDisconnected(sl.hubConn)
-	sl.sendMessageAndLog(func() (interface{}, error) { return sl.hubConn.Close(fmt.Sprintf("%v", connErr)) })
+	sl.sendMessageAndLog(func() (interface{}, error) { return sl.hubConn.Close(fmt.Sprintf("%v", connErr), sl.allowReconnect) })
 	// Wait for pings to complete
 	pings.Wait()
 	_ = sl.dbg.Log(evt, "messageloop ended")
@@ -191,6 +199,13 @@ func (sl *serverLoop) recoverInvocationPanic(invocation invocationMessage) {
 				return sl.hubConn.Completion(invocation.InvocationID, nil, fmt.Sprintf("%v\n%v", err, string(debug.Stack())))
 			})
 		}
+	}
+}
+
+func (sl *serverLoop) recoverHubLifeCyclePanic() {
+	if err := recover(); err != nil {
+		_ = sl.info.Log(evt, "recover", "error", err, react, "close connection")
+		// End loop
 	}
 }
 
