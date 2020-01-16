@@ -33,16 +33,6 @@ func SimpleHubFactory(hubProto HubInterface) func(*Server) error {
 		})
 }
 
-// AllowReconnect allows clients with automatic reconnects enabled
-// that they attempt to reconnect after receiving the message.
-// Default is true.
-func AllowReconnect(allow bool) func(*Server) error {
-	return func(s *Server) error {
-		s.allowReconnect = allow
-		return nil
-	}
-}
-
 // ClientTimeoutInterval: The server will consider the client disconnected
 // if it hasn't received a message (including keep-alive) in this interval.
 // The recommended value is double the KeepAliveInterval value.

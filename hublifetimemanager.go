@@ -28,11 +28,11 @@ type defaultHubLifetimeManager struct {
 }
 
 func (d *defaultHubLifetimeManager) OnConnected(conn hubConnection) {
-	d.clients.Store(conn.GetConnectionID(), conn)
+	d.clients.Store(conn.ConnectionID(), conn)
 }
 
 func (d *defaultHubLifetimeManager) OnDisconnected(conn hubConnection) {
-	d.clients.Delete(conn.GetConnectionID())
+	d.clients.Delete(conn.ConnectionID())
 }
 
 func (d *defaultHubLifetimeManager) InvokeAll(target string, args []interface{}) {

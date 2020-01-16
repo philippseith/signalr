@@ -2,7 +2,6 @@ package signalr
 
 import (
 	"fmt"
-	"github.com/go-kit/kit/log"
 	"reflect"
 	"runtime/debug"
 	"strings"
@@ -16,32 +15,31 @@ type serverLoop struct {
 	dbg          StructuredLogger
 	protocol     HubProtocol
 	hubConn      hubConnection
-	pings        *sync.WaitGroup
 	streamer     *streamer
 	streamClient *streamClient
 }
 
 func (s *Server) newServerLoop(conn Connection, protocol HubProtocol) *serverLoop {
-	info, dbg := s.prefixLogger()
 	protocol = reflect.New(reflect.ValueOf(protocol).Elem().Type()).Interface().(HubProtocol)
 	protocol.setDebugLogger(s.dbg)
-	hubConn := newHubConnection(conn, protocol, s.maximumReceiveMessageSize, s.info, s.dbg)
+	info, dbg := s.prefixLogger()
+	hubConn := newHubConnection(conn, protocol, s.maximumReceiveMessageSize)
 	return &serverLoop{
 		server:       s,
-		info:         info,
-		dbg:          dbg,
 		protocol:     protocol,
 		hubConn:      hubConn,
-		pings:        startPingClientLoop(hubConn),
 		streamer:     newStreamer(hubConn),
 		streamClient: s.newStreamClient(),
+		info:         info,
+		dbg:          dbg,
 	}
 }
 
 func (sl *serverLoop) Run() {
 	sl.hubConn.Start()
+	pings := sl.startPingClientLoop()
 	sl.server.lifetimeManager.OnConnected(sl.hubConn)
-	sl.server.getHub(sl.hubConn).OnConnected(sl.hubConn.GetConnectionID())
+	sl.server.getHub(sl.hubConn).OnConnected(sl.hubConn.ConnectionID())
 	// Process messages
 	var message interface{}
 	var connErr error
@@ -72,11 +70,11 @@ messageLoop:
 			}
 		}
 	}
-	sl.server.getHub(sl.hubConn).OnDisconnected(sl.hubConn.GetConnectionID())
+	sl.server.getHub(sl.hubConn).OnDisconnected(sl.hubConn.ConnectionID())
 	sl.server.lifetimeManager.OnDisconnected(sl.hubConn)
-	sl.hubConn.Close(fmt.Sprintf("%v", connErr))
+	sl.sendMessageAndLog(func() (interface{}, error) { return sl.hubConn.Close(fmt.Sprintf("%v", connErr)) })
 	// Wait for pings to complete
-	sl.pings.Wait()
+	pings.Wait()
 	_ = sl.dbg.Log(evt, "messageloop ended")
 }
 
@@ -87,30 +85,32 @@ func (sl *serverLoop) handleInvocationMessage(message interface{}) {
 	if method, ok := getMethod(sl.server.getHub(sl.hubConn), invocation.Target); !ok {
 		// Unable to find the method
 		_ = sl.info.Log(evt, "getMethod", "error", "missing method", "name", invocation.Target, react, "send completion with error")
-		sl.hubConn.Completion(invocation.InvocationID, nil, fmt.Sprintf("Unknown method %s", invocation.Target))
+		sl.sendMessageAndLog(func() (interface{}, error) {
+			return sl.hubConn.Completion(invocation.InvocationID, nil, fmt.Sprintf("Unknown method %s", invocation.Target))
+		})
 	} else if in, clientStreaming, err := buildMethodArguments(method, invocation, sl.streamClient, sl.protocol); err != nil {
 		// argument build failed
 		_ = sl.info.Log(evt, "buildMethodArguments", "error", err, "name", invocation.Target, react, "send completion with error")
-		sl.hubConn.Completion(invocation.InvocationID, nil, err.Error())
+		sl.sendMessageAndLog(func() (interface{}, error) { return sl.hubConn.Completion(invocation.InvocationID, nil, err.Error()) })
 	} else if clientStreaming {
 		// let the receiving method run independently
 		go func() {
-			defer recoverInvocationPanic(sl.info, invocation, sl.hubConn)
+			defer sl.recoverInvocationPanic(invocation)
 			method.Call(in)
 		}()
 	} else {
 		// hub method might take a long time
 		go func() {
 			result := func() []reflect.Value {
-				defer recoverInvocationPanic(sl.info, invocation, sl.hubConn)
+				defer sl.recoverInvocationPanic(invocation)
 				return method.Call(in)
 			}()
-			returnInvocationResult(sl.hubConn, invocation, sl.streamer, result)
+			sl.returnInvocationResult(invocation, result)
 		}()
 	}
 }
 
-func returnInvocationResult(conn hubConnection, invocation invocationMessage, streamer *streamer, result []reflect.Value) {
+func (sl *serverLoop) returnInvocationResult(invocation invocationMessage, result []reflect.Value) {
 	// No invocation id, no completion
 	if invocation.InvocationID != "" {
 		// if the hub method returns a chan, it should be considered asynchronous or source for a stream
@@ -121,25 +121,27 @@ func returnInvocationResult(conn hubConnection, invocation invocationMessage, st
 				go func() {
 					// Recv might block, so run continue in a goroutine
 					if chanResult, ok := result[0].Recv(); ok {
-						invokeConnection(conn, invocation, completion, []reflect.Value{chanResult})
+						sl.invokeConnection(invocation, completion, []reflect.Value{chanResult})
 					} else {
-						conn.Completion(invocation.InvocationID, nil, "hub func returned closed chan")
+						sl.sendMessageAndLog(func() (interface{}, error) {
+							return sl.hubConn.Completion(invocation.InvocationID, nil, "hub func returned closed chan")
+						})
 					}
 				}()
 			// StreamInvocation
 			case 4:
-				streamer.Start(invocation.InvocationID, result[0])
+				sl.streamer.Start(invocation.InvocationID, result[0])
 			}
 		} else {
 			switch invocation.Type {
 			// Simple invocation
 			case 1:
-				invokeConnection(conn, invocation, completion, result)
+				sl.invokeConnection(invocation, completion, result)
 			case 4:
 				// Stream invocation of method with no stream result.
 				// Return a single StreamItem and an empty Completion
-				invokeConnection(conn, invocation, streamItem, result)
-				conn.Completion(invocation.InvocationID, nil, "")
+				sl.invokeConnection(invocation, streamItem, result)
+				sl.sendMessageAndLog(func() (interface{}, error) { return sl.hubConn.Completion(invocation.InvocationID, nil, "") })
 			}
 		}
 	}
@@ -151,7 +153,9 @@ func (sl *serverLoop) handleStreamItemMessage(message interface{}) error {
 	if err := sl.streamClient.receiveStreamItem(streamItemMessage); err != nil {
 		switch t := err.(type) {
 		case *hubChanTimeoutError:
-			sl.hubConn.Completion(streamItemMessage.InvocationID, nil, t.Error())
+			sl.sendMessageAndLog(func() (interface{}, error) {
+				return sl.hubConn.Completion(streamItemMessage.InvocationID, nil, t.Error())
+			})
 		default:
 			_ = sl.info.Log(evt, msgRecv, "error", err, msg, message, react, "disconnect")
 			return err
@@ -181,12 +185,20 @@ func (sl *serverLoop) handleOtherMessage(message interface{}) error {
 	return nil
 }
 
-func recoverInvocationPanic(info log.Logger, invocation invocationMessage, hubConn hubConnection) {
+func (sl *serverLoop) recoverInvocationPanic(invocation invocationMessage) {
 	if err := recover(); err != nil {
-		_ = info.Log(evt, "recover", "error", err, "name", invocation.Target, react, "send completion with error")
+		_ = sl.info.Log(evt, "recover", "error", err, "name", invocation.Target, react, "send completion with error")
 		if invocation.InvocationID != "" {
-			hubConn.Completion(invocation.InvocationID, nil, fmt.Sprintf("%v\n%v", err, string(debug.Stack())))
+			sl.sendMessageAndLog(func() (interface{}, error) {
+				return sl.hubConn.Completion(invocation.InvocationID, nil, fmt.Sprintf("%v\n%v", err, string(debug.Stack())))
+			})
 		}
+	}
+}
+
+func (sl *serverLoop) sendMessageAndLog(connFunc func() (interface{}, error)) {
+	if msg, err := connFunc(); err != nil {
+		_ = sl.info.Log(evt, msgSend, "message", msg, "error", err)
 	}
 }
 
@@ -219,17 +231,17 @@ func buildMethodArguments(method reflect.Value, invocation invocationMessage,
 	return arguments, chanCount > 0, nil
 }
 
-func startPingClientLoop(conn hubConnection) *sync.WaitGroup {
+func (sl *serverLoop) startPingClientLoop() *sync.WaitGroup {
 	var waitgroup sync.WaitGroup
 	waitgroup.Add(1)
-	go func(waitGroup *sync.WaitGroup, conn hubConnection) {
+	go func(waitGroup *sync.WaitGroup) {
 		defer waitGroup.Done()
 
-		for conn.IsConnected() {
-			conn.Ping()
+		for sl.hubConn.IsConnected() {
+			sl.sendMessageAndLog(func() (interface{}, error) { return sl.hubConn.Ping() })
 			time.Sleep(5 * time.Second)
 		}
-	}(&waitgroup, conn)
+	}(&waitgroup)
 	return &waitgroup
 }
 
@@ -245,27 +257,27 @@ func getMethod(hub HubInterface, name string) (reflect.Value, bool) {
 	return reflect.Value{}, false
 }
 
-type connFunc func(conn hubConnection, invocation invocationMessage, value interface{})
-
-func completion(conn hubConnection, invocation invocationMessage, value interface{}) {
-	conn.Completion(invocation.InvocationID, value, "")
-}
-
-func streamItem(conn hubConnection, invocation invocationMessage, value interface{}) {
-	conn.StreamItem(invocation.InvocationID, value)
-}
-
-func invokeConnection(conn hubConnection, invocation invocationMessage, connFunc connFunc, result []reflect.Value) {
+func (sl *serverLoop) invokeConnection(invocation invocationMessage, connFunc connFunc, result []reflect.Value) {
 	values := make([]interface{}, len(result))
 	for i, rv := range result {
 		values[i] = rv.Interface()
 	}
 	switch len(result) {
 	case 0:
-		conn.Completion(invocation.InvocationID, nil, "")
+		sl.sendMessageAndLog(func() (interface{}, error) { return sl.hubConn.Completion(invocation.InvocationID, nil, "") })
 	case 1:
-		connFunc(conn, invocation, values[0])
+		connFunc(sl, invocation, values[0])
 	default:
-		connFunc(conn, invocation, values)
+		connFunc(sl, invocation, values)
 	}
+}
+
+type connFunc func(sl *serverLoop, invocation invocationMessage, value interface{})
+
+func completion(sl *serverLoop, invocation invocationMessage, value interface{}) {
+	sl.sendMessageAndLog(func() (interface{}, error) { return sl.hubConn.Completion(invocation.InvocationID, value, "") })
+}
+
+func streamItem(sl *serverLoop, invocation invocationMessage, value interface{}) {
+	sl.sendMessageAndLog(func() (interface{}, error) { return sl.hubConn.StreamItem(invocation.InvocationID, value) })
 }

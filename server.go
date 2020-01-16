@@ -21,7 +21,6 @@ type Server struct {
 	info                      log.Logger
 	dbg                       log.Logger
 	hubChanReceiveTimeout     time.Duration
-	allowReconnect            bool
 	clientTimeoutInterval     time.Duration
 	handshakeTimeout          time.Duration
 	keepAliveInterval         time.Duration
@@ -47,7 +46,6 @@ func NewServer(options ...func(*Server) error) (*Server, error) {
 		info:                      i,
 		dbg:                       d,
 		hubChanReceiveTimeout:     time.Second * 5,
-		allowReconnect:            false, // TODO default should be true
 		clientTimeoutInterval:     time.Second * 30,
 		handshakeTimeout:          time.Second * 15,
 		keepAliveInterval:         time.Second * 15,
@@ -77,9 +75,6 @@ func (s *Server) Run(conn Connection) {
 		} else {
 			s.newServerLoop(conn, protocol).Run() // TODO Add return value to to allow breaking out of the outer loop
 		}
-		if !s.allowReconnect {
-			break
-		}
 	}
 }
 
@@ -105,7 +100,7 @@ func (s *Server) newConnectionHubContext(conn hubConnection) HubContext {
 	return &connectionHubContext{
 		clients: &callerHubClients{
 			defaultHubClients: s.defaultHubClients,
-			connectionID:      conn.GetConnectionID(),
+			connectionID:      conn.ConnectionID(),
 		},
 		groups: s.groupManager,
 		items:  conn.Items(),
@@ -177,5 +172,6 @@ var protocolMap = map[string]HubProtocol{
 // const for logging
 const evt string = "event"
 const msgRecv string = "message received"
+const msgSend string = "message send"
 const msg string = "message"
 const react string = "reaction"
