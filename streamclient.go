@@ -85,7 +85,7 @@ func (c *streamClient) receiveStreamItem(streamItem streamItemMessage) error {
 }
 
 func (c *streamClient) sendChanValSave(upChan reflect.Value, chanVal reflect.Value) error {
-	done := make(chan error, 0)
+	done := make(chan error)
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {

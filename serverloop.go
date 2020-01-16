@@ -49,18 +49,18 @@ messageLoop:
 			_ = sl.info.Log(evt, msgRecv, "error", connErr, msg, message, react, "disconnect")
 			break messageLoop
 		} else {
-			switch message.(type) {
+			switch message := message.(type) {
 			case invocationMessage:
 				sl.handleInvocationMessage(message)
 			case cancelInvocationMessage:
-				_ = sl.dbg.Log(evt, msgRecv, msg, message.(cancelInvocationMessage))
-				sl.streamer.Stop(message.(cancelInvocationMessage).InvocationID)
+				_ = sl.dbg.Log(evt, msgRecv, msg, message)
+				sl.streamer.Stop(message.InvocationID)
 			case streamItemMessage:
 				connErr = sl.handleStreamItemMessage(message)
 			case completionMessage:
 				connErr = sl.handleCompletionMessage(message)
 			case closeMessage:
-				_ = sl.dbg.Log(evt, msgRecv, msg, message.(closeMessage))
+				_ = sl.dbg.Log(evt, msgRecv, msg, message)
 				break messageLoop
 			case hubMessage:
 				connErr = sl.handleOtherMessage(message)
@@ -78,8 +78,7 @@ messageLoop:
 	_ = sl.dbg.Log(evt, "messageloop ended")
 }
 
-func (sl *serverLoop) handleInvocationMessage(message interface{}) {
-	invocation := message.(invocationMessage)
+func (sl *serverLoop) handleInvocationMessage(invocation invocationMessage) {
 	_ = sl.dbg.Log(evt, msgRecv, msg, fmt.Sprintf("%v", invocation))
 	// Transient hub, dispatch invocation here
 	if method, ok := getMethod(sl.server.getHub(sl.hubConn), invocation.Target); !ok {
@@ -147,8 +146,7 @@ func (sl *serverLoop) returnInvocationResult(invocation invocationMessage, resul
 	}
 }
 
-func (sl *serverLoop) handleStreamItemMessage(message interface{}) error {
-	streamItemMessage := message.(streamItemMessage)
+func (sl *serverLoop) handleStreamItemMessage(streamItemMessage streamItemMessage) error {
 	_ = sl.dbg.Log(evt, msgRecv, msg, streamItemMessage)
 	if err := sl.streamClient.receiveStreamItem(streamItemMessage); err != nil {
 		switch t := err.(type) {
@@ -157,29 +155,28 @@ func (sl *serverLoop) handleStreamItemMessage(message interface{}) error {
 				return sl.hubConn.Completion(streamItemMessage.InvocationID, nil, t.Error())
 			})
 		default:
-			_ = sl.info.Log(evt, msgRecv, "error", err, msg, message, react, "disconnect")
+			_ = sl.info.Log(evt, msgRecv, "error", err, msg, streamItemMessage, react, "disconnect")
 			return err
 		}
 	}
 	return nil
 }
 
-func (sl *serverLoop) handleCompletionMessage(message interface{}) error {
-	_ = sl.dbg.Log(evt, msgRecv, msg, message.(completionMessage))
+func (sl *serverLoop) handleCompletionMessage(message completionMessage) error {
+	_ = sl.dbg.Log(evt, msgRecv, msg, message)
 	var err error
-	if err = sl.streamClient.receiveCompletionItem(message.(completionMessage)); err != nil {
+	if err = sl.streamClient.receiveCompletionItem(message); err != nil {
 		_ = sl.info.Log(evt, msgRecv, "error", err, msg, message, react, "disconnect")
 	}
 	return err
 }
 
-func (sl *serverLoop) handleOtherMessage(message interface{}) error {
-	hubMessage := message.(hubMessage)
+func (sl *serverLoop) handleOtherMessage(hubMessage hubMessage) error {
 	_ = sl.dbg.Log(evt, msgRecv, msg, hubMessage)
 	// Not Ping
 	if hubMessage.Type != 6 {
-		err := fmt.Errorf("invalid message type %v", message)
-		_ = sl.info.Log(evt, msgRecv, "error", err, msg, message, react, "disconnect")
+		err := fmt.Errorf("invalid message type %v", hubMessage)
+		_ = sl.info.Log(evt, msgRecv, "error", err, msg, hubMessage, react, "disconnect")
 		return err
 	}
 	return nil

@@ -88,7 +88,6 @@ func (c *chat) UploadStream(upload1 <-chan int, factor float64, upload2 <-chan f
 				c.Echo("Finished")
 				return
 			}
-		default:
 		}
 	}
 }

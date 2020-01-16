@@ -127,7 +127,7 @@ func (j *JSONHubProtocol) WriteMessage(message interface{}, writer io.Writer) er
 	if err := json.NewEncoder(&buf).Encode(message); err != nil {
 		return err
 	}
-	_ = j.dbg.Log(evt, "write", msg, string(buf.Bytes()))
+	_ = j.dbg.Log(evt, "write", msg, buf.String())
 
 	if err := buf.WriteByte(30); err != nil {
 		return err
