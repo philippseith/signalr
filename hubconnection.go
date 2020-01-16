@@ -3,6 +3,7 @@ package signalr
 import (
 	"bytes"
 	"context"
+	"sync"
 	"sync/atomic"
 )
 
@@ -16,18 +17,18 @@ type hubConnection interface {
 	Completion(id string, result interface{}, error string) (completionMessage, error)
 	Close(error string) (closeMessage, error)
 	Ping() (hubMessage, error)
-	Items() map[string]interface{}
+	Items() *sync.Map
 	Context() context.Context
 	Abort()
 }
 
-func newHubConnection(connection Connection, protocol HubProtocol, maximumReceiveMessageSize int) hubConnection {
-	ctx, abort := context.WithCancel(context.TODO()) // Should be passed from caller
+func newHubConnection(connection Connection, protocol HubProtocol, maximumReceiveMessageSize int, parentContext context.Context) hubConnection {
+	ctx, abort := context.WithCancel(parentContext)
 	return &defaultHubConnection{
 		Protocol:                  protocol,
 		Connection:                connection,
 		maximumReceiveMessageSize: maximumReceiveMessageSize,
-		items:                     make(map[string]interface{}),
+		items:                     &sync.Map{},
 		context:                   ctx,
 		abort:                     abort,
 	}
@@ -38,17 +39,17 @@ type defaultHubConnection struct {
 	Connected                 int32
 	Connection                Connection
 	maximumReceiveMessageSize int
-	items                     map[string]interface{}
+	items                     *sync.Map
 	context                   context.Context
 	abort                     context.CancelFunc
 }
 
-func (c *defaultHubConnection) Items() map[string]interface{} {
+func (c *defaultHubConnection) Items() *sync.Map {
 	return c.items
 }
 
 func (c *defaultHubConnection) Start() {
-	atomic.CompareAndSwapInt32(&c.Connected, 0, 1)
+	atomic.SwapInt32(&c.Connected, 1)
 }
 
 func (c *defaultHubConnection) IsConnected() bool {
@@ -56,8 +57,7 @@ func (c *defaultHubConnection) IsConnected() bool {
 }
 
 func (c *defaultHubConnection) Close(error string) (closeMessage, error) {
-	atomic.StoreInt32(&c.Connected, 0)
-
+	defer c.Abort()
 	var closeMessage = closeMessage{
 		Type:           7,
 		Error:          error,
@@ -80,6 +80,9 @@ func (c *defaultHubConnection) Abort() {
 }
 
 func (c *defaultHubConnection) Receive() (interface{}, error) {
+	if !c.IsConnected() {
+		return nil, c.context.Err()
+	}
 	m := make(chan interface{}, 1)
 	e := make(chan error, 1)
 	go func() {
@@ -151,6 +154,9 @@ func (c *defaultHubConnection) Ping() (hubMessage, error) {
 }
 
 func (c *defaultHubConnection) writeMessage(message interface{}) error {
+	if !c.IsConnected() {
+		return c.context.Err()
+	}
 	e := make(chan error, 1)
 	go func() { e <- c.Protocol.WriteMessage(message, c.Connection) }()
 	select {

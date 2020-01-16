@@ -1,6 +1,7 @@
 package signalr
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
@@ -19,7 +20,7 @@ func MapHub(mux *http.ServeMux, path string, hubProto HubInterface) *Server {
 			// Support websocket connection without negotiateWebSocketTestServer
 			connectionID = getConnectionID()
 		}
-		server.Run(&webSocketConnection{ws, connectionID, 0})
+		server.Run(&webSocketConnection{ws, connectionID, 0}, context.TODO())
 	}))
 	return server
 }

@@ -1,5 +1,7 @@
 package signalr
 
+import "sync"
+
 // HubInterface is a hubs interface
 type HubInterface interface {
 	Initialize(hubContext HubContext)
@@ -28,7 +30,7 @@ func (h *Hub) Groups() GroupManager {
 }
 
 // Items returns the items for this connection
-func (h *Hub) Items() map[string]interface{} {
+func (h *Hub) Items() *sync.Map {
 	return h.context.Items()
 }
 

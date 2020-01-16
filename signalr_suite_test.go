@@ -1,6 +1,7 @@
 package signalr
 
 import (
+	"context"
 	"os"
 	"testing"
 	"time"
@@ -24,6 +25,6 @@ func connect(hubProto HubInterface) *testingConnection {
 		return nil
 	}
 	conn := newTestingConnection()
-	go server.Run(conn)
+	go server.Run(conn, context.TODO())
 	return conn
 }

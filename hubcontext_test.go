@@ -1,6 +1,7 @@
 package signalr
 
 import (
+	"context"
 	"fmt"
 	"github.com/go-kit/kit/log"
 	. "github.com/onsi/ginkgo"
@@ -52,13 +53,16 @@ func (c *contextHub) CallGroup() {
 }
 
 func (c *contextHub) AddItem(key string, value interface{}) {
-	c.Items()[key] = value
+	c.Items().Store(key, value)
 	hubContextInvocationQueue <- "AddItem()"
 }
 
 func (c *contextHub) GetItem(key string) interface{} {
 	hubContextInvocationQueue <- "GetItem()"
-	return c.Items()[key]
+	if item, ok := c.Items().Load(key); ok {
+		return item
+	}
+	return nil
 }
 
 var hubContextInvocationQueue = make(chan string, 10)
@@ -73,7 +77,7 @@ func connectMany() []*testingConnection {
 	conns := make([]*testingConnection, 3)
 	for i := 0; i < 3; i++ {
 		conns[i] = newTestingConnection()
-		go server.Run(conns[i])
+		go server.Run(conns[i], context.TODO())
 		// Ensure to return all connection with connected hubs
 		<-hubContextOnConnectMsg
 	}

@@ -2,6 +2,7 @@ package signalr
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"github.com/go-kit/kit/log"
@@ -131,7 +132,7 @@ func handShakeAndCallWebSocketTestServer(port int, connectionID string) {
 		_ = ws.Close()
 	}()
 	wsConn := webSocketConnection{ws, connectionID, 0}
-	cliConn := newHubConnection(&wsConn, &protocol, 1<<15)
+	cliConn := newHubConnection(&wsConn, &protocol, 1<<15, context.TODO())
 	_, _ = wsConn.Write(append([]byte(`{"protocol": "json","version": 1}`), 30))
 	_, _ = wsConn.Write(append([]byte(`{"type":1,"invocationId":"666","target":"add2","arguments":[1]}`), 30))
 	cliConn.Start()

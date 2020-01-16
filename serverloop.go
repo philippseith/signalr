@@ -1,6 +1,7 @@
 package signalr
 
 import (
+	"context"
 	"fmt"
 	"reflect"
 	"runtime/debug"
@@ -19,11 +20,11 @@ type serverLoop struct {
 	streamClient *streamClient
 }
 
-func (s *Server) newServerLoop(conn Connection, protocol HubProtocol) *serverLoop {
+func (s *Server) newServerLoop(conn Connection, protocol HubProtocol, parentContext context.Context) *serverLoop {
 	protocol = reflect.New(reflect.ValueOf(protocol).Elem().Type()).Interface().(HubProtocol)
 	protocol.setDebugLogger(s.dbg)
 	info, dbg := s.prefixLogger()
-	hubConn := newHubConnection(conn, protocol, s.maximumReceiveMessageSize)
+	hubConn := newHubConnection(conn, protocol, s.maximumReceiveMessageSize, parentContext)
 	return &serverLoop{
 		server:       s,
 		protocol:     protocol,
