@@ -38,7 +38,6 @@ type defaultHubConnection struct {
 	maximumReceiveMessageSize int
 	items                     *sync.Map
 	context                   context.Context
-	stateMx                   sync.Mutex
 }
 
 func (c *defaultHubConnection) Items() *sync.Map {
