@@ -12,10 +12,13 @@ type HubInterface interface {
 // Hub is a base class for hubs
 type Hub struct {
 	context HubContext
+	cm      sync.Mutex
 }
 
 // Initialize initializes a hub with a HubContext
 func (h *Hub) Initialize(ctx HubContext) {
+	defer h.cm.Unlock()
+	h.cm.Lock()
 	h.context = ctx
 }
 

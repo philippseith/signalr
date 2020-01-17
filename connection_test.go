@@ -73,6 +73,16 @@ var _ = Describe("Protocol", func() {
 	})
 })
 
+type handshakeHub struct {
+	Hub
+}
+
+func (h *handshakeHub) Shake() {
+	shakeQueue <- "Shake()"
+}
+
+var shakeQueue = make(chan string, 10)
+
 var _ = Describe("Handshake", func() {
 
 	Context("When the handshake is sent as partial message to the server", func() {
@@ -89,16 +99,16 @@ var _ = Describe("Handshake", func() {
 	})
 	Context("When an invalid handshake is sent as partial message to the server", func() {
 		It("should not be connected", func() {
-			server, _ := NewServer(SimpleHubFactory(&invocationHub{}))
+			server, _ := NewServer(SimpleHubFactory(&handshakeHub{}))
 			conn := newTestingConnectionBeforeHandshake()
 			go server.Run(conn, context.TODO())
 			_, _ = conn.cliWriter.Write([]byte(`{"protocol"`))
 			// Opening curly brace is invalid
 			conn.ClientSend(`{: "json","version": 1}`)
 			conn.SetConnected(true)
-			conn.ClientSend(`{"type":1,"invocationId": "123","target":"simple"}`)
+			conn.ClientSend(`{"type":1,"invocationId": "123","target":"shake"}`)
 			select {
-			case <-invocationQueue:
+			case <-shakeQueue:
 				Fail("server connected with invalid handshake")
 			case <-time.After(100 * time.Millisecond):
 			}
@@ -117,9 +127,9 @@ var _ = Describe("Handshake", func() {
 			err = json.Unmarshal([]byte(response), &jsonMap)
 			Expect(err).To(BeNil())
 			Expect(jsonMap["error"]).NotTo(BeNil())
-			conn.ClientSend(`{"type":1,"invocationId": "123","target":"simple"}`)
+			conn.ClientSend(`{"type":1,"invocationId": "123","target":"shake"}`)
 			select {
-			case <-invocationQueue:
+			case <-shakeQueue:
 				Fail("server connected with invalid handshake")
 			case <-time.After(100 * time.Millisecond):
 			}

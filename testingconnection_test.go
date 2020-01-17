@@ -28,6 +28,7 @@ type testingConnection struct {
 }
 
 var connNum = 0
+var cnm sync.Mutex
 
 func (t *testingConnection) SetTimeout(timeout time.Duration) {
 	t.timeout = timeout
@@ -39,6 +40,8 @@ func (t *testingConnection) Timeout() time.Duration {
 
 func (t *testingConnection) ConnectionID() string {
 	if t.connectionID == "" {
+		defer cnm.Unlock()
+		cnm.Lock()
 		connNum++
 		t.connectionID = fmt.Sprintf("test%v", connNum)
 	}
