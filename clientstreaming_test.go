@@ -386,7 +386,7 @@ var _ = Describe("ClientStreaming", func() {
 				}
 			})
 		})
-		Context("When an invalid streamitem message with invalid invocation id is sent", func() {
+		Context("When an invalid stream item message with invalid invocation id is sent", func() {
 			It("should end the connection with an error", func() {
 				conn := connect(&clientStreamHub{})
 				conn.ClientSend(`{"type":4,"invocationId": "nnn","target":"uploadstreamsmoke","arguments":[5.0],"streamids":["ff4","ggg"]}`)

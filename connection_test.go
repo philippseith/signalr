@@ -25,7 +25,7 @@ var _ = Describe("Connection", func() {
 			})
 		})
 		Context("When the connection is closed with an invalid close message", func() {
-			It("should close the connection and not should not answer an invocation", func() {
+			It("should close the connection and should not answer an invocation", func() {
 				conn := connect(&Hub{})
 				conn.ClientSend(`{"type":7,"error":1}`)
 				conn.ClientSend(`{"type":1,"invocationId": "123","target":"simple"}`)

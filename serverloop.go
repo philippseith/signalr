@@ -31,7 +31,7 @@ func (s *Server) newServerLoop(conn Connection, protocol HubProtocol, parentCont
 		protocol:       protocol,
 		hubConn:        hubConn,
 		allowReconnect: true,
-		streamer:       newStreamer(hubConn),
+		streamer:       newStreamer(hubConn, s.info),
 		streamClient:   s.newStreamClient(),
 		info:           info,
 		dbg:            dbg,
@@ -46,32 +46,35 @@ func (sl *serverLoop) Run() {
 		defer sl.recoverHubLifeCyclePanic()
 		sl.server.getHub(sl.hubConn).OnConnected(sl.hubConn.ConnectionID())
 	}()
+	var protocolErr error
 	// Process messages
-	var message interface{}
-	var connErr error
 messageLoop:
 	for sl.hubConn.IsConnected() {
-		if message, connErr = sl.hubConn.Receive(); connErr != nil {
-			_ = sl.info.Log(evt, msgRecv, "error", connErr, msg, message, react, "disconnect")
-			break messageLoop
+		if message, err := sl.hubConn.Receive(); err != nil {
+			_ = sl.info.Log(evt, msgRecv, "error", err, msg, fmtMsg(message), react, "close connection")
+			// Even if err did not abort the connection, we need to stop the message loop and send a close message
+			if sl.hubConn.IsConnected() {
+				protocolErr = err
+				break messageLoop
+			}
 		} else {
 			switch message := message.(type) {
 			case invocationMessage:
 				sl.handleInvocationMessage(message)
 			case cancelInvocationMessage:
-				_ = sl.dbg.Log(evt, msgRecv, msg, message)
+				_ = sl.dbg.Log(evt, msgRecv, msg, fmtMsg(message))
 				sl.streamer.Stop(message.InvocationID)
 			case streamItemMessage:
-				connErr = sl.handleStreamItemMessage(message)
+				protocolErr = sl.handleStreamItemMessage(message)
 			case completionMessage:
-				connErr = sl.handleCompletionMessage(message)
+				protocolErr = sl.handleCompletionMessage(message)
 			case closeMessage:
-				_ = sl.dbg.Log(evt, msgRecv, msg, message)
+				_ = sl.dbg.Log(evt, msgRecv, msg, fmtMsg(message))
 				break messageLoop
 			case hubMessage:
-				connErr = sl.handleOtherMessage(message)
+				protocolErr = sl.handleOtherMessage(message)
 			}
-			if connErr != nil {
+			if protocolErr != nil {
 				break
 			}
 		}
@@ -81,25 +84,29 @@ messageLoop:
 		sl.server.getHub(sl.hubConn).OnDisconnected(sl.hubConn.ConnectionID())
 	}()
 	sl.server.lifetimeManager.OnDisconnected(sl.hubConn)
-	sl.sendMessageAndLog(func() (interface{}, error) { return sl.hubConn.Close(fmt.Sprintf("%v", connErr), sl.allowReconnect) })
+	sendMessageAndLog(func() (interface{}, error) {
+		return sl.hubConn.Close(fmt.Sprintf("%v", protocolErr), sl.allowReconnect)
+	}, sl.info)
 	// Wait for pings to complete
 	pings.Wait()
-	_ = sl.dbg.Log(evt, "messageloop ended")
+	_ = sl.dbg.Log(evt, "message loop ended")
 }
 
 func (sl *serverLoop) handleInvocationMessage(invocation invocationMessage) {
-	_ = sl.dbg.Log(evt, msgRecv, msg, fmt.Sprintf("%v", invocation))
+	_ = sl.dbg.Log(evt, msgRecv, msg, fmtMsg(invocation))
 	// Transient hub, dispatch invocation here
 	if method, ok := getMethod(sl.server.getHub(sl.hubConn), invocation.Target); !ok {
 		// Unable to find the method
 		_ = sl.info.Log(evt, "getMethod", "error", "missing method", "name", invocation.Target, react, "send completion with error")
-		sl.sendMessageAndLog(func() (interface{}, error) {
+		sendMessageAndLog(func() (interface{}, error) {
 			return sl.hubConn.Completion(invocation.InvocationID, nil, fmt.Sprintf("Unknown method %s", invocation.Target))
-		})
+		}, sl.info)
 	} else if in, clientStreaming, err := buildMethodArguments(method, invocation, sl.streamClient, sl.protocol); err != nil {
 		// argument build failed
 		_ = sl.info.Log(evt, "buildMethodArguments", "error", err, "name", invocation.Target, react, "send completion with error")
-		sl.sendMessageAndLog(func() (interface{}, error) { return sl.hubConn.Completion(invocation.InvocationID, nil, err.Error()) })
+		sendMessageAndLog(func() (interface{}, error) {
+			return sl.hubConn.Completion(invocation.InvocationID, nil, err.Error())
+		}, sl.info)
 	} else if clientStreaming {
 		// let the receiving method run independently
 		go func() {
@@ -131,9 +138,9 @@ func (sl *serverLoop) returnInvocationResult(invocation invocationMessage, resul
 					if chanResult, ok := result[0].Recv(); ok {
 						sl.invokeConnection(invocation, completion, []reflect.Value{chanResult})
 					} else {
-						sl.sendMessageAndLog(func() (interface{}, error) {
+						sendMessageAndLog(func() (interface{}, error) {
 							return sl.hubConn.Completion(invocation.InvocationID, nil, "hub func returned closed chan")
-						})
+						}, sl.info)
 					}
 				}()
 			// StreamInvocation
@@ -149,22 +156,24 @@ func (sl *serverLoop) returnInvocationResult(invocation invocationMessage, resul
 				// Stream invocation of method with no stream result.
 				// Return a single StreamItem and an empty Completion
 				sl.invokeConnection(invocation, streamItem, result)
-				sl.sendMessageAndLog(func() (interface{}, error) { return sl.hubConn.Completion(invocation.InvocationID, nil, "") })
+				sendMessageAndLog(func() (interface{}, error) {
+					return sl.hubConn.Completion(invocation.InvocationID, nil, "")
+				}, sl.info)
 			}
 		}
 	}
 }
 
 func (sl *serverLoop) handleStreamItemMessage(streamItemMessage streamItemMessage) error {
-	_ = sl.dbg.Log(evt, msgRecv, msg, streamItemMessage)
+	_ = sl.dbg.Log(evt, msgRecv, msg, fmtMsg(streamItemMessage))
 	if err := sl.streamClient.receiveStreamItem(streamItemMessage); err != nil {
 		switch t := err.(type) {
 		case *hubChanTimeoutError:
-			sl.sendMessageAndLog(func() (interface{}, error) {
+			sendMessageAndLog(func() (interface{}, error) {
 				return sl.hubConn.Completion(streamItemMessage.InvocationID, nil, t.Error())
-			})
+			}, sl.info)
 		default:
-			_ = sl.info.Log(evt, msgRecv, "error", err, msg, streamItemMessage, react, "disconnect")
+			_ = sl.info.Log(evt, msgRecv, "error", err, msg, fmtMsg(streamItemMessage), react, "close connection")
 			return err
 		}
 	}
@@ -172,20 +181,20 @@ func (sl *serverLoop) handleStreamItemMessage(streamItemMessage streamItemMessag
 }
 
 func (sl *serverLoop) handleCompletionMessage(message completionMessage) error {
-	_ = sl.dbg.Log(evt, msgRecv, msg, message)
+	_ = sl.dbg.Log(evt, msgRecv, msg, fmtMsg(message))
 	var err error
 	if err = sl.streamClient.receiveCompletionItem(message); err != nil {
-		_ = sl.info.Log(evt, msgRecv, "error", err, msg, message, react, "disconnect")
+		_ = sl.info.Log(evt, msgRecv, "error", err, msg, fmtMsg(message), react, "close connection")
 	}
 	return err
 }
 
 func (sl *serverLoop) handleOtherMessage(hubMessage hubMessage) error {
-	_ = sl.dbg.Log(evt, msgRecv, msg, hubMessage)
+	_ = sl.dbg.Log(evt, msgRecv, msg, fmtMsg(hubMessage))
 	// Not Ping
 	if hubMessage.Type != 6 {
 		err := fmt.Errorf("invalid message type %v", hubMessage)
-		_ = sl.info.Log(evt, msgRecv, "error", err, msg, hubMessage, react, "disconnect")
+		_ = sl.info.Log(evt, msgRecv, "error", err, msg, fmtMsg(hubMessage), react, "close connection")
 		return err
 	}
 	return nil
@@ -193,25 +202,26 @@ func (sl *serverLoop) handleOtherMessage(hubMessage hubMessage) error {
 
 func (sl *serverLoop) recoverInvocationPanic(invocation invocationMessage) {
 	if err := recover(); err != nil {
-		_ = sl.info.Log(evt, "recover", "error", err, "name", invocation.Target, react, "send completion with error")
+		_ = sl.info.Log(evt, "panic in hub method", "error", err, "name", invocation.Target, react, "send completion with error")
+		stack := string(debug.Stack())
+		_ = sl.dbg.Log(evt, "panic in hub method", "error", err, "name", invocation.Target, react, "send completion with error", "stack", stack)
 		if invocation.InvocationID != "" {
-			sl.sendMessageAndLog(func() (interface{}, error) {
-				return sl.hubConn.Completion(invocation.InvocationID, nil, fmt.Sprintf("%v\n%v", err, string(debug.Stack())))
-			})
+			if !sl.server.enableDetailedErrors {
+				stack = ""
+			}
+			sendMessageAndLog(func() (interface{}, error) {
+				return sl.hubConn.Completion(invocation.InvocationID, nil, fmt.Sprintf("%v\n%v", err, stack))
+			}, sl.info)
 		}
 	}
 }
 
 func (sl *serverLoop) recoverHubLifeCyclePanic() {
 	if err := recover(); err != nil {
-		_ = sl.info.Log(evt, "recover", "error", err, react, "close connection")
-		// End loop
-	}
-}
-
-func (sl *serverLoop) sendMessageAndLog(connFunc func() (interface{}, error)) {
-	if msg, err := connFunc(); err != nil {
-		_ = sl.info.Log(evt, msgSend, "message", msg, "error", err)
+		sl.allowReconnect = false
+		_ = sl.info.Log(evt, "panic in hub lifecycle", "error", err, react, "close connection, allow no reconnect")
+		_ = sl.dbg.Log(evt, "panic in hub lifecycle", "error", err, react, "close connection, allow no reconnect", "stack", string(debug.Stack()))
+		sl.hubConn.Abort()
 	}
 }
 
@@ -251,7 +261,7 @@ func (sl *serverLoop) startPingClientLoop() *sync.WaitGroup {
 		defer waitGroup.Done()
 
 		for sl.hubConn.IsConnected() {
-			sl.sendMessageAndLog(func() (interface{}, error) { return sl.hubConn.Ping() })
+			sendMessageAndLog(func() (interface{}, error) { return sl.hubConn.Ping() }, sl.info)
 			time.Sleep(5 * time.Second)
 		}
 	}(&waitgroup)
@@ -277,7 +287,9 @@ func (sl *serverLoop) invokeConnection(invocation invocationMessage, connFunc co
 	}
 	switch len(result) {
 	case 0:
-		sl.sendMessageAndLog(func() (interface{}, error) { return sl.hubConn.Completion(invocation.InvocationID, nil, "") })
+		sendMessageAndLog(func() (interface{}, error) {
+			return sl.hubConn.Completion(invocation.InvocationID, nil, "")
+		}, sl.info)
 	case 1:
 		connFunc(sl, invocation, values[0])
 	default:
@@ -288,9 +300,23 @@ func (sl *serverLoop) invokeConnection(invocation invocationMessage, connFunc co
 type connFunc func(sl *serverLoop, invocation invocationMessage, value interface{})
 
 func completion(sl *serverLoop, invocation invocationMessage, value interface{}) {
-	sl.sendMessageAndLog(func() (interface{}, error) { return sl.hubConn.Completion(invocation.InvocationID, value, "") })
+	sendMessageAndLog(func() (interface{}, error) {
+		return sl.hubConn.Completion(invocation.InvocationID, value, "")
+	}, sl.info)
 }
 
 func streamItem(sl *serverLoop, invocation invocationMessage, value interface{}) {
-	sl.sendMessageAndLog(func() (interface{}, error) { return sl.hubConn.StreamItem(invocation.InvocationID, value) })
+	sendMessageAndLog(func() (interface{}, error) {
+		return sl.hubConn.StreamItem(invocation.InvocationID, value)
+	}, sl.info)
+}
+
+func sendMessageAndLog(connFunc func() (interface{}, error), info StructuredLogger) {
+	if msg, err := connFunc(); err != nil {
+		_ = info.Log(evt, msgSend, "message", fmtMsg(msg), "error", err)
+	}
+}
+
+func fmtMsg(msg interface{}) string {
+	return fmt.Sprintf("%v", msg)
 }

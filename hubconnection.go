@@ -18,30 +18,27 @@ type hubConnection interface {
 	Close(error string, allowReconnect bool) (closeMessage, error)
 	Ping() (hubMessage, error)
 	Items() *sync.Map
-	Context() context.Context
 	Abort()
 }
 
 func newHubConnection(connection Connection, protocol HubProtocol, maximumReceiveMessageSize int, parentContext context.Context) hubConnection {
-	ctx, abort := context.WithCancel(parentContext)
 	return &defaultHubConnection{
-		Protocol:                  protocol,
-		Connection:                connection,
+		protocol:                  protocol,
+		connection:                connection,
 		maximumReceiveMessageSize: maximumReceiveMessageSize,
 		items:                     &sync.Map{},
-		context:                   ctx,
-		abort:                     abort,
+		context:                   parentContext,
 	}
 }
 
 type defaultHubConnection struct {
-	Protocol                  HubProtocol
-	Connected                 int32
-	Connection                Connection
+	protocol                  HubProtocol
+	connected                 int32
+	connection                Connection
 	maximumReceiveMessageSize int
 	items                     *sync.Map
 	context                   context.Context
-	abort                     context.CancelFunc
+	stateMx                   sync.Mutex
 }
 
 func (c *defaultHubConnection) Items() *sync.Map {
@@ -49,15 +46,14 @@ func (c *defaultHubConnection) Items() *sync.Map {
 }
 
 func (c *defaultHubConnection) Start() {
-	atomic.SwapInt32(&c.Connected, 1)
+	atomic.SwapInt32(&c.connected, 1)
 }
 
 func (c *defaultHubConnection) IsConnected() bool {
-	return atomic.LoadInt32(&c.Connected) == 1
+	return atomic.LoadInt32(&c.connected) == 1
 }
 
 func (c *defaultHubConnection) Close(error string, allowReconnect bool) (closeMessage, error) {
-	defer c.Abort()
 	var closeMessage = closeMessage{
 		Type:           7,
 		Error:          error,
@@ -67,16 +63,11 @@ func (c *defaultHubConnection) Close(error string, allowReconnect bool) (closeMe
 }
 
 func (c *defaultHubConnection) ConnectionID() string {
-	return c.Connection.ConnectionID()
-}
-
-func (c *defaultHubConnection) Context() context.Context {
-	return c.context
+	return c.connection.ConnectionID()
 }
 
 func (c *defaultHubConnection) Abort() {
-	c.abort()
-	atomic.SwapInt32(&c.Connected, 0)
+	atomic.SwapInt32(&c.connected, 0)
 }
 
 func (c *defaultHubConnection) Receive() (interface{}, error) {
@@ -90,13 +81,14 @@ func (c *defaultHubConnection) Receive() (interface{}, error) {
 		var data = make([]byte, c.maximumReceiveMessageSize)
 		var n int
 		for {
-			if message, complete, err := c.Protocol.ReadMessage(&buf); !complete {
+			if message, complete, err := c.protocol.ReadMessage(&buf); !complete {
 				// Partial message, need more data
 				// ReadMessage read data out of the buf, so its gone there: refill
 				buf.Write(data[:n])
-				if n, err = c.Connection.Read(data); err == nil {
+				if n, err = c.connection.Read(data); err == nil {
 					buf.Write(data[:n])
 				} else {
+					c.Abort()
 					m <- nil
 					e <- err
 					break
@@ -112,6 +104,7 @@ func (c *defaultHubConnection) Receive() (interface{}, error) {
 	case <-c.context.Done():
 		// Wait for ReadMessage to return
 		<-e
+		c.Abort()
 		return nil, c.context.Err()
 	case err := <-e:
 		return <-m, err
@@ -158,13 +151,17 @@ func (c *defaultHubConnection) writeMessage(message interface{}) error {
 		return c.context.Err()
 	}
 	e := make(chan error, 1)
-	go func() { e <- c.Protocol.WriteMessage(message, c.Connection) }()
+	go func() { e <- c.protocol.WriteMessage(message, c.connection) }()
 	select {
 	case <-c.context.Done():
 		// Wait for WriteMessage to return
 		<-e
+		c.Abort()
 		return c.context.Err()
 	case err := <-e:
+		if err != nil {
+			c.Abort()
+		}
 		return err
 	}
 }

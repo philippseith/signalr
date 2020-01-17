@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"github.com/philippseith/signalr"
 	"log"
@@ -112,7 +113,7 @@ func runTCP(address string, hub signalr.HubInterface) {
 			break
 		}
 
-		go server.Run(newNetConnection(conn))
+		go server.Run(newNetConnection(conn), context.TODO())
 	}
 }
 

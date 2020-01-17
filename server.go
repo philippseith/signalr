@@ -33,8 +33,8 @@ type Server struct {
 // NewServer creates a new server for one type of hub
 // newHub is called each time a hub method is invoked by a client to create the transient hub instance
 func NewServer(options ...func(*Server) error) (*Server, error) {
-	lifetimeManager := defaultHubLifetimeManager{}
-	i, d := buildInfoDebugLogger(log.NewLogfmtLogger(os.Stderr), false)
+	info, dbg := buildInfoDebugLogger(log.NewLogfmtLogger(os.Stderr), false)
+	lifetimeManager := newLifeTimeManager(info)
 	server := &Server{
 		lifetimeManager: &lifetimeManager,
 		defaultHubClients: &defaultHubClients{
@@ -44,8 +44,8 @@ func NewServer(options ...func(*Server) error) (*Server, error) {
 		groupManager: &defaultGroupManager{
 			lifetimeManager: &lifetimeManager,
 		},
-		info:                      i,
-		dbg:                       d,
+		info:                      info,
+		dbg:                       dbg,
 		hubChanReceiveTimeout:     time.Second * 5,
 		clientTimeoutInterval:     time.Second * 30,
 		handshakeTimeout:          time.Second * 15,
@@ -69,13 +69,11 @@ func NewServer(options ...func(*Server) error) (*Server, error) {
 
 // Run runs the server on one connection. The same server might be run on different connections in parallel
 func (s *Server) Run(conn Connection, parentContext context.Context) {
-	for {
-		if protocol, err := s.processHandshake(conn); err != nil {
-			info, _ := s.prefixLogger()
-			_ = info.Log(evt, "processHandshake", "connectionId", conn.ConnectionID(), "error", err, react, "do not connect")
-		} else {
-			s.newServerLoop(conn, protocol, parentContext).Run() // TODO Add return value to to allow breaking out of the outer loop
-		}
+	if protocol, err := s.processHandshake(conn); err != nil {
+		info, _ := s.prefixLogger()
+		_ = info.Log(evt, "processHandshake", "connectionId", conn.ConnectionID(), "error", err, react, "do not connect")
+	} else {
+		s.newServerLoop(conn, protocol, parentContext).Run()
 	}
 }
 
