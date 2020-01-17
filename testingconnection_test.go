@@ -76,6 +76,8 @@ func (t *testingConnection) SetConnected(connected bool) {
 
 func newTestingConnection() *testingConnection {
 	conn := newTestingConnectionBeforeHandshake()
+	// client receive loop
+	go receiveLoop(conn)()
 	// Send initial Handshake
 	conn.ClientSend(`{"protocol": "json","version": 1}`)
 	conn.SetConnected(true)
@@ -94,8 +96,6 @@ func newTestingConnectionBeforeHandshake() *testingConnection {
 		cliSendChan: make(chan string, 20),
 		srvSendChan: make(chan []byte, 20),
 	}
-	// client receive loop
-	go receiveLoop(&conn)()
 	// client send loop
 	go func() {
 		for {
