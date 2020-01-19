@@ -84,29 +84,42 @@ func (c *defaultHubConnection) Receive() (interface{}, error) {
 				// Partial message, need more data
 				// ReadMessage read data out of the buf, so its gone there: refill
 				buf.Write(data[:n])
-				if n, err = c.connection.Read(data); err == nil {
-					buf.Write(data[:n])
-				} else {
+				nc := make(chan int)
+				e2 := make(chan error)
+				go func() {
+					if n, err = c.connection.Read(data); err == nil {
+						buf.Write(data[:n])
+						nc <- n
+					} else {
+						e2 <- err
+					}
+				}()
+				select {
+				case n = <-nc:
+				case err = <-e2:
 					c.Abort()
-					m <- nil
 					e <- err
-					break
+					m <- nil
+					return
+				case <-c.context.Done():
+					e <- c.context.Err()
+					m <- nil
+					return
 				}
 			} else {
 				m <- message
 				e <- err
-				break
+				return
 			}
 		}
 	}()
 	select {
 	case <-c.context.Done():
-		// Wait for ReadMessage to return
-		<-e
-		c.Abort()
 		return nil, c.context.Err()
 	case err := <-e:
 		return <-m, err
+	case message := <-m:
+		return message, <-e
 	}
 }
 
