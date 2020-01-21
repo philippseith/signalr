@@ -2,6 +2,7 @@ package signalr
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -14,20 +15,26 @@ import (
 
 // Server is a SignalR server for one type of hub
 type Server struct {
-	newHub                func() HubInterface
-	lifetimeManager       HubLifetimeManager
-	defaultHubClients     *defaultHubClients
-	groupManager          GroupManager
-	info                  log.Logger
-	dbg                   log.Logger
-	hubChanReceiveTimeout time.Duration
+	newHub                    func() HubInterface
+	lifetimeManager           HubLifetimeManager
+	defaultHubClients         *defaultHubClients
+	groupManager              GroupManager
+	info                      log.Logger
+	dbg                       log.Logger
+	hubChanReceiveTimeout     time.Duration
+	clientTimeoutInterval     time.Duration
+	handshakeTimeout          time.Duration
+	keepAliveInterval         time.Duration
+	enableDetailedErrors      bool
+	streamBufferCapacity      int
+	maximumReceiveMessageSize int
 }
 
 // NewServer creates a new server for one type of hub
 // newHub is called each time a hub method is invoked by a client to create the transient hub instance
 func NewServer(options ...func(*Server) error) (*Server, error) {
-	lifetimeManager := defaultHubLifetimeManager{}
-	i, d := buildInfoDebugLogger(log.NewLogfmtLogger(os.Stderr), false)
+	info, dbg := buildInfoDebugLogger(log.NewLogfmtLogger(os.Stderr), false)
+	lifetimeManager := newLifeTimeManager(info)
 	server := &Server{
 		lifetimeManager: &lifetimeManager,
 		defaultHubClients: &defaultHubClients{
@@ -37,9 +44,15 @@ func NewServer(options ...func(*Server) error) (*Server, error) {
 		groupManager: &defaultGroupManager{
 			lifetimeManager: &lifetimeManager,
 		},
-		info:                  i,
-		dbg:                   d,
-		hubChanReceiveTimeout: time.Millisecond * 5000,
+		info:                      info,
+		dbg:                       dbg,
+		hubChanReceiveTimeout:     time.Second * 5,
+		clientTimeoutInterval:     time.Second * 30,
+		handshakeTimeout:          time.Second * 15,
+		keepAliveInterval:         time.Second * 15,
+		enableDetailedErrors:      false,
+		streamBufferCapacity:      10,
+		maximumReceiveMessageSize: 1 << 15, // 32KB
 	}
 	for _, option := range options {
 		if option != nil {
@@ -55,12 +68,12 @@ func NewServer(options ...func(*Server) error) (*Server, error) {
 }
 
 // Run runs the server on one connection. The same server might be run on different connections in parallel
-func (s *Server) Run(conn Connection) {
+func (s *Server) Run(conn Connection, parentContext context.Context) {
 	if protocol, err := s.processHandshake(conn); err != nil {
 		info, _ := s.prefixLogger()
-		_ = info.Log(evt, "processHandshake", "error", err, react, "do not connect")
+		_ = info.Log(evt, "processHandshake", "connectionId", conn.ConnectionID(), "error", err, react, "do not connect")
 	} else {
-		s.newServerLoop(conn, protocol).Run()
+		s.newServerLoop(conn, protocol, parentContext).Run()
 	}
 }
 
@@ -86,7 +99,7 @@ func (s *Server) newConnectionHubContext(conn hubConnection) HubContext {
 	return &connectionHubContext{
 		clients: &callerHubClients{
 			defaultHubClients: s.defaultHubClients,
-			connectionID:      conn.GetConnectionID(),
+			connectionID:      conn.ConnectionID(),
 		},
 		groups: s.groupManager,
 		items:  conn.Items(),
@@ -158,5 +171,6 @@ var protocolMap = map[string]HubProtocol{
 // const for logging
 const evt string = "event"
 const msgRecv string = "message received"
+const msgSend string = "message send"
 const msg string = "message"
 const react string = "reaction"

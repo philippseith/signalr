@@ -126,8 +126,7 @@ var _ = Describe("Invocation", func() {
 		Context("When invoked by the client", func() {
 			It("should be invoked on the server, get an int and return an int", func() {
 				conn := connect(&invocationHub{})
-				var value int
-				value = 314
+				var value = 314
 				conn.ClientSend(fmt.Sprintf(
 					`{"type":1,"invocationId": "666","target":"simpleint","arguments":[%v]}`, value))
 				Expect(<-invocationQueue).To(Equal(fmt.Sprintf("SimpleInt(%v)", value)))
@@ -158,8 +157,7 @@ var _ = Describe("Invocation", func() {
 		Context("When invoked by the client", func() {
 			It("should be invoked on the server, get a float and return a two floats", func() {
 				conn := connect(&invocationHub{})
-				var value float64
-				value = 3.1415
+				var value = 3.1415
 				conn.ClientSend(fmt.Sprintf(
 					`{"type":1,"invocationId": "8087","target":"simplefloat","arguments":[%v]}`, value))
 				Expect(<-invocationQueue).To(Equal(fmt.Sprintf("SimpleFloat(%v)", value)))

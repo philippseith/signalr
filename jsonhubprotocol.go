@@ -118,21 +118,13 @@ func parseTextMessageFormat(buf *bytes.Buffer) ([]byte, error) {
 
 // WriteMessage writes a message as JSON to the specified writer
 func (j *JSONHubProtocol) WriteMessage(message interface{}, writer io.Writer) error {
-
-	// TODO: Reduce the amount of copies
-
-	// We're copying because we want to write complete messages to the underlying Writer
 	buf := bytes.Buffer{}
-
 	if err := json.NewEncoder(&buf).Encode(message); err != nil {
+		// Don't know when this will happen, presumably never
 		return err
 	}
-	_ = j.dbg.Log(evt, "write", msg, string(buf.Bytes()))
-
-	if err := buf.WriteByte(30); err != nil {
-		return err
-	}
-
+	_ = j.dbg.Log(evt, "write", msg, buf.String())
+	_ = buf.WriteByte(30) // bytes.Buffer.WriteByte() returns always nil
 	_, err := writer.Write(buf.Bytes())
 	return err
 }

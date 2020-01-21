@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"github.com/philippseith/signalr"
 	"log"
@@ -88,7 +89,6 @@ func (c *chat) UploadStream(upload1 <-chan int, factor float64, upload2 <-chan f
 				c.Echo("Finished")
 				return
 			}
-		default:
 		}
 	}
 }
@@ -113,7 +113,7 @@ func runTCP(address string, hub signalr.HubInterface) {
 			break
 		}
 
-		go server.Run(newNetConnection(conn))
+		go server.Run(newNetConnection(conn), context.TODO())
 	}
 }
 

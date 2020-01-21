@@ -6,14 +6,20 @@ import (
 	"time"
 )
 
-func newStreamClient(hubChanReceiveTimeout time.Duration) *streamClient {
-	return &streamClient{make(map[string]reflect.Value), make(map[string]bool), hubChanReceiveTimeout}
+func (s *Server) newStreamClient() *streamClient {
+	return &streamClient{
+		upstreamChannels:      make(map[string]reflect.Value),
+		runningStreams:        make(map[string]bool),
+		hubChanReceiveTimeout: s.hubChanReceiveTimeout,
+		streamBufferCapacity:  s.streamBufferCapacity,
+	}
 }
 
 type streamClient struct {
 	upstreamChannels      map[string]reflect.Value
 	runningStreams        map[string]bool
 	hubChanReceiveTimeout time.Duration
+	streamBufferCapacity  int
 }
 
 func (c *streamClient) buildChannelArgument(invocation invocationMessage, argType reflect.Type, chanCount int) (arg reflect.Value, canClientStreaming bool, err error) {
@@ -21,7 +27,7 @@ func (c *streamClient) buildChannelArgument(invocation invocationMessage, argTyp
 		return reflect.Value{}, false, nil
 	} else if len(invocation.StreamIds) > chanCount {
 		// MakeChan does only accept bidirectional channels and we need to Send to this channel anyway
-		arg = reflect.MakeChan(reflect.ChanOf(reflect.BothDir, argType.Elem()), 0)
+		arg = reflect.MakeChan(reflect.ChanOf(reflect.BothDir, argType.Elem()), c.streamBufferCapacity)
 		c.upstreamChannels[invocation.StreamIds[chanCount]] = arg
 		return arg, true, nil
 	} else {
@@ -79,7 +85,7 @@ func (c *streamClient) receiveStreamItem(streamItem streamItemMessage) error {
 }
 
 func (c *streamClient) sendChanValSave(upChan reflect.Value, chanVal reflect.Value) error {
-	done := make(chan error, 0)
+	done := make(chan error)
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
