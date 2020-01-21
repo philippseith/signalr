@@ -33,8 +33,8 @@ func SimpleHubFactory(hubProto HubInterface) func(*Server) error {
 		})
 }
 
-// ClientTimeoutInterval: The server will consider the client disconnected
-// if it hasn't received a message (including keep-alive) in this interval.
+// ClientTimeoutInterval is the interval the server will consider the client disconnected
+// if it hasn't received a message (including keep-alive) in it.
 // The recommended value is double the KeepAliveInterval value.
 // Default is 30 seconds.
 func ClientTimeoutInterval(timeout time.Duration) func(*Server) error {
@@ -44,7 +44,7 @@ func ClientTimeoutInterval(timeout time.Duration) func(*Server) error {
 	}
 }
 
-// HandshakeTimeout: If the client doesn't send an initial handshake message within this time interval,
+// HandshakeTimeout it the interval if the client doesn't send an initial handshake message within,
 // the connection is closed. This is an advanced setting that should only be modified
 // if handshake timeout errors are occurring due to severe network latency.
 // For more detail on the handshake process,
@@ -56,7 +56,7 @@ func HandshakeTimeout(timeout time.Duration) func(*Server) error {
 	}
 }
 
-// KeepAliveInterval: If the server hasn't sent a message within this interval,
+// KeepAliveInterval is the interval if the server hasn't sent a message within,
 // a ping message is sent automatically to keep the connection open.
 // When changing KeepAliveInterval, change the ServerTimeout/serverTimeoutInMilliseconds setting on the client.
 // The recommended ServerTimeout/serverTimeoutInMilliseconds value is double the KeepAliveInterval value.
@@ -68,7 +68,7 @@ func KeepAliveInterval(timeout time.Duration) func(*Server) error {
 	}
 }
 
-// EnableDetailedErrors: If true, detailed exception messages are returned to clients when an exception is thrown in a Hub method.
+// EnableDetailedErrors - if true, detailed exception messages are returned to clients when an exception is thrown in a Hub method.
 // The default is false, as these exception messages can contain sensitive information.
 func EnableDetailedErrors(enable bool) func(*Server) error {
 	return func(s *Server) error {

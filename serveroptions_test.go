@@ -45,11 +45,11 @@ var _ = Describe("Server options", func() {
 				Expect(err).To(BeNil())
 				conn1 := newTestingConnection()
 				Expect(conn1).NotTo(BeNil())
-				go server.Run(conn1, context.TODO())
+				go server.Run(context.TODO(), conn1)
 				<-singleHubMsg
 				conn2 := newTestingConnection()
 				Expect(conn2).NotTo(BeNil())
-				go server.Run(conn2, context.TODO())
+				go server.Run(context.TODO(), conn2)
 				<-singleHubMsg
 				// Call GetId twice. If different instances used the results are different
 				var uuid string
@@ -93,7 +93,7 @@ var _ = Describe("Server options", func() {
 				Expect(err).To(BeNil())
 				conn := newTestingConnection()
 				Expect(conn).NotTo(BeNil())
-				go server.Run(conn, context.TODO())
+				go server.Run(context.TODO(), conn)
 				uuids := make(map[string]interface{})
 				uuid := <-singleHubMsg
 				if _, ok := uuids[uuid]; ok {
@@ -136,7 +136,7 @@ var _ = Describe("Server options", func() {
 				Expect(err).To(BeNil())
 				conn := newTestingConnection()
 				Expect(conn).NotTo(BeNil())
-				go server.Run(conn, context.TODO())
+				go server.Run(context.TODO(), conn)
 				conn.ClientSend(`{"type":1,"invocationId": "123","target":"simple"}`)
 				<-invocationQueue
 				select {
@@ -155,7 +155,7 @@ var _ = Describe("Server options", func() {
 				Expect(err).To(BeNil())
 				conn := newTestingConnection()
 				Expect(conn).NotTo(BeNil())
-				go server.Run(conn, context.TODO())
+				go server.Run(context.TODO(), conn)
 				conn.ClientSend(`{"type":1,"invocationId": "123","target":"simple"}`)
 				<-invocationQueue
 				select {
@@ -174,7 +174,7 @@ var _ = Describe("Server options", func() {
 				Expect(err).To(BeNil())
 				conn := newTestingConnection()
 				Expect(conn).NotTo(BeNil())
-				go server.Run(conn, context.TODO())
+				go server.Run(context.TODO(), conn)
 				conn.ClientSend(`{"type":1,"invocationId": "123","target":"sumple is simple with typo"}`)
 				select {
 				case <-cw.Chan():

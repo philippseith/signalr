@@ -26,6 +26,6 @@ func connect(hubProto HubInterface) *testingConnection {
 		return nil
 	}
 	conn := newTestingConnection()
-	go server.Run(conn, context.TODO())
+	go server.Run(context.TODO(), conn)
 	return conn
 }
