@@ -27,7 +27,7 @@ func (c *streamClient) buildChannelArgument(invocation invocationMessage, argTyp
 		return reflect.Value{}, false, nil
 	} else if len(invocation.StreamIds) > chanCount {
 		// MakeChan does only accept bidirectional channels and we need to Send to this channel anyway
-		arg = reflect.MakeChan(reflect.ChanOf(reflect.BothDir, argType.Elem()), 0)
+		arg = reflect.MakeChan(reflect.ChanOf(reflect.BothDir, argType.Elem()), c.streamBufferCapacity)
 		c.upstreamChannels[invocation.StreamIds[chanCount]] = arg
 		return arg, true, nil
 	} else {

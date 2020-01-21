@@ -85,6 +85,17 @@ var shakeQueue = make(chan string, 10)
 
 var _ = Describe("Handshake", func() {
 
+	Context("When the handshake is sent as one message to the server", func() {
+		It("should be connected", func() {
+			server, _ := NewServer(SimpleHubFactory(&invocationHub{}))
+			conn := newTestingConnectionBeforeHandshake()
+			go server.Run(conn, context.TODO())
+			conn.ClientSend(`{"protocol": "json","version": 1}`)
+			conn.SetConnected(true)
+			conn.ClientSend(`{"type":1,"invocationId": "123","target":"simple"}`)
+			Expect(<-invocationQueue).To(Equal("Simple()"))
+		})
+	})
 	Context("When the handshake is sent as partial message to the server", func() {
 		It("should be connected", func() {
 			server, _ := NewServer(SimpleHubFactory(&invocationHub{}))
@@ -131,6 +142,54 @@ var _ = Describe("Handshake", func() {
 			select {
 			case <-shakeQueue:
 				Fail("server connected with invalid handshake")
+			case <-time.After(100 * time.Millisecond):
+			}
+		})
+	})
+	Context("When the connection fails before the server can receive handshake request", func() {
+		It("should not be connected", func() {
+			server, _ := NewServer(SimpleHubFactory(&invocationHub{}))
+			conn := newTestingConnectionBeforeHandshake()
+			go server.Run(conn, context.TODO())
+			conn.SetFailRead("failed read in handshake")
+			conn.ClientSend(`{"protocol": "json","version": 1}`)
+			conn.SetConnected(true)
+			conn.ClientSend(`{"type":1,"invocationId": "123","target":"simple"}`)
+			select {
+			case <-shakeQueue:
+				Fail("server connected with fail before handshake")
+			case <-time.After(100 * time.Millisecond):
+			}
+		})
+	})
+	Context("When the handshake is received by the server but the connection fails when the response should be sent ", func() {
+		It("should not be connected", func() {
+			server, _ := NewServer(SimpleHubFactory(&invocationHub{}))
+			conn := newTestingConnectionBeforeHandshake()
+			go server.Run(conn, context.TODO())
+			conn.SetFailWrite("failed write in handshake")
+			conn.ClientSend(`{"protocol": "json","version": 1}`)
+			conn.SetConnected(true)
+			conn.ClientSend(`{"type":1,"invocationId": "123","target":"simple"}`)
+			select {
+			case <-shakeQueue:
+				Fail("server connected with fail before handshake")
+			case <-time.After(100 * time.Millisecond):
+			}
+		})
+	})
+	Context("When the handshake with an unsupported protocol is received by the server but the connection fails when the response should be sent ", func() {
+		It("should not be connected", func() {
+			server, _ := NewServer(SimpleHubFactory(&invocationHub{}))
+			conn := newTestingConnectionBeforeHandshake()
+			go server.Run(conn, context.TODO())
+			conn.SetFailWrite("failed write in handshake")
+			conn.ClientSend(`{"protocol": "bson","version": 1}`)
+			conn.SetConnected(true)
+			conn.ClientSend(`{"type":1,"invocationId": "123","target":"simple"}`)
+			select {
+			case <-shakeQueue:
+				Fail("server connected with fail before handshake")
 			case <-time.After(100 * time.Millisecond):
 			}
 		})

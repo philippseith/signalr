@@ -23,12 +23,13 @@ type testingConnection struct {
 	connected    bool
 	cliSendChan  chan string
 	srvSendChan  chan []byte
-	failRead     bool
-	failWrite    bool
+	failRead     string
+	failWrite    string
+	failMx       sync.Mutex
 }
 
 var connNum = 0
-var cnm sync.Mutex
+var connNumMx sync.Mutex
 
 func (t *testingConnection) SetTimeout(timeout time.Duration) {
 	t.timeout = timeout
@@ -40,8 +41,8 @@ func (t *testingConnection) Timeout() time.Duration {
 
 func (t *testingConnection) ConnectionID() string {
 	if t.connectionID == "" {
-		defer cnm.Unlock()
-		cnm.Lock()
+		defer connNumMx.Unlock()
+		connNumMx.Lock()
 		connNum++
 		t.connectionID = fmt.Sprintf("test%v", connNum)
 	}
@@ -49,17 +50,17 @@ func (t *testingConnection) ConnectionID() string {
 }
 
 func (t *testingConnection) Read(b []byte) (n int, err error) {
-	if t.failRead {
-		t.failRead = false
-		return 0, errors.New("test fail")
+	if fr := t.FailRead(); fr != "" {
+		defer func() { t.SetFailRead("") }()
+		return 0, errors.New(fr)
 	}
 	return t.srvReader.Read(b)
 }
 
 func (t *testingConnection) Write(b []byte) (n int, err error) {
-	if t.failWrite {
-		t.failWrite = false
-		return 0, errors.New("test fail")
+	if fw := t.FailWrite(); fw != "" {
+		defer func() { t.SetFailWrite("") }()
+		return 0, errors.New(fw)
 	}
 	t.srvSendChan <- b
 	return len(b), nil
@@ -75,6 +76,30 @@ func (t *testingConnection) SetConnected(connected bool) {
 	t.cnMutex.Lock()
 	defer t.cnMutex.Unlock()
 	t.connected = connected
+}
+
+func (t *testingConnection) FailRead() string {
+	defer t.failMx.Unlock()
+	t.failMx.Lock()
+	return t.failRead
+}
+
+func (t *testingConnection) FailWrite() string {
+	defer t.failMx.Unlock()
+	t.failMx.Lock()
+	return t.failWrite
+}
+
+func (t *testingConnection) SetFailRead(fail string) {
+	defer t.failMx.Unlock()
+	t.failMx.Lock()
+	t.failRead = fail
+}
+
+func (t *testingConnection) SetFailWrite(fail string) {
+	defer t.failMx.Unlock()
+	t.failMx.Lock()
+	t.failWrite = fail
 }
 
 func newTestingConnection() *testingConnection {
@@ -112,14 +137,6 @@ func newTestingConnectionBeforeHandshake() *testingConnection {
 		}
 	}()
 	return &conn
-}
-
-func (t *testingConnection) FailReadOnce() {
-	t.failRead = true
-}
-
-func (t *testingConnection) FailWriteOnce() {
-	t.failWrite = true
 }
 
 func (t *testingConnection) ClientSend(message string) {

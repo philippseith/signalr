@@ -192,12 +192,16 @@ var _ = Describe("ClientStreaming", func() {
 				conn := connect(&clientStreamHub{})
 				conn.ClientSend(`{"type":1,"invocationId":"upstream","target":"uploadhang","streamids":["hang"]}`)
 				Expect(<-clientStreamingInvocationQueue).To(Equal("UploadHang()"))
-				conn.ClientSend(`{"type":2,"invocationid":"hang","item":1}`)
+				// connect() sets StreamBufferCapacity to 5, so 6 messages should be send to make it hang
+				for i := 0; i < 6; i++ {
+					conn.ClientSend(fmt.Sprintf(`{"type":2,"invocationid":"hang","item":%v}`, i))
+				}
 				select {
 				case message := <-conn.received:
 					Expect(message).To(BeAssignableToTypeOf(completionMessage{}))
 					Expect(message.(completionMessage).Error).NotTo(BeNil())
-				case <-time.After(1000 * time.Millisecond):
+				case <-time.After(500 * time.Millisecond):
+					// connect() sets HubChanReceiveTimeout 200ms s, 500 should be enough to timeout
 					Fail("timed out")
 				}
 			})
