@@ -87,7 +87,7 @@ var _ = Describe("Server options", func() {
 
 	Describe("SimpleHubFactory option", func() {
 		Context("When the SimpleHubFactory option is used", func() {
-			It("should call the hubfactory on each hub method invocation", func() {
+			It("should call the hub factory on each hub method invocation", func() {
 				server, err := NewServer(SimpleHubFactory(&singleHub{}))
 				Expect(server).NotTo(BeNil())
 				Expect(err).To(BeNil())
@@ -197,6 +197,49 @@ var _ = Describe("Server options", func() {
 			})
 		})
 	})
+
+	Describe("EnableDetailedErrors option", func() {
+		Context("When the EnableDetailedErrors option false is used, calling a method which panics", func() {
+			It("should return a completion, which contains only the panic", func() {
+				server, err := NewServer(UseHub(&invocationHub{}))
+				Expect(server).NotTo(BeNil())
+				Expect(err).To(BeNil())
+				conn := newTestingConnection()
+				Expect(conn).NotTo(BeNil())
+				go server.Run(context.TODO(), conn)
+				conn.ClientSend(`{"type":1,"invocationId": "ppp","target":"Panic"}`)
+				<-invocationQueue
+				select {
+				case m := <-conn.ReceiveChan():
+					Expect(m).To(BeAssignableToTypeOf(completionMessage{}))
+					cm := m.(completionMessage)
+					Expect(cm.Error).To(Equal("Don't panic!\n"))
+				case <-time.After(100 * time.Millisecond):
+					Fail("timed out")
+				}
+			})
+		})
+		Context("When the EnableDetailedErrors option true is used, calling a method which panics", func() {
+			It("should return a completion, which contains only the panic", func() {
+				server, err := NewServer(UseHub(&invocationHub{}), EnableDetailedErrors(true))
+				Expect(server).NotTo(BeNil())
+				Expect(err).To(BeNil())
+				conn := newTestingConnection()
+				Expect(conn).NotTo(BeNil())
+				go server.Run(context.TODO(), conn)
+				conn.ClientSend(`{"type":1,"invocationId": "ppp","target":"Panic"}`)
+				<-invocationQueue
+				select {
+				case m := <-conn.ReceiveChan():
+					Expect(m).To(BeAssignableToTypeOf(completionMessage{}))
+					cm := m.(completionMessage)
+					Expect(cm.Error).NotTo(Equal("Don't panic!\n"))
+				case <-time.After(100 * time.Millisecond):
+					Fail("timed out")
+				}
+			})
+		})
+	})
 })
 
 type channelWriter struct {
@@ -214,4 +257,18 @@ func (c *channelWriter) Chan() chan []byte {
 
 func newChannelWriter() *channelWriter {
 	return &channelWriter{make(chan []byte, 100)}
+}
+
+type mapLogger struct {
+	c chan bool
+	m map[string]string
+}
+
+func (m *mapLogger) Log(keyvals ...interface{}) error {
+	m.m = make(map[string]string)
+	for i := 0; i < len(keyvals); i += 2 {
+		m.m[keyvals[i].(string)] = keyvals[i+1].(string)
+	}
+	m.c <- true
+	return nil
 }
