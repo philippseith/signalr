@@ -113,7 +113,7 @@ func runTCP(address string, hub signalr.HubInterface) {
 			break
 		}
 
-		go server.Run(newNetConnection(conn), context.TODO())
+		go server.Run(context.TODO(), newNetConnection(conn))
 	}
 }
 

@@ -89,7 +89,7 @@ var _ = Describe("Handshake", func() {
 		It("should be connected", func() {
 			server, _ := NewServer(SimpleHubFactory(&invocationHub{}))
 			conn := newTestingConnectionBeforeHandshake()
-			go server.Run(conn, context.TODO())
+			go server.Run(context.TODO(), conn)
 			conn.ClientSend(`{"protocol": "json","version": 1}`)
 			conn.SetConnected(true)
 			conn.ClientSend(`{"type":1,"invocationId": "123","target":"simple"}`)
@@ -100,7 +100,7 @@ var _ = Describe("Handshake", func() {
 		It("should be connected", func() {
 			server, _ := NewServer(SimpleHubFactory(&invocationHub{}))
 			conn := newTestingConnectionBeforeHandshake()
-			go server.Run(conn, context.TODO())
+			go server.Run(context.TODO(), conn)
 			_, _ = conn.cliWriter.Write([]byte(`{"protocol"`))
 			conn.ClientSend(`: "json","version": 1}`)
 			conn.SetConnected(true)
@@ -112,7 +112,7 @@ var _ = Describe("Handshake", func() {
 		It("should not be connected", func() {
 			server, _ := NewServer(SimpleHubFactory(&handshakeHub{}))
 			conn := newTestingConnectionBeforeHandshake()
-			go server.Run(conn, context.TODO())
+			go server.Run(context.TODO(), conn)
 			_, _ = conn.cliWriter.Write([]byte(`{"protocol"`))
 			// Opening curly brace is invalid
 			conn.ClientSend(`{: "json","version": 1}`)
@@ -129,7 +129,7 @@ var _ = Describe("Handshake", func() {
 		It("should return an error handshake response and be not connected", func() {
 			server, _ := NewServer(SimpleHubFactory(&invocationHub{}))
 			conn := newTestingConnectionBeforeHandshake()
-			go server.Run(conn, context.TODO())
+			go server.Run(context.TODO(), conn)
 			conn.ClientSend(`{"protocol": "bson","version": 1}`)
 			response, err := conn.ClientReceive()
 			Expect(err).To(BeNil())
@@ -150,7 +150,7 @@ var _ = Describe("Handshake", func() {
 		It("should not be connected", func() {
 			server, _ := NewServer(SimpleHubFactory(&invocationHub{}))
 			conn := newTestingConnectionBeforeHandshake()
-			go server.Run(conn, context.TODO())
+			go server.Run(context.TODO(), conn)
 			conn.SetFailRead("failed read in handshake")
 			conn.ClientSend(`{"protocol": "json","version": 1}`)
 			conn.SetConnected(true)
@@ -166,7 +166,7 @@ var _ = Describe("Handshake", func() {
 		It("should not be connected", func() {
 			server, _ := NewServer(SimpleHubFactory(&invocationHub{}))
 			conn := newTestingConnectionBeforeHandshake()
-			go server.Run(conn, context.TODO())
+			go server.Run(context.TODO(), conn)
 			conn.SetFailWrite("failed write in handshake")
 			conn.ClientSend(`{"protocol": "json","version": 1}`)
 			conn.SetConnected(true)
@@ -182,7 +182,7 @@ var _ = Describe("Handshake", func() {
 		It("should not be connected", func() {
 			server, _ := NewServer(SimpleHubFactory(&invocationHub{}))
 			conn := newTestingConnectionBeforeHandshake()
-			go server.Run(conn, context.TODO())
+			go server.Run(context.TODO(), conn)
 			conn.SetFailWrite("failed write in handshake")
 			conn.ClientSend(`{"protocol": "bson","version": 1}`)
 			conn.SetConnected(true)

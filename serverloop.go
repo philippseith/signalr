@@ -21,11 +21,11 @@ type serverLoop struct {
 	streamClient   *streamClient
 }
 
-func (s *Server) newServerLoop(conn Connection, protocol HubProtocol, parentContext context.Context) *serverLoop {
+func (s *Server) newServerLoop(parentContext context.Context, conn Connection, protocol HubProtocol) *serverLoop {
 	protocol = reflect.New(reflect.ValueOf(protocol).Elem().Type()).Interface().(HubProtocol)
 	protocol.setDebugLogger(s.dbg)
 	info, dbg := s.prefixLogger()
-	hubConn := newHubConnection(conn, protocol, s.maximumReceiveMessageSize, parentContext)
+	hubConn := newHubConnection(parentContext, conn, protocol, s.maximumReceiveMessageSize)
 	return &serverLoop{
 		server:         s,
 		protocol:       protocol,

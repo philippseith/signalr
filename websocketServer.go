@@ -20,7 +20,7 @@ func MapHub(mux *http.ServeMux, path string, hubProto HubInterface) *Server {
 			// Support websocket connection without negotiateWebSocketTestServer
 			connectionID = getConnectionID()
 		}
-		server.Run(&webSocketConnection{ws, connectionID, 0}, context.TODO())
+		server.Run(context.TODO(), &webSocketConnection{ws, connectionID, 0})
 	}))
 	return server
 }

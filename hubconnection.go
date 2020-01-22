@@ -21,7 +21,7 @@ type hubConnection interface {
 	Abort()
 }
 
-func newHubConnection(connection Connection, protocol HubProtocol, maximumReceiveMessageSize int, parentContext context.Context) hubConnection {
+func newHubConnection(parentContext context.Context, connection Connection, protocol HubProtocol, maximumReceiveMessageSize int) hubConnection {
 	return &defaultHubConnection{
 		protocol:                  protocol,
 		connection:                connection,
