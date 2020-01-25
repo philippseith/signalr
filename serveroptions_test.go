@@ -266,6 +266,36 @@ var _ = Describe("Server options", func() {
 			})
 		})
 	})
+
+	Describe("KeepAliveInterval option", func() {
+		Context("When the KeepAliveInterval has expired without any server message", func() {
+			It("a ping should have been sent", func() {
+				server, err := NewServer(UseHub(&invocationHub{}), KeepAliveInterval(100*time.Millisecond))
+				Expect(server).NotTo(BeNil())
+				Expect(err).To(BeNil())
+				conn := newTestingConnectionBeforeHandshake()
+				go server.Run(context.TODO(), conn)
+				// Send initial Handshake
+				conn.ClientSend(`{"protocol": "json","version": 1}`)
+				// Handshake response
+				hr, _ := conn.ClientReceive()
+				Expect(hr).To(Equal("{}"))
+				// Wait for ping
+				hmc := make(chan interface{}, 1)
+				go func() {
+					m, _ := conn.ClientReceive()
+					hmc <- m
+				}()
+				select {
+				case m := <-hmc:
+					Expect(m).To(Equal("{\"type\":6}\n"))
+				case <-time.After(150 * time.Millisecond):
+					Fail("timed out")
+				}
+
+			})
+		})
+	})
 })
 
 type channelWriter struct {
