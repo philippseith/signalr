@@ -240,6 +240,32 @@ var _ = Describe("Server options", func() {
 			})
 		})
 	})
+
+	Describe("ClientTimeoutInterval option", func() {
+		Context("When the ClientTimeoutInterval has expired without any client message", func() {
+			It("the connection should be closed", func() {
+				server, err := NewServer(UseHub(&invocationHub{}), ClientTimeoutInterval(100*time.Millisecond))
+				Expect(server).NotTo(BeNil())
+				Expect(err).To(BeNil())
+				conn := newTestingConnection()
+				Expect(conn).NotTo(BeNil())
+				go server.Run(context.TODO(), conn)
+				time.Sleep(200 * time.Millisecond)
+				conn.ClientSend(`{"type":1,"invocationId": "timeout100","target":"Simple"}`)
+				select {
+				case m := <-conn.ReceiveChan():
+					Expect(m).To(BeAssignableToTypeOf(closeMessage{}))
+					cm := m.(closeMessage)
+					Expect(cm.Error).NotTo(BeNil())
+				case <-time.After(200 * time.Millisecond):
+					Fail("timed out")
+				case <-invocationQueue:
+					Fail("hub method invoked")
+				}
+
+			})
+		})
+	})
 })
 
 type channelWriter struct {
@@ -259,16 +285,16 @@ func newChannelWriter() *channelWriter {
 	return &channelWriter{make(chan []byte, 100)}
 }
 
-type mapLogger struct {
-	c chan bool
-	m map[string]string
-}
-
-func (m *mapLogger) Log(keyvals ...interface{}) error {
-	m.m = make(map[string]string)
-	for i := 0; i < len(keyvals); i += 2 {
-		m.m[keyvals[i].(string)] = keyvals[i+1].(string)
-	}
-	m.c <- true
-	return nil
-}
+//type mapLogger struct {
+//	c chan bool
+//	m map[string]string
+//}
+//
+//func (m *mapLogger) Log(keyvals ...interface{}) error {
+//	m.m = make(map[string]string)
+//	for i := 0; i < len(keyvals); i += 2 {
+//		m.m[keyvals[i].(string)] = keyvals[i+1].(string)
+//	}
+//	m.c <- true
+//	return nil
+//}

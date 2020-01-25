@@ -6,7 +6,6 @@ import (
 	"reflect"
 	"runtime/debug"
 	"strings"
-	"sync"
 	"time"
 )
 
@@ -40,43 +39,53 @@ func (s *Server) newServerLoop(parentContext context.Context, conn Connection, p
 
 func (sl *serverLoop) Run() {
 	sl.hubConn.Start()
-	pings := sl.startPingClientLoop()
 	sl.server.lifetimeManager.OnConnected(sl.hubConn)
 	go func() {
 		defer sl.recoverHubLifeCyclePanic()
 		sl.server.getHub(sl.hubConn).OnConnected(sl.hubConn.ConnectionID())
 	}()
-	var protocolErr error
 	// Process messages
-messageLoop:
+	var err error
+loop:
 	for sl.hubConn.IsConnected() {
-		if message, err := sl.hubConn.Receive(); err != nil {
-			_ = sl.info.Log(evt, msgRecv, "error", err, msg, fmtMsg(message), react, "close connection")
-			// Even if err did not abort the connection, we need to stop the message loop and send a close message
-			if sl.hubConn.IsConnected() {
-				protocolErr = err
-				break messageLoop
+		mch := make(chan interface{}, 1)
+		ech := make(chan error, 1)
+		clientWatchdog := time.After(sl.server.clientTimeoutInterval)
+		keepAliveWatchdog := time.After(sl.server.keepAliveInterval)
+		go func() {
+			message, err := sl.receive()
+			ech <- err
+			mch <- message
+		}()
+		select {
+		case message := <-mch:
+			err = <-ech
+			if err == nil {
+				switch message := message.(type) {
+				case invocationMessage:
+					sl.handleInvocationMessage(message)
+				case cancelInvocationMessage:
+					_ = sl.dbg.Log(evt, msgRecv, msg, fmtMsg(message))
+					sl.streamer.Stop(message.InvocationID)
+				case streamItemMessage:
+					err = sl.handleStreamItemMessage(message)
+				case completionMessage:
+					err = sl.handleCompletionMessage(message)
+				case closeMessage:
+					_ = sl.dbg.Log(evt, msgRecv, msg, fmtMsg(message))
+					break loop
+				case hubMessage:
+					err = sl.handleOtherMessage(message)
+				}
 			}
-		} else {
-			switch message := message.(type) {
-			case invocationMessage:
-				sl.handleInvocationMessage(message)
-			case cancelInvocationMessage:
-				_ = sl.dbg.Log(evt, msgRecv, msg, fmtMsg(message))
-				sl.streamer.Stop(message.InvocationID)
-			case streamItemMessage:
-				protocolErr = sl.handleStreamItemMessage(message)
-			case completionMessage:
-				protocolErr = sl.handleCompletionMessage(message)
-			case closeMessage:
-				_ = sl.dbg.Log(evt, msgRecv, msg, fmtMsg(message))
-				break messageLoop
-			case hubMessage:
-				protocolErr = sl.handleOtherMessage(message)
+			if err != nil {
+				break loop
 			}
-			if protocolErr != nil {
-				break
-			}
+		case <-clientWatchdog:
+			err = fmt.Errorf("client timeout interval elapsed (%v)", sl.server.clientTimeoutInterval)
+			break loop
+		case <-keepAliveWatchdog:
+			sendMessageAndLog(func() (interface{}, error) { return sl.hubConn.Ping() }, sl.info)
 		}
 	}
 	go func() {
@@ -85,11 +94,16 @@ messageLoop:
 	}()
 	sl.server.lifetimeManager.OnDisconnected(sl.hubConn)
 	sendMessageAndLog(func() (interface{}, error) {
-		return sl.hubConn.Close(fmt.Sprintf("%v", protocolErr), sl.allowReconnect)
+		return sl.hubConn.Close(fmt.Sprintf("%v", err), sl.allowReconnect)
 	}, sl.info)
-	// Wait for pings to complete
-	pings.Wait()
 	_ = sl.dbg.Log(evt, "message loop ended")
+}
+
+func (sl *serverLoop) receive() (message interface{}, err error) {
+	if message, err = sl.hubConn.Receive(); err != nil {
+		_ = sl.info.Log(evt, msgRecv, "error", err, msg, fmtMsg(message), react, "close connection")
+	}
+	return message, err
 }
 
 func (sl *serverLoop) handleInvocationMessage(invocation invocationMessage) {
@@ -252,20 +266,6 @@ func buildMethodArguments(method reflect.Value, invocation invocationMessage,
 		return arguments, chanCount > 0, fmt.Errorf("to many StreamIds for channel parameters of method %v", invocation.Target)
 	}
 	return arguments, chanCount > 0, nil
-}
-
-func (sl *serverLoop) startPingClientLoop() *sync.WaitGroup {
-	var waitgroup sync.WaitGroup
-	waitgroup.Add(1)
-	go func(waitGroup *sync.WaitGroup) {
-		defer waitGroup.Done()
-
-		for sl.hubConn.IsConnected() {
-			sendMessageAndLog(func() (interface{}, error) { return sl.hubConn.Ping() }, sl.info)
-			time.Sleep(5 * time.Second)
-		}
-	}(&waitgroup)
-	return &waitgroup
 }
 
 func getMethod(hub HubInterface, name string) (reflect.Value, bool) {

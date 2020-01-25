@@ -44,7 +44,7 @@ func ClientTimeoutInterval(timeout time.Duration) func(*Server) error {
 	}
 }
 
-// HandshakeTimeout it the interval if the client doesn't send an initial handshake message within,
+// HandshakeTimeout is the interval if the client doesn't send an initial handshake message within,
 // the connection is closed. This is an advanced setting that should only be modified
 // if handshake timeout errors are occurring due to severe network latency.
 // For more detail on the handshake process,

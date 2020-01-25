@@ -121,7 +121,7 @@ func (s *Server) processHandshake(conn Connection) (HubProtocol, error) {
 	info, dbg := s.prefixLogger()
 
 	defer conn.SetTimeout(0)
-	conn.SetTimeout(time.Second * 5)
+	conn.SetTimeout(s.handshakeTimeout)
 
 	var buf bytes.Buffer
 	data := make([]byte, 1<<12)
