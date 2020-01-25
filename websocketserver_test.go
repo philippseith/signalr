@@ -99,6 +99,19 @@ var _ = Describe("Websocket server", func() {
 	})
 })
 
+var _ = Describe("Websocket connection", func() {
+
+	Context("The timeout is set with SetTimeout()", func() {
+		It("should return the same value in Timeout()", func() {
+			c := &webSocketConnection{}
+			c.SetTimeout(time.Millisecond * 100)
+			Expect(c.Timeout()).To(Equal(time.Millisecond * 100))
+			c.SetTimeout(time.Millisecond * 200)
+			Expect(c.Timeout()).To(Equal(time.Millisecond * 200))
+		})
+	})
+})
+
 func negotiateWebSocketTestServer(port int) map[string]interface{} {
 	waitForPort(port)
 	buf := bytes.Buffer{}

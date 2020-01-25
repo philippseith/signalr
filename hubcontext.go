@@ -40,6 +40,5 @@ func (c *connectionHubContext) ConnectionID() string {
 }
 
 func (c *connectionHubContext) Abort() {
-	// TODO Should we really use hubConnection.Abort(), this ends the message loop without a close message?
-	// c.connection.Abort()
+	c.connection.Abort()
 }
