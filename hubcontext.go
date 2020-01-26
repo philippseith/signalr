@@ -20,7 +20,6 @@ type connectionHubContext struct {
 	connection hubConnection
 	clients    HubClients
 	groups     GroupManager
-	items      *sync.Map
 }
 
 func (c *connectionHubContext) Clients() HubClients {
@@ -32,7 +31,7 @@ func (c *connectionHubContext) Groups() GroupManager {
 }
 
 func (c *connectionHubContext) Items() *sync.Map {
-	return c.items
+	return c.connection.Items()
 }
 
 func (c *connectionHubContext) ConnectionID() string {

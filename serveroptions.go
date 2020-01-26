@@ -1,6 +1,7 @@
 package signalr
 
 import (
+	"errors"
 	"reflect"
 	"time"
 )
@@ -80,8 +81,11 @@ func EnableDetailedErrors(enable bool) func(*Server) error {
 // StreamBufferCapacity is the maximum number of items that can be buffered for client upload streams.
 // If this limit is reached, the processing of invocations is blocked until the the server processes stream items.
 // Default is 10.
-func StreamBufferCapacity(capacity int) func(*Server) error {
+func StreamBufferCapacity(capacity uint) func(*Server) error {
 	return func(s *Server) error {
+		if capacity == 0 {
+			return errors.New("unsupported StreamBufferCapacity 0")
+		}
 		s.streamBufferCapacity = capacity
 		return nil
 	}
@@ -89,8 +93,11 @@ func StreamBufferCapacity(capacity int) func(*Server) error {
 
 // MaximumReceiveMessageSize is the maximum size of a single incoming hub message.
 // Default is 32KB
-func MaximumReceiveMessageSize(size int) func(*Server) error {
+func MaximumReceiveMessageSize(size uint) func(*Server) error {
 	return func(s *Server) error {
+		if size == 0 {
+			return errors.New("unsupported MaximumReceiveMessageSize 0")
+		}
 		s.maximumReceiveMessageSize = size
 		return nil
 	}

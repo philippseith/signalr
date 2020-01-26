@@ -270,7 +270,7 @@ var _ = Describe("Server options", func() {
 	Describe("KeepAliveInterval option", func() {
 		Context("When the KeepAliveInterval has expired without any server message", func() {
 			It("a ping should have been sent", func() {
-				server, err := NewServer(UseHub(&invocationHub{}), KeepAliveInterval(100*time.Millisecond))
+				server, err := NewServer(UseHub(&invocationHub{}), KeepAliveInterval(200*time.Millisecond))
 				Expect(server).NotTo(BeNil())
 				Expect(err).To(BeNil())
 				conn := newTestingConnectionBeforeHandshake()
@@ -280,19 +280,38 @@ var _ = Describe("Server options", func() {
 				// Handshake response
 				hr, _ := conn.ClientReceive()
 				Expect(hr).To(Equal("{}"))
-				// Wait for ping
-				hmc := make(chan interface{}, 1)
-				go func() {
-					m, _ := conn.ClientReceive()
-					hmc <- m
-				}()
-				select {
-				case m := <-hmc:
-					Expect(m).To(Equal("{\"type\":6}\n"))
-				case <-time.After(150 * time.Millisecond):
-					Fail("timed out")
+				for i := 0; i < 5; i++ {
+					// Wait for ping
+					hmc := make(chan interface{}, 1)
+					go func() {
+						m, _ := conn.ClientReceive()
+						hmc <- m
+					}()
+					select {
+					case m := <-hmc:
+						Expect(m).To(Equal("{\"type\":6}\n"))
+					case <-time.After(300 * time.Millisecond):
+						Fail("timed out")
+					}
 				}
+			})
+		})
+	})
 
+	Describe("StreamBufferCapacity option", func() {
+		Context("When the StreamBufferCapacity is 0", func() {
+			It("should return an error", func() {
+				_, err := NewServer(UseHub(&singleHub{}), StreamBufferCapacity(0))
+				Expect(err).NotTo(BeNil())
+			})
+		})
+	})
+
+	Describe("MaximumReceiveMessageSize option", func() {
+		Context("When the MaximumReceiveMessageSize is 0", func() {
+			It("should return an error", func() {
+				_, err := NewServer(UseHub(&singleHub{}), MaximumReceiveMessageSize(0))
+				Expect(err).NotTo(BeNil())
 			})
 		})
 	})

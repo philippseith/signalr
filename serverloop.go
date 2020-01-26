@@ -47,7 +47,7 @@ func (sl *serverLoop) Run() {
 	// Process messages
 	var err error
 loop:
-	for sl.hubConn.IsConnected() {
+	for {
 		mch := make(chan interface{}, 1)
 		ech := make(chan error, 1)
 		clientWatchdog := time.After(sl.server.clientTimeoutInterval)
@@ -86,6 +86,8 @@ loop:
 			break loop
 		case <-keepAliveWatchdog:
 			sendMessageAndLog(func() (interface{}, error) { return sl.hubConn.Ping() }, sl.info)
+		case err = <-sl.hubConn.Aborted():
+			break loop
 		}
 	}
 	go func() {

@@ -3,8 +3,8 @@ package signalr
 import (
 	"bytes"
 	"context"
+	"errors"
 	"sync"
-	"sync/atomic"
 )
 
 type hubConnection interface {
@@ -19,23 +19,27 @@ type hubConnection interface {
 	Ping() (hubMessage, error)
 	Items() *sync.Map
 	Abort()
+	Aborted() <-chan error
 }
 
-func newHubConnection(parentContext context.Context, connection Connection, protocol HubProtocol, maximumReceiveMessageSize int) hubConnection {
+func newHubConnection(parentContext context.Context, connection Connection, protocol HubProtocol, maximumReceiveMessageSize uint) hubConnection {
 	return &defaultHubConnection{
 		protocol:                  protocol,
 		connection:                connection,
 		maximumReceiveMessageSize: maximumReceiveMessageSize,
 		items:                     &sync.Map{},
 		context:                   parentContext,
+		aborted:                   make(chan error, 1),
 	}
 }
 
 type defaultHubConnection struct {
 	protocol                  HubProtocol
-	connected                 int32
+	mx                        sync.Mutex
+	connected                 bool
+	aborted                   chan error
 	connection                Connection
-	maximumReceiveMessageSize int
+	maximumReceiveMessageSize uint
 	items                     *sync.Map
 	context                   context.Context
 }
@@ -45,11 +49,15 @@ func (c *defaultHubConnection) Items() *sync.Map {
 }
 
 func (c *defaultHubConnection) Start() {
-	atomic.SwapInt32(&c.connected, 1)
+	defer c.mx.Unlock()
+	c.mx.Lock()
+	c.connected = true
 }
 
 func (c *defaultHubConnection) IsConnected() bool {
-	return atomic.LoadInt32(&c.connected) == 1
+	defer c.mx.Unlock()
+	c.mx.Lock()
+	return c.connected
 }
 
 func (c *defaultHubConnection) Close(error string, allowReconnect bool) (closeMessage, error) {
@@ -66,7 +74,16 @@ func (c *defaultHubConnection) ConnectionID() string {
 }
 
 func (c *defaultHubConnection) Abort() {
-	atomic.SwapInt32(&c.connected, 0)
+	defer c.mx.Unlock()
+	c.mx.Lock()
+	if c.connected {
+		c.aborted <- errors.New("connection aborted from hub")
+		c.connected = false
+	}
+}
+
+func (c *defaultHubConnection) Aborted() <-chan error {
+	return c.aborted
 }
 
 func (c *defaultHubConnection) Receive() (interface{}, error) {
@@ -159,7 +176,10 @@ func (c *defaultHubConnection) Ping() (hubMessage, error) {
 }
 
 func (c *defaultHubConnection) writeMessage(message interface{}) error {
-	if !c.IsConnected() {
+	_, isCloseMsg := message.(closeMessage)
+	if !c.IsConnected() &&
+		// Allow sending closeMessage when Aborted
+		(c.Aborted() == nil || !isCloseMsg) {
 		return c.context.Err()
 	}
 	e := make(chan error, 1)
