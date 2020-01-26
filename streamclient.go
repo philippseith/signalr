@@ -19,7 +19,7 @@ type streamClient struct {
 	upstreamChannels      map[string]reflect.Value
 	runningStreams        map[string]bool
 	hubChanReceiveTimeout time.Duration
-	streamBufferCapacity  int
+	streamBufferCapacity  uint
 }
 
 func (c *streamClient) buildChannelArgument(invocation invocationMessage, argType reflect.Type, chanCount int) (arg reflect.Value, canClientStreaming bool, err error) {
@@ -27,7 +27,7 @@ func (c *streamClient) buildChannelArgument(invocation invocationMessage, argTyp
 		return reflect.Value{}, false, nil
 	} else if len(invocation.StreamIds) > chanCount {
 		// MakeChan does only accept bidirectional channels and we need to Send to this channel anyway
-		arg = reflect.MakeChan(reflect.ChanOf(reflect.BothDir, argType.Elem()), c.streamBufferCapacity)
+		arg = reflect.MakeChan(reflect.ChanOf(reflect.BothDir, argType.Elem()), int(c.streamBufferCapacity))
 		c.upstreamChannels[invocation.StreamIds[chanCount]] = arg
 		return arg, true, nil
 	} else {

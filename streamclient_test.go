@@ -186,9 +186,9 @@ var _ = Describe("ClientStreaming", func() {
 		})
 	})
 
-	Describe("Stream invocation", func() {
+	Describe("Stream invocation to the StreamBufferCapacity", func() {
 		Context(" When hub method is called as streaming receiver but does not handle channel input", func() {
-			It("should send a completion with error", func() {
+			It("should send a completion with error, but wait at least HubChanReceiveTimeout", func() {
 				conn := connect(&clientStreamHub{})
 				conn.ClientSend(`{"type":1,"invocationId":"upstream","target":"uploadhang","streamids":["hang"]}`)
 				Expect(<-clientStreamingInvocationQueue).To(Equal("UploadHang()"))
@@ -196,12 +196,15 @@ var _ = Describe("ClientStreaming", func() {
 				for i := 0; i < 6; i++ {
 					conn.ClientSend(fmt.Sprintf(`{"type":2,"invocationid":"hang","item":%v}`, i))
 				}
+				sent := time.Now()
 				select {
 				case message := <-conn.received:
 					Expect(message).To(BeAssignableToTypeOf(completionMessage{}))
 					Expect(message.(completionMessage).Error).NotTo(BeNil())
-				case <-time.After(500 * time.Millisecond):
-					// connect() sets HubChanReceiveTimeout 200ms s, 500 should be enough to timeout
+					// HubChanReceiveTimeout 200 ms should be over
+					Expect(time.Now().UnixNano()).To(BeNumerically(">", sent.Add(200*time.Millisecond).UnixNano()))
+				case <-time.After(300 * time.Millisecond):
+					// connect() sets HubChanReceiveTimeout 200ms s, 300 should be enough to timeout
 					Fail("timed out")
 				}
 			})

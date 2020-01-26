@@ -54,7 +54,21 @@ func (t *testingConnection) Read(b []byte) (n int, err error) {
 		defer func() { t.SetFailRead("") }()
 		return 0, errors.New(fr)
 	}
-	return t.srvReader.Read(b)
+	timer := make(<-chan time.Time)
+	if t.Timeout() > 0 {
+		timer = time.After(t.Timeout())
+	}
+	nch := make(chan int)
+	go func() {
+		n, _ := t.srvReader.Read(b)
+		nch <- n
+	}()
+	select {
+	case n := <-nch:
+		return n, nil
+	case <-timer:
+		return 0, fmt.Errorf("timeout %v", t.Timeout())
+	}
 }
 
 func (t *testingConnection) Write(b []byte) (n int, err error) {
@@ -123,6 +137,7 @@ func newTestingConnectionBeforeHandshake() *testingConnection {
 		received:    make(chan interface{}, 20),
 		cliSendChan: make(chan string, 20),
 		srvSendChan: make(chan []byte, 20),
+		timeout:     time.Second * 5,
 	}
 	// client send loop
 	go func() {

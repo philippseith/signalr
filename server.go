@@ -1,3 +1,9 @@
+// Package signalr implements a SignalR server in go.
+// SignalR is an open-source library that simplifies adding real-time web functionality to apps.
+//  Real-time web functionality enables server-side code to push content to clients instantly.
+//
+// Historically it was tied to ASP.NET Core but the protocol is open and implementable in any language.
+// The server currently supports transport over http/WebSockets and TCP. The supported protocol encoding in JSON.
 package signalr
 
 import (
@@ -26,8 +32,8 @@ type Server struct {
 	handshakeTimeout          time.Duration
 	keepAliveInterval         time.Duration
 	enableDetailedErrors      bool
-	streamBufferCapacity      int
-	maximumReceiveMessageSize int
+	streamBufferCapacity      uint
+	maximumReceiveMessageSize uint
 }
 
 // NewServer creates a new server for one type of hub
@@ -101,8 +107,8 @@ func (s *Server) newConnectionHubContext(conn hubConnection) HubContext {
 			defaultHubClients: s.defaultHubClients,
 			connectionID:      conn.ConnectionID(),
 		},
-		groups: s.groupManager,
-		items:  conn.Items(),
+		groups:     s.groupManager,
+		connection: conn,
 	}
 }
 
@@ -121,7 +127,7 @@ func (s *Server) processHandshake(conn Connection) (HubProtocol, error) {
 	info, dbg := s.prefixLogger()
 
 	defer conn.SetTimeout(0)
-	conn.SetTimeout(time.Second * 5)
+	conn.SetTimeout(s.handshakeTimeout)
 
 	var buf bytes.Buffer
 	data := make([]byte, 1<<12)
