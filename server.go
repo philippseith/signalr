@@ -1,7 +1,6 @@
 // Package signalr implements a SignalR server in go.
 // SignalR is an open-source library that simplifies adding real-time web functionality to apps.
-//  Real-time web functionality enables server-side code to push content to clients instantly.
-//
+// Real-time web functionality enables server-side code to push content to clients instantly.
 // Historically it was tied to ASP.NET Core but the protocol is open and implementable in any language.
 // The server currently supports transport over http/WebSockets and TCP. The supported protocol encoding in JSON.
 package signalr
