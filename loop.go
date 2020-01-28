@@ -3,6 +3,7 @@ package signalr
 import (
 	"context"
 	"fmt"
+	"github.com/go-kit/kit/log"
 	"reflect"
 	"runtime/debug"
 	"strings"
@@ -26,10 +27,15 @@ type party interface {
 	onConnected(hc hubConnection)
 	onDisconnected(hc hubConnection)
 	getInvocationTarget(hc hubConnection) interface{}
+	setTimeout(timeout time.Duration)
+	setHandshakeTimeout(timeout time.Duration)
+	setKeepAliveInterval(interval time.Duration)
 	allowReconnect() bool
+	setEnableDetailedErrors(enable bool)
+	setLoggers(i log.Logger, d log.Logger)
 }
 
-func (s *Server) newLoop(parentContext context.Context, conn Connection, protocol HubProtocol) *loop {
+func (s *server) newLoop(parentContext context.Context, conn Connection, protocol HubProtocol) *loop {
 	protocol = reflect.New(reflect.ValueOf(protocol).Elem().Type()).Interface().(HubProtocol)
 	protocol.setDebugLogger(s.dbg)
 	info, dbg := s.prefixLogger()

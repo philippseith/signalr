@@ -192,7 +192,7 @@ var _ = Describe("Server options", func() {
 		})
 		Context("When an option returns an error, NewServer", func() {
 			It("should return an error", func() {
-				_, err := NewServer(func(*Server) error { return errors.New("bad option") })
+				_, err := NewServer(func(party) error { return errors.New("bad option") })
 				Expect(err).NotTo(BeNil())
 			})
 		})
@@ -241,10 +241,10 @@ var _ = Describe("Server options", func() {
 		})
 	})
 
-	Describe("ClientTimeoutInterval option", func() {
-		Context("When the ClientTimeoutInterval has expired without any client message", func() {
+	Describe("TimeoutInterval option", func() {
+		Context("When the TimeoutInterval has expired without any client message", func() {
 			It("the connection should be closed", func() {
-				server, err := NewServer(UseHub(&invocationHub{}), ClientTimeoutInterval(100*time.Millisecond))
+				server, err := NewServer(UseHub(&invocationHub{}), TimeoutInterval(100*time.Millisecond))
 				Expect(server).NotTo(BeNil())
 				Expect(err).To(BeNil())
 				conn := newTestingConnection()

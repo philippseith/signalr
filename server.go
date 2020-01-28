@@ -12,7 +12,6 @@ import (
 	"errors"
 	"fmt"
 	"github.com/go-kit/kit/log"
-	"github.com/go-kit/kit/log/level"
 	"os"
 	"reflect"
 	"runtime/debug"
@@ -20,7 +19,12 @@ import (
 )
 
 // Server is a SignalR server for one type of hub
-type Server struct {
+type Server interface {
+	party
+	Run(parentContext context.Context, conn Connection)
+}
+
+type server struct {
 	newHub                    func() HubInterface
 	lifetimeManager           HubLifetimeManager
 	defaultHubClients         *defaultHubClients
@@ -37,12 +41,33 @@ type Server struct {
 	reconnectAllowed          bool
 }
 
+func (s *server) setTimeout(timeout time.Duration) {
+	s.clientTimeoutInterval = timeout
+}
+
+func (s *server) setHandshakeTimeout(timeout time.Duration) {
+	s.handshakeTimeout = timeout
+}
+
+func (s *server) setKeepAliveInterval(interval time.Duration) {
+	s.keepAliveInterval = interval
+}
+
+func (s *server) setEnableDetailedErrors(enable bool) {
+	s.enableDetailedErrors = enable
+}
+
+func (s *server) setLoggers(info log.Logger, dbg log.Logger) {
+	s.info = info
+	s.dbg = dbg
+}
+
 // NewServer creates a new server for one type of hub. The hub type is set by one of the
 // options UseHub, HubFactory or SimpleHubFactory
-func NewServer(options ...func(*Server) error) (*Server, error) {
+func NewServer(options ...func(party) error) (Server, error) {
 	info, dbg := buildInfoDebugLogger(log.NewLogfmtLogger(os.Stderr), false)
 	lifetimeManager := newLifeTimeManager(info)
-	server := &Server{
+	server := &server{
 		lifetimeManager: &lifetimeManager,
 		defaultHubClients: &defaultHubClients{
 			lifetimeManager: &lifetimeManager,
@@ -76,7 +101,7 @@ func NewServer(options ...func(*Server) error) (*Server, error) {
 }
 
 // Run runs the server on one connection. The same server might be run on different connections in parallel
-func (s *Server) Run(parentContext context.Context, conn Connection) {
+func (s *server) Run(parentContext context.Context, conn Connection) {
 	if protocol, err := s.processHandshake(conn); err != nil {
 		info, _ := s.prefixLogger()
 		_ = info.Log(evt, "processHandshake", "connectionId", conn.ConnectionID(), "error", err, react, "do not connect")
@@ -85,7 +110,7 @@ func (s *Server) Run(parentContext context.Context, conn Connection) {
 	}
 }
 
-func (s *Server) onConnected(hc hubConnection) {
+func (s *server) onConnected(hc hubConnection) {
 	s.lifetimeManager.OnConnected(hc)
 	go func() {
 		defer s.recoverHubLifeCyclePanic(hc)
@@ -93,7 +118,7 @@ func (s *Server) onConnected(hc hubConnection) {
 	}()
 }
 
-func (s *Server) onDisconnected(hc hubConnection) {
+func (s *server) onDisconnected(hc hubConnection) {
 	go func() {
 		defer s.recoverHubLifeCyclePanic(hc)
 		s.getInvocationTarget(hc).(HubInterface).OnDisconnected(hc.ConnectionID())
@@ -102,17 +127,17 @@ func (s *Server) onDisconnected(hc hubConnection) {
 
 }
 
-func (s *Server) getInvocationTarget(conn hubConnection) interface{} {
+func (s *server) getInvocationTarget(conn hubConnection) interface{} {
 	hub := s.newHub()
 	hub.Initialize(s.newConnectionHubContext(conn))
 	return hub
 }
 
-func (s *Server) allowReconnect() bool {
+func (s *server) allowReconnect() bool {
 	return s.reconnectAllowed
 }
 
-func (s *Server) recoverHubLifeCyclePanic(hc hubConnection) {
+func (s *server) recoverHubLifeCyclePanic(hc hubConnection) {
 	if err := recover(); err != nil {
 		s.reconnectAllowed = false
 		info, dbg := s.prefixLogger()
@@ -122,7 +147,7 @@ func (s *Server) recoverHubLifeCyclePanic(hc hubConnection) {
 	}
 }
 
-func (s *Server) prefixLogger() (info log.Logger, debug log.Logger) {
+func (s *server) prefixLogger() (info log.Logger, debug log.Logger) {
 	return log.WithPrefix(s.info, "ts", log.DefaultTimestampUTC,
 			"class", "Server",
 			"hub", reflect.ValueOf(s.newHub()).Elem().Type()),
@@ -131,16 +156,7 @@ func (s *Server) prefixLogger() (info log.Logger, debug log.Logger) {
 			"hub", reflect.ValueOf(s.newHub()).Elem().Type())
 }
 
-func buildInfoDebugLogger(logger log.Logger, debug bool) (log.Logger, log.Logger) {
-	if debug {
-		logger = level.NewFilter(logger, level.AllowDebug())
-	} else {
-		logger = level.NewFilter(logger, level.AllowInfo())
-	}
-	return level.Info(logger), log.With(level.Debug(logger), "caller", log.DefaultCaller)
-}
-
-func (s *Server) newConnectionHubContext(conn hubConnection) HubContext {
+func (s *server) newConnectionHubContext(conn hubConnection) HubContext {
 	return &connectionHubContext{
 		clients: &callerHubClients{
 			defaultHubClients: s.defaultHubClients,
@@ -151,7 +167,7 @@ func (s *Server) newConnectionHubContext(conn hubConnection) HubContext {
 	}
 }
 
-func (s *Server) processHandshake(conn Connection) (HubProtocol, error) {
+func (s *server) processHandshake(conn Connection) (HubProtocol, error) {
 	var err error
 	var protocol HubProtocol
 	var ok bool

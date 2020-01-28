@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-func (s *Server) newStreamClient() *streamClient {
+func (s *server) newStreamClient() *streamClient {
 	return &streamClient{
 		upstreamChannels:      make(map[string]reflect.Value),
 		runningStreams:        make(map[string]bool),
