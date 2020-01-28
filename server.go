@@ -35,8 +35,8 @@ type Server struct {
 	maximumReceiveMessageSize uint
 }
 
-// NewServer creates a new server for one type of hub
-// newHub is called each time a hub method is invoked by a client to create the transient hub instance
+// NewServer creates a new server for one type of hub. The hub type is set by one of the
+// options UseHub, HubFactory or SimpleHubFactory
 func NewServer(options ...func(*Server) error) (*Server, error) {
 	info, dbg := buildInfoDebugLogger(log.NewLogfmtLogger(os.Stderr), false)
 	lifetimeManager := newLifeTimeManager(info)
