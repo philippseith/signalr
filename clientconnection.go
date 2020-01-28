@@ -1,9 +1,12 @@
 package signalr
 
-type Client interface {
-	Invoke(method string, arguments ...interface{}) <-chan interface{}
-	StreamInvoke(method string, arguments ...interface{}) <-chan interface{}
+type ClientConnection interface {
+	Start() <-chan error
+	Closed() <-chan error
+	Invoke(method string, arguments ...interface{}) (<-chan interface{}, <-chan error)
+	Stream(method string, arguments ...interface{}) (<-chan interface{}, <-chan error)
+	Upstream(method string, arguments ...interface{}) <-chan error
 	// It is not necessary to register callbacks with On(...),
-	// the server can call back all exported methods of the receiver
+	// the server can "call back" all exported methods of the receiver
 	SetReceiver(receiver interface{})
 }
