@@ -15,6 +15,7 @@ import (
 	"github.com/go-kit/kit/log/level"
 	"os"
 	"reflect"
+	"runtime/debug"
 	"time"
 )
 
@@ -33,6 +34,7 @@ type Server struct {
 	enableDetailedErrors      bool
 	streamBufferCapacity      uint
 	maximumReceiveMessageSize uint
+	reconnectAllowed          bool
 }
 
 // NewServer creates a new server for one type of hub. The hub type is set by one of the
@@ -58,6 +60,7 @@ func NewServer(options ...func(*Server) error) (*Server, error) {
 		enableDetailedErrors:      false,
 		streamBufferCapacity:      10,
 		maximumReceiveMessageSize: 1 << 15, // 32KB
+		reconnectAllowed:          true,
 	}
 	for _, option := range options {
 		if option != nil {
@@ -78,7 +81,44 @@ func (s *Server) Run(parentContext context.Context, conn Connection) {
 		info, _ := s.prefixLogger()
 		_ = info.Log(evt, "processHandshake", "connectionId", conn.ConnectionID(), "error", err, react, "do not connect")
 	} else {
-		s.newServerLoop(parentContext, conn, protocol).Run()
+		s.newLoop(parentContext, conn, protocol).Run()
+	}
+}
+
+func (s *Server) onConnected(hc hubConnection) {
+	s.lifetimeManager.OnConnected(hc)
+	go func() {
+		defer s.recoverHubLifeCyclePanic(hc)
+		s.getInvocationTarget(hc).(HubInterface).OnConnected(hc.ConnectionID())
+	}()
+}
+
+func (s *Server) onDisconnected(hc hubConnection) {
+	go func() {
+		defer s.recoverHubLifeCyclePanic(hc)
+		s.getInvocationTarget(hc).(HubInterface).OnDisconnected(hc.ConnectionID())
+	}()
+	s.lifetimeManager.OnDisconnected(hc)
+
+}
+
+func (s *Server) getInvocationTarget(conn hubConnection) interface{} {
+	hub := s.newHub()
+	hub.Initialize(s.newConnectionHubContext(conn))
+	return hub
+}
+
+func (s *Server) allowReconnect() bool {
+	return s.reconnectAllowed
+}
+
+func (s *Server) recoverHubLifeCyclePanic(hc hubConnection) {
+	if err := recover(); err != nil {
+		s.reconnectAllowed = false
+		info, dbg := s.prefixLogger()
+		_ = info.Log(evt, "panic in hub lifecycle", "error", err, react, "close connection, allow no reconnect")
+		_ = dbg.Log(evt, "panic in hub lifecycle", "error", err, react, "close connection, allow no reconnect", "stack", string(debug.Stack()))
+		hc.Abort()
 	}
 }
 
@@ -109,12 +149,6 @@ func (s *Server) newConnectionHubContext(conn hubConnection) HubContext {
 		groups:     s.groupManager,
 		connection: conn,
 	}
-}
-
-func (s *Server) getHub(conn hubConnection) HubInterface {
-	hub := s.newHub()
-	hub.Initialize(s.newConnectionHubContext(conn))
-	return hub
 }
 
 func (s *Server) processHandshake(conn Connection) (HubProtocol, error) {
