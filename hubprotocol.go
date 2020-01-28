@@ -23,17 +23,11 @@ type hubMessage struct {
 }
 
 type invocationMessage struct {
-	Type         int
-	Target       string
-	InvocationID string
-	Arguments    []interface{}
-	StreamIds    []string
-}
-
-type sendOnlyHubInvocationMessage struct {
-	Type      int           `json:"type"`
-	Target    string        `json:"target"`
-	Arguments []interface{} `json:"arguments"`
+	Type         int           `json:"type"`
+	Target       string        `json:"target"`
+	InvocationID string        `json:"invocationId,omitempty"`
+	Arguments    []interface{} `json:"arguments"`
+	StreamIds    []string      `json:"streamIds,omitempty"`
 }
 
 type completionMessage struct {
