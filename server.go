@@ -25,41 +25,13 @@ type Server interface {
 }
 
 type server struct {
+	partyBase
 	newHub                    func() HubInterface
 	lifetimeManager           HubLifetimeManager
 	defaultHubClients         *defaultHubClients
 	groupManager              GroupManager
-	info                      log.Logger
-	dbg                       log.Logger
-	hubChanReceiveTimeout     time.Duration
-	clientTimeoutInterval     time.Duration
-	handshakeTimeout          time.Duration
-	keepAliveInterval         time.Duration
-	enableDetailedErrors      bool
-	streamBufferCapacity      uint
 	maximumReceiveMessageSize uint
 	reconnectAllowed          bool
-}
-
-func (s *server) setTimeout(timeout time.Duration) {
-	s.clientTimeoutInterval = timeout
-}
-
-func (s *server) setHandshakeTimeout(timeout time.Duration) {
-	s.handshakeTimeout = timeout
-}
-
-func (s *server) setKeepAliveInterval(interval time.Duration) {
-	s.keepAliveInterval = interval
-}
-
-func (s *server) setEnableDetailedErrors(enable bool) {
-	s.enableDetailedErrors = enable
-}
-
-func (s *server) setLoggers(info log.Logger, dbg log.Logger) {
-	s.info = info
-	s.dbg = dbg
 }
 
 // NewServer creates a new server for one type of hub. The hub type is set by one of the
@@ -76,14 +48,16 @@ func NewServer(options ...func(party) error) (Server, error) {
 		groupManager: &defaultGroupManager{
 			lifetimeManager: &lifetimeManager,
 		},
-		info:                      info,
-		dbg:                       dbg,
-		hubChanReceiveTimeout:     time.Second * 5,
-		clientTimeoutInterval:     time.Second * 30,
-		handshakeTimeout:          time.Second * 15,
-		keepAliveInterval:         time.Second * 15,
-		enableDetailedErrors:      false,
-		streamBufferCapacity:      10,
+		partyBase: partyBase{
+			timeout:              time.Second * 30,
+			handshakeTimeout:     time.Second * 15,
+			keepAliveInterval:    time.Second * 15,
+			chanReceiveTimeout:   time.Second * 5,
+			streamBufferCapacity: 10,
+			enableDetailedErrors: false,
+			info:                 info,
+			dbg:                  dbg,
+		},
 		maximumReceiveMessageSize: 1 << 15, // 32KB
 		reconnectAllowed:          true,
 	}
@@ -103,7 +77,7 @@ func NewServer(options ...func(party) error) (Server, error) {
 // Run runs the server on one connection. The same server might be run on different connections in parallel
 func (s *server) Run(parentContext context.Context, conn Connection) {
 	if protocol, err := s.processHandshake(conn); err != nil {
-		info, _ := s.prefixLogger()
+		info, _ := s.prefixLoggers()
 		_ = info.Log(evt, "processHandshake", "connectionId", conn.ConnectionID(), "error", err, react, "do not connect")
 	} else {
 		s.newLoop(parentContext, conn, protocol).Run()
@@ -140,18 +114,17 @@ func (s *server) allowReconnect() bool {
 func (s *server) recoverHubLifeCyclePanic(hc hubConnection) {
 	if err := recover(); err != nil {
 		s.reconnectAllowed = false
-		info, dbg := s.prefixLogger()
+		info, dbg := s.prefixLoggers()
 		_ = info.Log(evt, "panic in hub lifecycle", "error", err, react, "close connection, allow no reconnect")
 		_ = dbg.Log(evt, "panic in hub lifecycle", "error", err, react, "close connection, allow no reconnect", "stack", string(debug.Stack()))
 		hc.Abort()
 	}
 }
 
-func (s *server) prefixLogger() (info log.Logger, debug log.Logger) {
+func (s *server) prefixLoggers() (info StructuredLogger, debug StructuredLogger) {
 	return log.WithPrefix(s.info, "ts", log.DefaultTimestampUTC,
 			"class", "Server",
-			"hub", reflect.ValueOf(s.newHub()).Elem().Type()),
-		log.WithPrefix(s.dbg, "ts", log.DefaultTimestampUTC,
+			"hub", reflect.ValueOf(s.newHub()).Elem().Type()), log.WithPrefix(s.dbg, "ts", log.DefaultTimestampUTC,
 			"class", "Server",
 			"hub", reflect.ValueOf(s.newHub()).Elem().Type())
 }
@@ -173,7 +146,7 @@ func (s *server) processHandshake(conn Connection) (HubProtocol, error) {
 	var ok bool
 	const handshakeResponse = "{}\u001e"
 	const errorHandshakeResponse = "{\"error\":\"%s\"}\u001e"
-	info, dbg := s.prefixLogger()
+	info, dbg := s.prefixLoggers()
 
 	defer conn.SetTimeout(0)
 	conn.SetTimeout(s.handshakeTimeout)

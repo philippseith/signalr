@@ -6,20 +6,20 @@ import (
 	"time"
 )
 
-func (s *server) newStreamClient() *streamClient {
+func newStreamClient(chanReceiveTimeout time.Duration, streamBufferCapacity uint) *streamClient {
 	return &streamClient{
-		upstreamChannels:      make(map[string]reflect.Value),
-		runningStreams:        make(map[string]bool),
-		hubChanReceiveTimeout: s.hubChanReceiveTimeout,
-		streamBufferCapacity:  s.streamBufferCapacity,
+		upstreamChannels:     make(map[string]reflect.Value),
+		runningStreams:       make(map[string]bool),
+		chanReceiveTimeout:   chanReceiveTimeout,
+		streamBufferCapacity: streamBufferCapacity,
 	}
 }
 
 type streamClient struct {
-	upstreamChannels      map[string]reflect.Value
-	runningStreams        map[string]bool
-	hubChanReceiveTimeout time.Duration
-	streamBufferCapacity  uint
+	upstreamChannels     map[string]reflect.Value
+	runningStreams       map[string]bool
+	chanReceiveTimeout   time.Duration
+	streamBufferCapacity uint
 }
 
 func (c *streamClient) buildChannelArgument(invocation invocationMessage, argType reflect.Type, chanCount int) (arg reflect.Value, canClientStreaming bool, err error) {
@@ -98,8 +98,8 @@ func (c *streamClient) sendChanValSave(upChan reflect.Value, chanVal reflect.Val
 	select {
 	case err := <-done:
 		return err
-	case <-time.After(c.hubChanReceiveTimeout):
-		return &hubChanTimeoutError{fmt.Sprintf("timeout (%v) waiting for hub to receive client streamed value", c.hubChanReceiveTimeout)}
+	case <-time.After(c.chanReceiveTimeout):
+		return &hubChanTimeoutError{fmt.Sprintf("timeout (%v) waiting for hub to receive client streamed value", c.chanReceiveTimeout)}
 	}
 }
 

@@ -3,7 +3,6 @@ package signalr
 import (
 	"context"
 	"fmt"
-	"github.com/go-kit/kit/log"
 	"reflect"
 	"runtime/debug"
 	"strings"
@@ -23,32 +22,21 @@ type loop struct {
 	enableDetailedErrors bool
 }
 
-type party interface {
-	onConnected(hc hubConnection)
-	onDisconnected(hc hubConnection)
-	getInvocationTarget(hc hubConnection) interface{}
-	setTimeout(timeout time.Duration)
-	setHandshakeTimeout(timeout time.Duration)
-	setKeepAliveInterval(interval time.Duration)
-	allowReconnect() bool
-	setEnableDetailedErrors(enable bool)
-	setLoggers(i log.Logger, d log.Logger)
-}
-
 func (s *server) newLoop(parentContext context.Context, conn Connection, protocol HubProtocol) *loop {
 	protocol = reflect.New(reflect.ValueOf(protocol).Elem().Type()).Interface().(HubProtocol)
-	protocol.setDebugLogger(s.dbg)
-	info, dbg := s.prefixLogger()
+	_, dbg := s.loggers()
+	protocol.setDebugLogger(dbg)
+	info, dbg := s.prefixLoggers()
 	hubConn := newHubConnection(parentContext, conn, protocol, s.maximumReceiveMessageSize)
 	return &loop{
 		party:                s,
 		protocol:             protocol,
 		hubConn:              hubConn,
 		streamer:             newStreamer(hubConn, s.info),
-		streamClient:         s.newStreamClient(),
+		streamClient:         newStreamClient(s.chanReceiveTimeout, s.streamBufferCapacity),
 		info:                 info,
 		dbg:                  dbg,
-		timeout:              s.clientTimeoutInterval,
+		timeout:              s.timeout,
 		keepAliveInterval:    s.keepAliveInterval,
 		enableDetailedErrors: s.enableDetailedErrors,
 	}

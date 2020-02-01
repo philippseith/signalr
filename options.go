@@ -1,6 +1,7 @@
 package signalr
 
 import (
+	"errors"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"time"
@@ -37,6 +38,30 @@ func HandshakeTimeout(timeout time.Duration) func(party) error {
 func KeepAliveInterval(interval time.Duration) func(party) error {
 	return func(p party) error {
 		p.setKeepAliveInterval(interval)
+		return nil
+	}
+}
+
+// StreamBufferCapacity is the maximum number of items that can be buffered for client upload streams.
+// If this limit is reached, the processing of invocations is blocked until the the server processes stream items.
+// Default is 10.
+func StreamBufferCapacity(capacity uint) func(party) error {
+	return func(p party) error {
+		if capacity == 0 {
+			return errors.New("unsupported StreamBufferCapacity 0")
+		}
+		p.setStreamBufferCapacity(capacity)
+		return nil
+	}
+}
+
+// ChanReceiveTimeout is the timeout for processing stream items from the client, after StreamBufferCapacity was reached
+// If the hub method is not able to process a stream item during the timeout duration,
+// the server will send a completion with error.
+// Default is 5 seconds.
+func ChanReceiveTimeout(timeout time.Duration) func(party) error {
+	return func(p party) error {
+		p.setChanReceiveTimeout(timeout)
 		return nil
 	}
 }
