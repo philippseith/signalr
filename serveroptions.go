@@ -38,18 +38,3 @@ func SimpleHubFactory(hubProto HubInterface) func(party) error {
 			return reflect.New(reflect.ValueOf(hubProto).Elem().Type()).Interface().(HubInterface)
 		})
 }
-
-// MaximumReceiveMessageSize is the maximum size of a single incoming hub message.
-// Default is 32KB
-func MaximumReceiveMessageSize(size uint) func(party) error {
-	return func(p party) error {
-		if s, ok := p.(*server); ok {
-			if size == 0 {
-				return errors.New("unsupported MaximumReceiveMessageSize 0")
-			}
-			s.maximumReceiveMessageSize = size
-			return nil
-		}
-		return errors.New("option MaximumReceiveMessageSize is server only")
-	}
-}

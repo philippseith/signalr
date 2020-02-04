@@ -32,8 +32,8 @@ func HandshakeTimeout(timeout time.Duration) func(party) error {
 
 // KeepAliveInterval is the interval if the party hasn't sent a message within,
 // a ping message is sent automatically to keep the connection open.
-// When changing KeepAliveInterval, change the TimeoutInterval setting on the other party.
-// The recommended TimeoutInterval value is double the KeepAliveInterval value.
+// When changing KeepAliveInterval, change the Timeout setting on the other party.
+// The recommended Timeout value is double the KeepAliveInterval value.
 // Default is 15 seconds.
 func KeepAliveInterval(interval time.Duration) func(party) error {
 	return func(p party) error {
@@ -51,6 +51,18 @@ func StreamBufferCapacity(capacity uint) func(party) error {
 			return errors.New("unsupported StreamBufferCapacity 0")
 		}
 		p.setStreamBufferCapacity(capacity)
+		return nil
+	}
+}
+
+// MaximumReceiveMessageSize is the maximum size of a single incoming hub message.
+// Default is 32KB
+func MaximumReceiveMessageSize(size uint) func(party) error {
+	return func(p party) error {
+		if size == 0 {
+			return errors.New("unsupported maximumReceiveMessageSize 0")
+		}
+		p.setMaximumReceiveMessageSize(size)
 		return nil
 	}
 }

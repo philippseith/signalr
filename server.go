@@ -26,12 +26,11 @@ type Server interface {
 
 type server struct {
 	partyBase
-	newHub                    func() HubInterface
-	lifetimeManager           HubLifetimeManager
-	defaultHubClients         *defaultHubClients
-	groupManager              GroupManager
-	maximumReceiveMessageSize uint
-	reconnectAllowed          bool
+	newHub            func() HubInterface
+	lifetimeManager   HubLifetimeManager
+	defaultHubClients *defaultHubClients
+	groupManager      GroupManager
+	reconnectAllowed  bool
 }
 
 // NewServer creates a new server for one type of hub. The hub type is set by one of the
@@ -49,17 +48,17 @@ func NewServer(options ...func(party) error) (Server, error) {
 			lifetimeManager: &lifetimeManager,
 		},
 		partyBase: partyBase{
-			timeout:              time.Second * 30,
-			handshakeTimeout:     time.Second * 15,
-			keepAliveInterval:    time.Second * 15,
-			chanReceiveTimeout:   time.Second * 5,
-			streamBufferCapacity: 10,
-			enableDetailedErrors: false,
-			info:                 info,
-			dbg:                  dbg,
+			_timeout:                   time.Second * 30,
+			_handshakeTimeout:          time.Second * 15,
+			_keepAliveInterval:         time.Second * 15,
+			_chanReceiveTimeout:        time.Second * 5,
+			_streamBufferCapacity:      10,
+			_maximumReceiveMessageSize: 1 << 15, // 32KB
+			_enableDetailedErrors:      false,
+			info:                       info,
+			dbg:                        dbg,
 		},
-		maximumReceiveMessageSize: 1 << 15, // 32KB
-		reconnectAllowed:          true,
+		reconnectAllowed: true,
 	}
 	for _, option := range options {
 		if option != nil {
@@ -80,7 +79,7 @@ func (s *server) Run(parentContext context.Context, conn Connection) {
 		info, _ := s.prefixLoggers()
 		_ = info.Log(evt, "processHandshake", "connectionId", conn.ConnectionID(), "error", err, react, "do not connect")
 	} else {
-		s.newLoop(parentContext, conn, protocol).Run()
+		newLoop(s, parentContext, conn, protocol).Run()
 	}
 }
 
@@ -88,20 +87,20 @@ func (s *server) onConnected(hc hubConnection) {
 	s.lifetimeManager.OnConnected(hc)
 	go func() {
 		defer s.recoverHubLifeCyclePanic(hc)
-		s.getInvocationTarget(hc).(HubInterface).OnConnected(hc.ConnectionID())
+		s.invocationTarget(hc).(HubInterface).OnConnected(hc.ConnectionID())
 	}()
 }
 
 func (s *server) onDisconnected(hc hubConnection) {
 	go func() {
 		defer s.recoverHubLifeCyclePanic(hc)
-		s.getInvocationTarget(hc).(HubInterface).OnDisconnected(hc.ConnectionID())
+		s.invocationTarget(hc).(HubInterface).OnDisconnected(hc.ConnectionID())
 	}()
 	s.lifetimeManager.OnDisconnected(hc)
 
 }
 
-func (s *server) getInvocationTarget(conn hubConnection) interface{} {
+func (s *server) invocationTarget(conn hubConnection) interface{} {
 	hub := s.newHub()
 	hub.Initialize(s.newConnectionHubContext(conn))
 	return hub
@@ -149,7 +148,7 @@ func (s *server) processHandshake(conn Connection) (HubProtocol, error) {
 	info, dbg := s.prefixLoggers()
 
 	defer conn.SetTimeout(0)
-	conn.SetTimeout(s.handshakeTimeout)
+	conn.SetTimeout(s._handshakeTimeout)
 
 	var buf bytes.Buffer
 	data := make([]byte, 1<<12)

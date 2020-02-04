@@ -10,35 +10,29 @@ import (
 )
 
 type loop struct {
-	party                party
-	info                 StructuredLogger
-	dbg                  StructuredLogger
-	protocol             HubProtocol
-	hubConn              hubConnection
-	streamer             *streamer
-	streamClient         *streamClient
-	timeout              time.Duration
-	keepAliveInterval    time.Duration
-	enableDetailedErrors bool
+	party        party
+	info         StructuredLogger
+	dbg          StructuredLogger
+	protocol     HubProtocol
+	hubConn      hubConnection
+	streamer     *streamer
+	streamClient *streamClient
 }
 
-func (s *server) newLoop(parentContext context.Context, conn Connection, protocol HubProtocol) *loop {
+func newLoop(p party, parentContext context.Context, conn Connection, protocol HubProtocol) *loop {
 	protocol = reflect.New(reflect.ValueOf(protocol).Elem().Type()).Interface().(HubProtocol)
-	_, dbg := s.loggers()
+	info, dbg := p.loggers()
 	protocol.setDebugLogger(dbg)
-	info, dbg := s.prefixLoggers()
-	hubConn := newHubConnection(parentContext, conn, protocol, s.maximumReceiveMessageSize)
+	pInfo, pDbg := p.prefixLoggers()
+	hubConn := newHubConnection(parentContext, conn, protocol, p.maximumReceiveMessageSize())
 	return &loop{
-		party:                s,
-		protocol:             protocol,
-		hubConn:              hubConn,
-		streamer:             newStreamer(hubConn, s.info),
-		streamClient:         newStreamClient(s.chanReceiveTimeout, s.streamBufferCapacity),
-		info:                 info,
-		dbg:                  dbg,
-		timeout:              s.timeout,
-		keepAliveInterval:    s.keepAliveInterval,
-		enableDetailedErrors: s.enableDetailedErrors,
+		party:        p,
+		protocol:     protocol,
+		hubConn:      hubConn,
+		streamer:     newStreamer(hubConn, info),
+		streamClient: newStreamClient(p.chanReceiveTimeout(), p.streamBufferCapacity()),
+		info:         pInfo,
+		dbg:          pDbg,
 	}
 }
 
@@ -51,8 +45,8 @@ loop:
 	for {
 		mch := make(chan interface{}, 1)
 		ech := make(chan error, 1)
-		timeoutWatchdog := time.After(l.timeout)
-		keepAliveWatchdog := time.After(l.keepAliveInterval)
+		timeoutWatchdog := time.After(l.party.timeout())
+		keepAliveWatchdog := time.After(l.party.keepAliveInterval())
 		go func() {
 			message, err := l.receive()
 			ech <- err
@@ -83,7 +77,7 @@ loop:
 				break loop
 			}
 		case <-timeoutWatchdog:
-			err = fmt.Errorf("party timeout interval elapsed (%v)", l.timeout)
+			err = fmt.Errorf("party timeout interval elapsed (%v)", l.party.timeout())
 			break loop
 		case <-keepAliveWatchdog:
 			sendMessageAndLog(func() (interface{}, error) { return l.hubConn.Ping() }, l.info)
@@ -108,7 +102,7 @@ func (l *loop) receive() (message interface{}, err error) {
 func (l *loop) handleInvocationMessage(invocation invocationMessage) {
 	_ = l.dbg.Log(evt, msgRecv, msg, fmtMsg(invocation))
 	// Transient hub, dispatch invocation here
-	if method, ok := getMethod(l.party.getInvocationTarget(l.hubConn), invocation.Target); !ok {
+	if method, ok := getMethod(l.party.invocationTarget(l.hubConn), invocation.Target); !ok {
 		// Unable to find the method
 		_ = l.info.Log(evt, "getMethod", "error", "missing method", "name", invocation.Target, react, "send completion with error")
 		sendMessageAndLog(func() (interface{}, error) {
@@ -250,7 +244,7 @@ func (l *loop) recoverInvocationPanic(invocation invocationMessage) {
 		stack := string(debug.Stack())
 		_ = l.dbg.Log(evt, "panic in target method", "error", err, "name", invocation.Target, react, "send completion with error", "stack", stack)
 		if invocation.InvocationID != "" {
-			if !l.enableDetailedErrors {
+			if !l.party.enableDetailedErrors() {
 				stack = ""
 			}
 			sendMessageAndLog(func() (interface{}, error) {
