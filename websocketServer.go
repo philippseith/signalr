@@ -11,9 +11,9 @@ import (
 )
 
 // MapHub used to register a SignalR Hub with the specified ServeMux
-func MapHub(mux *http.ServeMux, path string, hubProto HubInterface) *Server {
+func MapHub(mux *http.ServeMux, path string, options ...func(*Server) error) *Server {
 	mux.HandleFunc(fmt.Sprintf("%s/negotiateWebSocketTestServer", path), negotiateHandler)
-	server, _ := NewServer(SimpleHubFactory(hubProto))
+	server, _ := NewServer(options...)
 	mux.Handle(path, websocket.Handler(func(ws *websocket.Conn) {
 		connectionID := ws.Request().URL.Query().Get("id")
 		if len(connectionID) == 0 {
