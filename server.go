@@ -108,6 +108,8 @@ func (s *Server) newConnectionHubContext(conn hubConnection) HubContext {
 		},
 		groups:     s.groupManager,
 		connection: conn,
+		info:       s.info,
+		dbg:        s.dbg,
 	}
 }
 
