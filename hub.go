@@ -37,6 +37,11 @@ func (h *Hub) Items() *sync.Map {
 	return h.context.Items()
 }
 
+// Logger returns the logger used in this server
+func (h *Hub) Logger() (info StructuredLogger, dbg StructuredLogger) {
+	return h.context.Logger()
+}
+
 // OnConnected is called when the hub is connected
 func (h *Hub) OnConnected(string) {}
 

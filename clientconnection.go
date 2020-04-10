@@ -62,7 +62,7 @@ func (c *clientConnection) Closed() <-chan error {
 }
 
 func (c *clientConnection) Invoke(method string, arguments ...interface{}) (<-chan interface{}, <-chan error) {
-	c.loop.hubConn.SendInvocation(getID(), method, arguments)
+	c.loop.hubConn.SendInvocation(getConnectionId(), method, arguments)
 	panic("implement me")
 }
 

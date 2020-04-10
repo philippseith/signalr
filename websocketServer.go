@@ -11,14 +11,14 @@ import (
 )
 
 // MapHub used to register a SignalR Hub with the specified ServeMux
-func MapHub(mux *http.ServeMux, path string, hubProto HubInterface) Server {
+func MapHub(mux *http.ServeMux, path string, options ...func(party) error) Server {
 	mux.HandleFunc(fmt.Sprintf("%s/negotiate", path), negotiateHandler)
-	server, _ := NewServer(SimpleHubFactory(hubProto))
+	server, _ := NewServer(options...)
 	mux.Handle(path, websocket.Handler(func(ws *websocket.Conn) {
 		connectionID := ws.Request().URL.Query().Get("id")
 		if len(connectionID) == 0 {
 			// Support websocket connection without negotiateWebSocketTestServer
-			connectionID = getID()
+			connectionID = getConnectionId()
 		}
 		server.Run(context.TODO(), &webSocketConnection{ws, connectionID, 0})
 	}))
@@ -30,7 +30,7 @@ func negotiateHandler(w http.ResponseWriter, req *http.Request) {
 		w.WriteHeader(400)
 	} else {
 		response := negotiateResponse{
-			ConnectionID: getID(),
+			ConnectionID: getConnectionId(),
 			AvailableTransports: []availableTransport{
 				{
 					Transport:       "WebSockets",
@@ -42,7 +42,7 @@ func negotiateHandler(w http.ResponseWriter, req *http.Request) {
 	}
 }
 
-func getID() string {
+func getConnectionId() string {
 	bytes := make([]byte, 16)
 	// rand.Read only fails when the systems random number generator fails. Rare case, ignore
 	_, _ = rand.Read(bytes)
