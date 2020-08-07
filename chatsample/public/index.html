@@ -105,7 +105,7 @@
                 }, 100);
             });
 
-            connection.on('send', message => {
+            connection.on('receive', message => {
                 var li = document.createElement('li');
                 li.innerText = 'sent ' + message;
                 document.getElementById('messages').appendChild(li);

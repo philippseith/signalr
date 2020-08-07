@@ -36,7 +36,7 @@ func newLoop(p party, parentContext context.Context, conn Connection, protocol H
 	}
 }
 
-func (l *loop) Run() {
+func (l *loop) run() {
 	l.hubConn.Start()
 	l.party.onConnected(l.hubConn)
 	// Process messages
@@ -47,17 +47,27 @@ loop:
 		ech := make(chan error, 1)
 		timeoutWatchdog := time.After(l.party.timeout())
 		keepAliveWatchdog := time.After(l.party.keepAliveInterval())
-		go func() {
+		go func(mch chan interface{}, ech chan error) {
 			message, err := l.receive()
 			ech <- err
+			if ivm, ok := message.(invocationMessage); ok {
+				if ivm.Target == "receive" {
+					fmt.Println(ivm.Target)
+				}
+			}
+			_ = l.info.Log("Push Message")
 			mch <- message
-		}()
+		}(mch, ech)
 		select {
 		case message := <-mch:
+			_ = l.info.Log("Message")
 			err = <-ech
 			if err == nil {
 				switch message := message.(type) {
 				case invocationMessage:
+					if message.Target == "receive" {
+						fmt.Println("receive")
+					}
 					l.handleInvocationMessage(message)
 				case cancelInvocationMessage:
 					_ = l.dbg.Log(evt, msgRecv, msg, fmtMsg(message))
@@ -80,6 +90,7 @@ loop:
 			err = fmt.Errorf("party timeout interval elapsed (%v)", l.party.timeout())
 			break loop
 		case <-keepAliveWatchdog:
+			_ = l.info.Log("Keepalive")
 			sendMessageAndLog(func() (interface{}, error) { return l.hubConn.Ping() }, l.info)
 		case err = <-l.hubConn.Aborted():
 			break loop
@@ -95,6 +106,11 @@ loop:
 func (l *loop) receive() (message interface{}, err error) {
 	if message, err = l.hubConn.Receive(); err != nil {
 		_ = l.info.Log(evt, msgRecv, "error", err, msg, fmtMsg(message), react, "close connection")
+	}
+	if ivm, ok := message.(invocationMessage); ok {
+		if ivm.Target == "receive" {
+			fmt.Println(ivm.Target)
+		}
 	}
 	return message, err
 }

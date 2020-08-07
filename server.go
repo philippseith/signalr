@@ -73,13 +73,13 @@ func NewServer(options ...func(party) error) (Server, error) {
 	return server, nil
 }
 
-// Run runs the server on one connection. The same server might be run on different connections in parallel
+// run runs the server on one connection. The same server might be run on different connections in parallel
 func (s *server) Run(parentContext context.Context, conn Connection) {
 	if protocol, err := s.processHandshake(conn); err != nil {
 		info, _ := s.prefixLoggers()
 		_ = info.Log(evt, "processHandshake", "connectionId", conn.ConnectionID(), "error", err, react, "do not connect")
 	} else {
-		newLoop(s, parentContext, conn, protocol).Run()
+		newLoop(s, parentContext, conn, protocol).run()
 	}
 }
 
