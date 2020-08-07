@@ -21,15 +21,12 @@ func NewWebsocketClientConnection(address string) ClientConnection {
 	}
 	defer resp.Body.Close()
 
-	fmt.Println("response Status:", resp.Status)
-	fmt.Println("response Headers:", resp.Header)
 	body, _ := ioutil.ReadAll(resp.Body)
 	nr := negotiateResponse{}
 	err = json.Unmarshal(body, &nr)
 	if err != nil {
 		panic(err)
 	}
-	fmt.Println("response %v", nr)
 	u, err := url.Parse(address)
 	if err != nil {
 		panic(err)

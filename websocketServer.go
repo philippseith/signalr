@@ -15,14 +15,22 @@ import (
 func MapHub(mux *http.ServeMux, path string, options ...func(party) error) Server {
 	mux.HandleFunc(fmt.Sprintf("%s/negotiate", path), negotiateHandler)
 	server, _ := NewServer(options...)
-	mux.Handle(path, websocket.Handler(func(ws *websocket.Conn) {
-		connectionID := ws.Request().URL.Query().Get("id")
-		if len(connectionID) == 0 {
-			// Support websocket connection without negotiate
-			connectionID = NewConnectionId()
-		}
-		server.Run(context.TODO(), &webSocketConnection{ws, connectionID, 0})
-	}))
+	mux.Handle(path, websocket.Server{
+		// Use custom Handshake. Default with websocket.Handler is to reject nil origin.
+		// This not useful when testing using the typescript client outside the browser (e.g. in node.js)
+		Handshake: func(config *websocket.Config, req *http.Request) (err error) {
+			config.Origin, err = websocket.Origin(config, req)
+			return err
+		},
+		Handler: func(ws *websocket.Conn) {
+			connectionID := ws.Request().URL.Query().Get("id")
+			if len(connectionID) == 0 {
+				// Support websocket connection without negotiateWebSocketTestServer
+				connectionID = NewConnectionId()
+			}
+			server.Run(context.TODO(), &webSocketConnection{ws, connectionID, 0})
+		},
+	})
 	return server
 }
 
