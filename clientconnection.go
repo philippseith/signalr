@@ -65,7 +65,7 @@ func (c *clientConnection) Start() <-chan error {
 		var ctx context.Context
 		ctx, c.cancel = context.WithCancel(context.Background())
 		c.loop = newLoop(c, ctx, c.conn, protocol)
-		c.loop.run()
+		c.loop.Run()
 	}
 	return errCh
 }

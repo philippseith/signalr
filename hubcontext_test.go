@@ -317,26 +317,27 @@ var _ = Describe("HubContext", func() {
 
 	Context("Abort()", func() {
 		It("should abort the connection of the current caller", func() {
-			conn := connect(&contextHub{})
-			conn.ClientSend(`{"type":1,"invocationId": "ab0ab0","target":"abort"}`)
+			conn0 := connect(&contextHub{})
+			conn1 := connect(&contextHub{})
+			conn0.ClientSend(`{"type":1,"invocationId": "ab0ab0","target":"abort"}`)
 			// Wait for execution
 			Expect(<-hubContextInvocationQueue).To(Equal("Abort()"))
 			// Abort should close
-			msg := <-conn.received
+			msg := <-conn0.received
 			Expect(msg).To(BeAssignableToTypeOf(closeMessage{}))
 			Expect(msg.(closeMessage).Error).NotTo(BeNil())
 			// Other connections should still work
-			//conns[1].ClientSend(`{"type":1,"invocationId": "ab123","target":"additem","arguments":["first",2]}`)
-			//// Wait for execution
-			//Expect(<-hubContextInvocationQueue).To(Equal("AddItem()"))
-			//// Read completion
-			//<-conns[1].received
-			//conns[1].ClientSend(`{"type":1,"invocationId": "ab123","target":"getitem","arguments":["first"]}`)
-			//// Wait for execution
-			//Expect(<-hubContextInvocationQueue).To(Equal("GetItem()"))
-			//msg = <-conns[0].received
-			//Expect(msg).To(BeAssignableToTypeOf(completionMessage{}))
-			//Expect(msg.(completionMessage).Result).To(Equal(float64(2)))
+			conn1.ClientSend(`{"type":1,"invocationId": "ab123","target":"additem","arguments":["first",2]}`)
+			// Wait for execution
+			Expect(<-hubContextInvocationQueue).To(Equal("AddItem()"))
+			// Read completion
+			<-conn1.received
+			conn1.ClientSend(`{"type":1,"invocationId": "ab123","target":"getitem","arguments":["first"]}`)
+			// Wait for execution
+			Expect(<-hubContextInvocationQueue).To(Equal("GetItem()"))
+			msg = <-conn1.received
+			Expect(msg).To(BeAssignableToTypeOf(completionMessage{}))
+			Expect(msg.(completionMessage).Result).To(Equal(float64(2)))
 
 		})
 	})

@@ -29,7 +29,7 @@ func newHubConnection(parentContext context.Context, connection Connection, prot
 		maximumReceiveMessageSize: maximumReceiveMessageSize,
 		items:                     &sync.Map{},
 		context:                   parentContext,
-		aborted:                   make(chan error, 1),
+		abortChans:                make([]chan error, 0),
 	}
 }
 
@@ -37,7 +37,7 @@ type defaultHubConnection struct {
 	protocol                  HubProtocol
 	mx                        sync.Mutex
 	connected                 bool
-	aborted                   chan error
+	abortChans                []chan error
 	connection                Connection
 	maximumReceiveMessageSize uint
 	items                     *sync.Map
@@ -77,13 +77,20 @@ func (c *defaultHubConnection) Abort() {
 	defer c.mx.Unlock()
 	c.mx.Lock()
 	if c.connected {
-		c.aborted <- errors.New("connection aborted from hub")
+		err := errors.New("connection aborted from hub")
+		for _, ch := range c.abortChans {
+			ch <- err
+		}
 		c.connected = false
 	}
 }
 
 func (c *defaultHubConnection) Aborted() <-chan error {
-	return c.aborted
+	defer c.mx.Unlock()
+	c.mx.Lock()
+	ch := make(chan error, 1)
+	c.abortChans = append(c.abortChans, ch)
+	return ch
 }
 
 func (c *defaultHubConnection) Receive() (interface{}, error) {
@@ -179,8 +186,8 @@ func (c *defaultHubConnection) Ping() (hubMessage, error) {
 func (c *defaultHubConnection) writeMessage(message interface{}) error {
 	_, isCloseMsg := message.(closeMessage)
 	if !c.IsConnected() &&
-		// Allow sending closeMessage when Aborted
-		(c.Aborted() == nil || !isCloseMsg) {
+		// Allow sending closeMessage when not connected
+		!isCloseMsg {
 		return c.context.Err()
 	}
 	e := make(chan error, 1)

@@ -36,63 +36,82 @@ func newLoop(p party, parentContext context.Context, conn Connection, protocol H
 	}
 }
 
-func (l *loop) run() {
+type loopEvent struct {
+	message          interface{}
+	err              error
+	keepAliveTimeout bool
+	clientTimeout    bool
+}
+
+func (l *loop) Run() {
 	l.hubConn.Start()
 	l.party.onConnected(l.hubConn)
+	abortConnCh := l.hubConn.Aborted()
 	// Process messages
 	var err error
 loop:
 	for {
-		mch := make(chan interface{}, 1)
-		ech := make(chan error, 1)
-		timeoutWatchdog := time.After(l.party.timeout())
-		keepAliveWatchdog := time.After(l.party.keepAliveInterval())
-		go func(mch chan interface{}, ech chan error) {
+		ch := make(chan loopEvent, 1)
+		go func() {
+			<-time.After(l.party.keepAliveInterval())
+			ch <- loopEvent{
+				keepAliveTimeout: true,
+			}
+		}()
+		go func() {
+			<-time.After(l.party.timeout())
+			ch <- loopEvent{
+				clientTimeout: true,
+			}
+		}()
+		go func() {
 			message, err := l.receive()
-			ech <- err
-			if ivm, ok := message.(invocationMessage); ok {
-				if ivm.Target == "receive" {
-					fmt.Println(ivm.Target)
-				}
+			ch <- loopEvent{
+				message: message,
+				err:     err,
 			}
-			_ = l.info.Log("Push Message")
-			mch <- message
-		}(mch, ech)
+		}()
 		select {
-		case message := <-mch:
-			_ = l.info.Log("Message")
-			err = <-ech
-			if err == nil {
-				switch message := message.(type) {
-				case invocationMessage:
-					if message.Target == "receive" {
-						fmt.Println("receive")
+		case evt := <-ch:
+			// First sender wins
+			go func() {
+				// Ignore the loosers
+				<-ch
+				<-ch
+				close(ch)
+			}()
+			// Parse the winning event
+			if evt.message != nil || evt.err != nil {
+				err = evt.err
+				if err == nil {
+					switch message := evt.message.(type) {
+					case invocationMessage:
+						l.handleInvocationMessage(message)
+					case cancelInvocationMessage:
+						_ = l.dbg.Log(evt, msgRecv, msg, fmtMsg(message))
+						l.streamer.Stop(message.InvocationID)
+					case streamItemMessage:
+						err = l.handleStreamItemMessage(message)
+					case completionMessage:
+						err = l.handleCompletionMessage(message)
+					case closeMessage:
+						_ = l.dbg.Log(evt, msgRecv, msg, fmtMsg(message))
+						break loop
+					case hubMessage:
+						err = l.handleOtherMessage(message)
+						// No default case necessary, because the protocol would return either a hubMessage or an error
 					}
-					l.handleInvocationMessage(message)
-				case cancelInvocationMessage:
-					_ = l.dbg.Log(evt, msgRecv, msg, fmtMsg(message))
-					l.streamer.Stop(message.InvocationID)
-				case streamItemMessage:
-					err = l.handleStreamItemMessage(message)
-				case completionMessage:
-					err = l.handleCompletionMessage(message)
-				case closeMessage:
-					_ = l.dbg.Log(evt, msgRecv, msg, fmtMsg(message))
-					break loop
-				case hubMessage:
-					err = l.handleOtherMessage(message)
 				}
-			}
-			if err != nil {
+				if err != nil {
+					break loop
+				}
+			} else if evt.keepAliveTimeout {
+				sendMessageAndLog(func() (interface{}, error) { return l.hubConn.Ping() }, l.info)
+			} else if evt.clientTimeout {
+				err = fmt.Errorf("client timeout interval elapsed (%v)", l.party.timeout())
 				break loop
 			}
-		case <-timeoutWatchdog:
-			err = fmt.Errorf("party timeout interval elapsed (%v)", l.party.timeout())
-			break loop
-		case <-keepAliveWatchdog:
-			_ = l.info.Log("Keepalive")
-			sendMessageAndLog(func() (interface{}, error) { return l.hubConn.Ping() }, l.info)
-		case err = <-l.hubConn.Aborted():
+		case <-abortConnCh:
 			break loop
 		}
 	}
