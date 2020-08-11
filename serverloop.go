@@ -37,6 +37,13 @@ func (s *Server) newServerLoop(parentContext context.Context, conn Connection, p
 	}
 }
 
+type loopEvent struct {
+	message          interface{}
+	err              error
+	keepAliveTimeout bool
+	clientTimeout    bool
+}
+
 func (sl *serverLoop) Run() {
 	sl.hubConn.Start()
 	sl.server.lifetimeManager.OnConnected(sl.hubConn)
@@ -44,49 +51,72 @@ func (sl *serverLoop) Run() {
 		defer sl.recoverHubLifeCyclePanic()
 		sl.server.getHub(sl.hubConn).OnConnected(sl.hubConn.ConnectionID())
 	}()
+	abortConnCh := sl.hubConn.Aborted()
 	// Process messages
 	var err error
 loop:
 	for {
-		mch := make(chan interface{}, 1)
-		ech := make(chan error, 1)
-		clientWatchdog := time.After(sl.server.clientTimeoutInterval)
-		keepAliveWatchdog := time.After(sl.server.keepAliveInterval)
+		ch := make(chan loopEvent, 1)
+		go func() {
+			<-time.After(sl.server.keepAliveInterval)
+			ch <- loopEvent{
+				keepAliveTimeout: true,
+			}
+		}()
+		go func() {
+			<-time.After(sl.server.clientTimeoutInterval)
+			ch <- loopEvent{
+				clientTimeout: true,
+			}
+		}()
 		go func() {
 			message, err := sl.receive()
-			ech <- err
-			mch <- message
+			ch <- loopEvent{
+				message: message,
+				err:     err,
+			}
 		}()
 		select {
-		case message := <-mch:
-			err = <-ech
-			if err == nil {
-				switch message := message.(type) {
-				case invocationMessage:
-					sl.handleInvocationMessage(message)
-				case cancelInvocationMessage:
-					_ = sl.dbg.Log(evt, msgRecv, msg, fmtMsg(message))
-					sl.streamer.Stop(message.InvocationID)
-				case streamItemMessage:
-					err = sl.handleStreamItemMessage(message)
-				case completionMessage:
-					err = sl.handleCompletionMessage(message)
-				case closeMessage:
-					_ = sl.dbg.Log(evt, msgRecv, msg, fmtMsg(message))
-					break loop
-				case hubMessage:
-					err = sl.handleOtherMessage(message)
+		case evt := <-ch:
+			// First sender wins
+			go func() {
+				// Ignore the loosers
+				<-ch
+				<-ch
+				close(ch)
+			}()
+			// Parse the winning event
+			if evt.message != nil || evt.err != nil {
+				err = evt.err
+				if err == nil {
+					switch message := evt.message.(type) {
+					case invocationMessage:
+						sl.handleInvocationMessage(message)
+					case cancelInvocationMessage:
+						_ = sl.dbg.Log(evt, msgRecv, msg, fmtMsg(message))
+						sl.streamer.Stop(message.InvocationID)
+					case streamItemMessage:
+						err = sl.handleStreamItemMessage(message)
+					case completionMessage:
+						err = sl.handleCompletionMessage(message)
+					case closeMessage:
+						_ = sl.dbg.Log(evt, msgRecv, msg, fmtMsg(message))
+						break loop
+					case hubMessage:
+						err = sl.handleOtherMessage(message)
+						// No default case necessary, because the protocol would return either a hubMessage or an error
+					}
 				}
-			}
-			if err != nil {
+				if err != nil {
+					break loop
+				}
+			} else if evt.keepAliveTimeout {
+				sendMessageAndLog(func() (interface{}, error) { return sl.hubConn.Ping() }, sl.info)
+			} else if evt.clientTimeout {
+				err = fmt.Errorf("client timeout interval elapsed (%v)", sl.server.clientTimeoutInterval)
 				break loop
 			}
-		case <-clientWatchdog:
-			err = fmt.Errorf("client timeout interval elapsed (%v)", sl.server.clientTimeoutInterval)
-			break loop
-		case <-keepAliveWatchdog:
-			sendMessageAndLog(func() (interface{}, error) { return sl.hubConn.Ping() }, sl.info)
-		case err = <-sl.hubConn.Aborted():
+		case <-abortConnCh:
 			break loop
 		}
 	}
