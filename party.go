@@ -1,6 +1,9 @@
 package signalr
 
-import "time"
+import (
+	"github.com/go-kit/kit/log"
+	"time"
+)
 
 type party interface {
 	onConnected(hc hubConnection)
@@ -34,6 +37,20 @@ type party interface {
 
 	maximumReceiveMessageSize() uint
 	setMaximumReceiveMessageSize(size uint)
+}
+
+func newPartyBase(info log.Logger, dbg log.Logger) partyBase {
+	return partyBase{
+		_timeout:                   time.Second * 30,
+		_handshakeTimeout:          time.Second * 15,
+		_keepAliveInterval:         time.Second * 5,
+		_chanReceiveTimeout:        time.Second * 5,
+		_streamBufferCapacity:      10,
+		_maximumReceiveMessageSize: 1 << 15, // 32KB
+		_enableDetailedErrors:      false,
+		info:                       info,
+		dbg:                        dbg,
+	}
 }
 
 type partyBase struct {

@@ -8,14 +8,13 @@ import (
 	"github.com/go-kit/kit/log"
 	"os"
 	"reflect"
-	"time"
 )
 
 type ClientConnection interface {
 	party
 	Start() <-chan error
-	Close() <-chan error
-	Closed() <-chan error
+	Close() error
+	// Closed() <-chan error TODO Define connection state
 	Invoke(method string, arguments ...interface{}) (<-chan interface{}, <-chan error)
 	Stream(method string, arguments ...interface{}) (<-chan interface{}, <-chan error)
 	Upstream(method string, arguments ...interface{}) <-chan error
@@ -26,18 +25,9 @@ type ClientConnection interface {
 
 func NewClientConnection(conn Connection, options ...func(party) error) (ClientConnection, error) {
 	info, dbg := buildInfoDebugLogger(log.NewLogfmtLogger(os.Stderr), true)
-	c := &clientConnection{conn: conn,
-		partyBase: partyBase{
-			_timeout:                   time.Second * 30,
-			_handshakeTimeout:          time.Second * 15,
-			_keepAliveInterval:         time.Second * 5,
-			_chanReceiveTimeout:        time.Second * 5,
-			_streamBufferCapacity:      10,
-			_maximumReceiveMessageSize: 1 << 15, // 32KB
-			_enableDetailedErrors:      false,
-			info:                       info,
-			dbg:                        dbg,
-		},
+	c := &clientConnection{
+		conn:      conn,
+		partyBase: newPartyBase(info, dbg),
 	}
 	for _, option := range options {
 		if option != nil {
@@ -59,24 +49,23 @@ type clientConnection struct {
 
 func (c *clientConnection) Start() <-chan error {
 	errCh := make(chan error, 1)
-	if protocol, err := c.processHandshake(); err != nil {
-		errCh <- err
-	} else {
-		var ctx context.Context
-		ctx, c.cancel = context.WithCancel(context.Background())
-		c.loop = newLoop(c, ctx, c.conn, protocol)
-		c.loop.Run()
-	}
+	go func() {
+		if protocol, err := c.processHandshake(); err != nil {
+			errCh <- err
+		} else {
+			errCh <- nil
+			var ctx context.Context
+			ctx, c.cancel = context.WithCancel(context.Background())
+			c.loop = newLoop(c, ctx, c.conn, protocol)
+			c.loop.Run()
+		}
+	}()
 	return errCh
 }
 
-func (c *clientConnection) Close() <-chan error {
-	c.loop.hubConn.Close("", false)
-	panic("implement me")
-}
-
-func (c *clientConnection) Closed() <-chan error {
-	panic("implement me")
+func (c *clientConnection) Close() error {
+	_, err := c.loop.hubConn.Close("", false)
+	return err
 }
 
 func (c *clientConnection) Invoke(method string, arguments ...interface{}) (<-chan interface{}, <-chan error) {
@@ -109,9 +98,14 @@ func (c *clientConnection) allowReconnect() bool {
 }
 
 func (c *clientConnection) prefixLoggers() (info StructuredLogger, dbg StructuredLogger) {
+	if c.receiver == nil {
+		return log.WithPrefix(c.info, "ts", log.DefaultTimestampUTC, "class", "Client"),
+			log.WithPrefix(c.dbg, "ts", log.DefaultTimestampUTC, "class", "Client")
+	}
 	return log.WithPrefix(c.info, "ts", log.DefaultTimestampUTC,
 			"class", "Client",
-			"hub", reflect.ValueOf(c.receiver).Elem().Type()), log.WithPrefix(c.dbg, "ts", log.DefaultTimestampUTC,
+			"hub", reflect.ValueOf(c.receiver).Elem().Type()),
+		log.WithPrefix(c.dbg, "ts", log.DefaultTimestampUTC,
 			"class", "Client",
 			"hub", reflect.ValueOf(c.receiver).Elem().Type())
 }

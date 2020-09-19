@@ -15,7 +15,6 @@ import (
 	"os"
 	"reflect"
 	"runtime/debug"
-	"time"
 )
 
 // Server is a SignalR server for one type of hub
@@ -47,17 +46,7 @@ func NewServer(options ...func(party) error) (Server, error) {
 		groupManager: &defaultGroupManager{
 			lifetimeManager: &lifetimeManager,
 		},
-		partyBase: partyBase{
-			_timeout:                   time.Second * 30,
-			_handshakeTimeout:          time.Second * 15,
-			_keepAliveInterval:         time.Second * 15,
-			_chanReceiveTimeout:        time.Second * 5,
-			_streamBufferCapacity:      10,
-			_maximumReceiveMessageSize: 1 << 15, // 32KB
-			_enableDetailedErrors:      false,
-			info:                       info,
-			dbg:                        dbg,
-		},
+		partyBase:        newPartyBase(info, dbg),
 		reconnectAllowed: true,
 	}
 	for _, option := range options {

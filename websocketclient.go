@@ -1,15 +1,12 @@
 package signalr
 
 import (
-	//"context"
 	"encoding/json"
 	"fmt"
 	"golang.org/x/net/websocket"
-	"net/url"
-
-	//"golang.org/x/net/websocket"
 	"io/ioutil"
 	"net/http"
+	"net/url"
 )
 
 func NewWebsocketClientConnection(address string) ClientConnection {
@@ -19,7 +16,7 @@ func NewWebsocketClientConnection(address string) ClientConnection {
 	if err != nil {
 		panic(err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, _ := ioutil.ReadAll(resp.Body)
 	nr := negotiateResponse{}
