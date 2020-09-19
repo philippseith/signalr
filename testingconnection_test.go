@@ -116,8 +116,9 @@ func (t *testingConnection) SetFailWrite(fail string) {
 	t.failWrite = fail
 }
 
-func newTestingConnection() *testingConnection {
-	conn := newTestingConnectionBeforeHandshake()
+// newTestingConnectionForServer builds a testingConnection with an sent (but not yet received) handshake for testing a server
+func newTestingConnectionForServer() *testingConnection {
+	conn := newTestingConnection()
 	// client receive loop
 	go receiveLoop(conn)()
 	// Send initial Handshake
@@ -126,7 +127,7 @@ func newTestingConnection() *testingConnection {
 	return conn
 }
 
-func newTestingConnectionBeforeHandshake() *testingConnection {
+func newTestingConnection() *testingConnection {
 	cliReader, srvWriter := io.Pipe()
 	srvReader, cliWriter := io.Pipe()
 	conn := testingConnection{
