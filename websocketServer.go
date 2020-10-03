@@ -25,7 +25,7 @@ func MapHub(mux *http.ServeMux, path string, options ...func(party) error) Serve
 		Handler: func(ws *websocket.Conn) {
 			connectionID := ws.Request().URL.Query().Get("id")
 			if len(connectionID) == 0 {
-				// Support websocket connection without negotiateWebSocketTestServer
+				// Support websocket connection without negotiate
 				connectionID = NewConnectionId()
 			}
 			server.Run(context.TODO(), &webSocketConnection{ws, connectionID, 0})

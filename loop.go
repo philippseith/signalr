@@ -15,6 +15,7 @@ type loop struct {
 	dbg          StructuredLogger
 	protocol     HubProtocol
 	hubConn      hubConnection
+	invokeClient *invokeClient
 	streamer     *streamer
 	streamClient *streamClient
 }
@@ -29,6 +30,7 @@ func newLoop(p party, parentContext context.Context, conn Connection, protocol H
 		party:        p,
 		protocol:     protocol,
 		hubConn:      hubConn,
+		invokeClient: newInvokeClient(p.chanReceiveTimeout()),
 		streamer:     newStreamer(hubConn, info),
 		streamClient: newStreamClient(p.chanReceiveTimeout(), p.streamBufferCapacity()),
 		info:         pInfo,
@@ -126,11 +128,6 @@ func (l *loop) receive() (message interface{}, err error) {
 	if message, err = l.hubConn.Receive(); err != nil {
 		_ = l.info.Log(evt, msgRecv, "error", err, msg, fmtMsg(message), react, "close connection")
 	}
-	if ivm, ok := message.(invocationMessage); ok {
-		if ivm.Target == "receive" {
-			fmt.Println(ivm.Target)
-		}
-	}
 	return message, err
 }
 
@@ -225,7 +222,16 @@ func (l *loop) handleStreamItemMessage(streamItemMessage streamItemMessage) erro
 func (l *loop) handleCompletionMessage(message completionMessage) error {
 	_ = l.dbg.Log(evt, msgRecv, msg, fmtMsg(message))
 	var err error
-	if err = l.streamClient.receiveCompletionItem(message); err != nil {
+	if l.streamClient.handlesInvocationID(message.InvocationID) && !l.invokeClient.handlesInvocationID(message.InvocationID) {
+		err = l.streamClient.receiveCompletionItem(message)
+	} else if !l.streamClient.handlesInvocationID(message.InvocationID) && l.invokeClient.handlesInvocationID(message.InvocationID) {
+		err = l.invokeClient.receiveCompletionItem(message)
+	} else if l.streamClient.handlesInvocationID(message.InvocationID) && l.invokeClient.handlesInvocationID(message.InvocationID) {
+		err = fmt.Errorf("invocationID %v used for streaming and invocation", message.InvocationID)
+	} else {
+		err = fmt.Errorf("unkown invocationID %v", message.InvocationID)
+	}
+	if err != nil {
 		_ = l.info.Log(evt, msgRecv, "error", err, msg, fmtMsg(message), react, "close connection")
 	}
 	return err

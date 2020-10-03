@@ -144,6 +144,11 @@ func convertNumberToChannelType(chanElm interface{}, number float64) (chanVal re
 	}
 }
 
+func (c *streamClient) handlesInvocationID(invocationID string) bool {
+	_, ok := c.upstreamChannels[invocationID]
+	return ok
+}
+
 func (c *streamClient) receiveCompletionItem(completion completionMessage) error {
 	if channel, ok := c.upstreamChannels[completion.InvocationID]; ok {
 		var err error

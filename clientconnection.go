@@ -16,6 +16,7 @@ type ClientConnection interface {
 	Close() error
 	// Closed() <-chan error TODO Define connection state
 	Invoke(method string, arguments ...interface{}) (<-chan interface{}, <-chan error)
+	Send(method string, arguments ...interface{}) <-chan error
 	Stream(method string, arguments ...interface{}) (<-chan interface{}, <-chan error)
 	Upstream(method string, arguments ...interface{}) <-chan error
 	// It is not necessary to register callbacks with On(...),
@@ -28,6 +29,7 @@ func NewClientConnection(conn Connection, options ...func(party) error) (ClientC
 	c := &clientConnection{
 		conn:      conn,
 		partyBase: newPartyBase(info, dbg),
+		lastID:    -1,
 	}
 	for _, option := range options {
 		if option != nil {
@@ -45,6 +47,7 @@ type clientConnection struct {
 	cancel   context.CancelFunc
 	loop     *loop
 	receiver interface{}
+	lastID   int64
 }
 
 func (c *clientConnection) Start() <-chan error {
@@ -69,8 +72,24 @@ func (c *clientConnection) Close() error {
 }
 
 func (c *clientConnection) Invoke(method string, arguments ...interface{}) (<-chan interface{}, <-chan error) {
-	c.loop.hubConn.SendInvocation("", method, arguments)
-	panic("implement me")
+	id := c.GetNewInvocationID()
+	resultChan, errChan := c.loop.invokeClient.newInvocation(id)
+	if _, err := c.loop.hubConn.SendInvocation(id, method, arguments); err != nil {
+		c.loop.invokeClient.deleteInvocation(id)
+		errChan <- err
+	}
+	return resultChan, errChan
+}
+
+func (c *clientConnection) Send(method string, arguments ...interface{}) <-chan error {
+	id := c.GetNewInvocationID()
+	_, errChan := c.loop.invokeClient.newInvocation(id)
+	_, err := c.loop.hubConn.SendInvocation(id, method, arguments)
+	if err != nil {
+		c.loop.invokeClient.deleteInvocation(id)
+		errChan <- err
+	}
+	return errChan
 }
 
 func (c *clientConnection) Stream(method string, arguments ...interface{}) (<-chan interface{}, <-chan error) {
@@ -83,6 +102,11 @@ func (c *clientConnection) Upstream(method string, arguments ...interface{}) <-c
 
 func (c *clientConnection) SetReceiver(receiver interface{}) {
 	c.receiver = receiver
+}
+
+func (c *clientConnection) GetNewInvocationID() string {
+	c.lastID++
+	return fmt.Sprint(c.lastID)
 }
 
 func (c *clientConnection) onConnected(hubConnection) {}
@@ -102,12 +126,19 @@ func (c *clientConnection) prefixLoggers() (info StructuredLogger, dbg Structure
 		return log.WithPrefix(c.info, "ts", log.DefaultTimestampUTC, "class", "Client"),
 			log.WithPrefix(c.dbg, "ts", log.DefaultTimestampUTC, "class", "Client")
 	}
+	var t reflect.Type = nil
+	switch reflect.ValueOf(c.receiver).Kind() {
+	case reflect.Ptr:
+		t = reflect.ValueOf(c.receiver).Elem().Type()
+	case reflect.Struct:
+		t = reflect.ValueOf(c.receiver).Type()
+	}
 	return log.WithPrefix(c.info, "ts", log.DefaultTimestampUTC,
 			"class", "Client",
-			"hub", reflect.ValueOf(c.receiver).Elem().Type()),
+			"hub", t),
 		log.WithPrefix(c.dbg, "ts", log.DefaultTimestampUTC,
 			"class", "Client",
-			"hub", reflect.ValueOf(c.receiver).Elem().Type())
+			"hub", t)
 }
 
 func (c *clientConnection) processHandshake() (HubProtocol, error) {

@@ -2,11 +2,13 @@ package signalr
 
 import (
 	"context"
+	"fmt"
 	"github.com/go-kit/kit/log"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"io"
 	"os"
+	"strings"
 	"time"
 )
 
@@ -54,7 +56,20 @@ type simpleHub struct {
 	Hub
 }
 
+func (s *simpleHub) InvokeMe(arg1 string, arg2 int) string {
+	return fmt.Sprintf("%v%v", arg1, arg2)
+}
+
+func (s *simpleHub) Callback(arg1 string) {
+	s.Hub.context.Clients().Caller().Send("OnCallback", strings.ToUpper(arg1))
+}
+
 type simpleReceiver struct {
+	result string
+}
+
+func (s *simpleReceiver) OnCallback(result string) {
+	s.result = result
 }
 
 var _ = FDescribe("ClientConnection", func() {
@@ -77,9 +92,114 @@ var _ = FDescribe("ClientConnection", func() {
 			Expect(clientConn).NotTo(BeNil())
 			// Start it
 			err = <-clientConn.Start()
-			// Handshake successful
 			Expect(err).NotTo(HaveOccurred())
 			close(done)
+		})
+	})
+	Context("Invoke", func() {
+		server, _ := NewServer(SimpleHubFactory(&simpleHub{}),
+			Logger(log.NewLogfmtLogger(os.Stderr), false),
+			ChanReceiveTimeout(200*time.Millisecond),
+			StreamBufferCapacity(5))
+		// Create both ends of the connection
+		cliConn, srvConn := newClientServerConnections()
+		// Start the server
+		go server.Run(context.TODO(), srvConn)
+		// Create the ClientConnection
+		clientConn, _ := NewClientConnection(cliConn)
+		// Start it
+		clientConn.SetReceiver(simpleReceiver{})
+		<-clientConn.Start()
+		It("should invoke a server method and return the result", func(done Done) {
+			ch, errCh := clientConn.Invoke("InvokeMe", "A", 1)
+			select {
+			case val := <-ch:
+				Expect(val).To(Equal("A1"))
+			case err := <-errCh:
+				Expect(err).NotTo(HaveOccurred())
+			}
+			close(done)
+		})
+		It("should invoke a server method and return the error when arguments don't match", func(done Done) {
+			ch, errCh := clientConn.Invoke("InvokeMe", "A", "B")
+			select {
+			case <-ch:
+				Fail("Value should not be returned")
+			case err := <-errCh:
+				Expect(err).To(HaveOccurred())
+			}
+			close(done)
+		})
+
+	})
+	Context("Send", func() {
+		server, _ := NewServer(SimpleHubFactory(&simpleHub{}),
+			Logger(log.NewLogfmtLogger(os.Stderr), false),
+			ChanReceiveTimeout(200*time.Millisecond),
+			StreamBufferCapacity(5))
+		// Create both ends of the connection
+		cliConn, srvConn := newClientServerConnections()
+		// Start the server
+		go server.Run(context.TODO(), srvConn)
+		// Create the ClientConnection
+		clientConn, _ := NewClientConnection(cliConn)
+		// Start it
+		receiver := &simpleReceiver{}
+		clientConn.SetReceiver(receiver)
+		<-clientConn.Start()
+		It("should invoke a server method and get the result via callback", func(done Done) {
+			receiver.result = ""
+			errCh := clientConn.Send("Callback", "low")
+			ch := make(chan string, 1)
+			go func() {
+				for {
+					if receiver.result != "" {
+						ch <- receiver.result
+						break
+					}
+				}
+			}()
+			select {
+			case val := <-ch:
+				Expect(val).To(Equal("LOW"))
+			case err := <-errCh:
+				Expect(err).NotTo(HaveOccurred())
+			}
+			close(done)
+		})
+		It("should invoke a server method and return the error when arguments don't match", func(done Done) {
+			receiver.result = ""
+			errCh := clientConn.Send("Callback", 1)
+			ch := make(chan string, 1)
+			go func() {
+				for {
+					if receiver.result != "" {
+						ch <- receiver.result
+						break
+					}
+				}
+			}()
+			select {
+			case <-ch:
+				Fail("Value should not be returned")
+			case err := <-errCh:
+				Expect(err).To(HaveOccurred())
+			}
+			close(done)
+		})
+
+	})
+	Context("GetConnectionID", func() {
+		It("should return distinct IDs", func() {
+			c, _ := NewClientConnection(nil)
+			cc := c.(*clientConnection)
+			ids := make(map[string]string, 0)
+			for i := 1; i < 100000; i++ {
+				id := cc.GetNewInvocationID()
+				_, ok := ids[id]
+				Expect(ok).To(BeFalse())
+				ids[id] = id
+			}
 		})
 	})
 })
