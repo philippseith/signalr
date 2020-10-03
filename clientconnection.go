@@ -17,8 +17,8 @@ type ClientConnection interface {
 	// Closed() <-chan error TODO Define connection state
 	Invoke(method string, arguments ...interface{}) (<-chan interface{}, <-chan error)
 	Send(method string, arguments ...interface{}) <-chan error
-	Stream(method string, arguments ...interface{}) (<-chan interface{}, <-chan error)
-	Upstream(method string, arguments ...interface{}) <-chan error
+	PullStream(method string, arguments ...interface{}) (<-chan interface{}, error)
+	PushStreams(method string, arguments ...interface{}) <-chan error
 	// It is not necessary to register callbacks with On(...),
 	// the server can "call back" all exported methods of the receiver
 	SetReceiver(receiver interface{})
@@ -92,11 +92,17 @@ func (c *clientConnection) Send(method string, arguments ...interface{}) <-chan 
 	return errChan
 }
 
-func (c *clientConnection) Stream(method string, arguments ...interface{}) (<-chan interface{}, <-chan error) {
-	panic("implement me")
+func (c *clientConnection) PullStream(method string, arguments ...interface{}) (<-chan interface{}, error) {
+	id := c.GetNewInvocationID()
+	upChan := c.loop.streamClient.newUpstreamChannel(id)
+	if _, err := c.loop.hubConn.SendStreamInvocation(id, method, arguments); err != nil {
+		c.loop.streamClient.deleteUpstreamChannel(id)
+		return nil, err
+	}
+	return upChan, nil
 }
 
-func (c *clientConnection) Upstream(method string, arguments ...interface{}) <-chan error {
+func (c *clientConnection) PushStreams(method string, arguments ...interface{}) <-chan error {
 	panic("implement me")
 }
 

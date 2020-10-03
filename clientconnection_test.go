@@ -64,6 +64,18 @@ func (s *simpleHub) Callback(arg1 string) {
 	s.Hub.context.Clients().Caller().Send("OnCallback", strings.ToUpper(arg1))
 }
 
+func (s *simpleHub) ReadStream() chan string {
+	ch := make(chan string)
+	go func() {
+		ch <- "A"
+		ch <- "B"
+		ch <- "C"
+		ch <- "D"
+		close(ch)
+	}()
+	return ch
+}
+
 type simpleReceiver struct {
 	result string
 }
@@ -72,7 +84,7 @@ func (s *simpleReceiver) OnCallback(result string) {
 	s.result = result
 }
 
-var _ = FDescribe("ClientConnection", func() {
+var _ = Describe("ClientConnection", func() {
 	Context("Start", func() {
 		It("should connect to the server", func(done Done) {
 			// Create a simple server
@@ -130,7 +142,17 @@ var _ = FDescribe("ClientConnection", func() {
 			}
 			close(done)
 		})
-
+		It("should invoke a server method and return the result after a bad invocation", func(done Done) {
+			clientConn.Invoke("InvokeMe", "A", "B")
+			ch, errCh := clientConn.Invoke("InvokeMe", "A", 1)
+			select {
+			case val := <-ch:
+				Expect(val).To(Equal("A1"))
+			case err := <-errCh:
+				Expect(err).NotTo(HaveOccurred())
+			}
+			close(done)
+		})
 	})
 	Context("Send", func() {
 		server, _ := NewServer(SimpleHubFactory(&simpleHub{}),
@@ -188,6 +210,32 @@ var _ = FDescribe("ClientConnection", func() {
 			close(done)
 		})
 
+	})
+	Context("PullStream", func() {
+		server, _ := NewServer(SimpleHubFactory(&simpleHub{}),
+			Logger(log.NewLogfmtLogger(os.Stderr), false),
+			ChanReceiveTimeout(200*time.Millisecond),
+			StreamBufferCapacity(5))
+		// Create both ends of the connection
+		cliConn, srvConn := newClientServerConnections()
+		// Start the server
+		go server.Run(context.TODO(), srvConn)
+		// Create the ClientConnection
+		clientConn, _ := NewClientConnection(cliConn)
+		// Start it
+		receiver := &simpleReceiver{}
+		clientConn.SetReceiver(receiver)
+		<-clientConn.Start()
+		It("should pull a stream from the server", func(done Done) {
+			ch, err := clientConn.PullStream("ReadStream")
+			Expect(err).NotTo(HaveOccurred())
+			values := make([]interface{}, 0)
+			for val := range ch {
+				values = append(values, val)
+			}
+			Expect(values).To(Equal([]interface{}{"A", "B", "C", "D"}))
+			close(done)
+		})
 	})
 	Context("GetConnectionID", func() {
 		It("should return distinct IDs", func() {
