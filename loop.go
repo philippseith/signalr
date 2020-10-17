@@ -153,14 +153,23 @@ func (l *loop) handleInvocationMessage(invocation invocationMessage) {
 			method.Call(in)
 		}()
 	} else {
-		// hub method might take a long time
-		go func() {
-			result := func() []reflect.Value {
-				defer l.recoverInvocationPanic(invocation)
-				return method.Call(in)
+		// Stream invocation is only allowed when the method has only one return value
+		// We allow no channel return values, because a client can receive as stream with only one item
+		if invocation.Type == 4 && method.Type().NumOut() != 1 {
+			sendMessageAndLog(func() (interface{}, error) {
+				return l.hubConn.Completion(invocation.InvocationID, nil,
+					fmt.Sprintf("Stream invocation of method %s which has not return value kind channel", invocation.Target))
+			}, l.info)
+		} else {
+			// hub method might take a long time
+			go func() {
+				result := func() []reflect.Value {
+					defer l.recoverInvocationPanic(invocation)
+					return method.Call(in)
+				}()
+				l.returnInvocationResult(invocation, result)
 			}()
-			l.returnInvocationResult(invocation, result)
-		}()
+		}
 	}
 }
 
@@ -222,12 +231,10 @@ func (l *loop) handleStreamItemMessage(streamItemMessage streamItemMessage) erro
 func (l *loop) handleCompletionMessage(message completionMessage) error {
 	_ = l.dbg.Log(evt, msgRecv, msg, fmtMsg(message))
 	var err error
-	if l.streamClient.handlesInvocationID(message.InvocationID) && !l.invokeClient.handlesInvocationID(message.InvocationID) {
-		err = l.streamClient.receiveCompletionItem(message)
-	} else if !l.streamClient.handlesInvocationID(message.InvocationID) && l.invokeClient.handlesInvocationID(message.InvocationID) {
+	if l.streamClient.handlesInvocationID(message.InvocationID) {
+		err = l.streamClient.receiveCompletionItem(message, l.invokeClient)
+	} else if l.invokeClient.handlesInvocationID(message.InvocationID) {
 		err = l.invokeClient.receiveCompletionItem(message)
-	} else if l.streamClient.handlesInvocationID(message.InvocationID) && l.invokeClient.handlesInvocationID(message.InvocationID) {
-		err = fmt.Errorf("invocationID %v used for streaming and invocation", message.InvocationID)
 	} else {
 		err = fmt.Errorf("unkown invocationID %v", message.InvocationID)
 	}
@@ -297,6 +304,9 @@ func (l *loop) recoverInvocationPanic(invocation invocationMessage) {
 
 func buildMethodArguments(method reflect.Value, invocation invocationMessage,
 	streamClient *streamClient, protocol HubProtocol) (arguments []reflect.Value, clientStreaming bool, err error) {
+	if len(invocation.StreamIds)+len(invocation.Arguments) != method.Type().NumIn() {
+		return nil, false, fmt.Errorf("parameter mismatch calling method %v", invocation.Target)
+	}
 	arguments = make([]reflect.Value, method.Type().NumIn())
 	chanCount := 0
 	for i := 0; i < method.Type().NumIn(); i++ {
@@ -318,7 +328,7 @@ func buildMethodArguments(method reflect.Value, invocation invocationMessage,
 			arguments[i] = arg.Elem()
 		}
 	}
-	if len(invocation.StreamIds) > chanCount {
+	if len(invocation.StreamIds) != chanCount {
 		return arguments, chanCount > 0, fmt.Errorf("to many StreamIds for channel parameters of method %v", invocation.Target)
 	}
 	return arguments, chanCount > 0, nil

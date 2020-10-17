@@ -54,6 +54,9 @@ func newClientServerConnections() (cliConn *pipeConnection, svrConn *pipeConnect
 
 type simpleHub struct {
 	Hub
+	receiveStreamArg        string
+	receiveStreamChanValues []int
+	receiveStreamDone       chan struct{}
 }
 
 func (s *simpleHub) InvokeMe(arg1 string, arg2 int) string {
@@ -74,6 +77,17 @@ func (s *simpleHub) ReadStream() chan string {
 		close(ch)
 	}()
 	return ch
+}
+
+func (s *simpleHub) ReceiveStream(arg string, ch <-chan int) {
+	s.receiveStreamArg = arg
+	s.receiveStreamChanValues = make([]int, 0)
+	go func(ch <-chan int, done chan struct{}) {
+		for v := range ch {
+			s.receiveStreamChanValues = append(s.receiveStreamChanValues, v)
+		}
+		done <- struct{}{}
+	}(ch, s.receiveStreamDone)
 }
 
 type simpleReceiver struct {
@@ -123,36 +137,23 @@ var _ = Describe("ClientConnection", func() {
 		clientConn.SetReceiver(simpleReceiver{})
 		<-clientConn.Start()
 		It("should invoke a server method and return the result", func(done Done) {
-			ch, errCh := clientConn.Invoke("InvokeMe", "A", 1)
-			select {
-			case val := <-ch:
-				Expect(val).To(Equal("A1"))
-			case err := <-errCh:
-				Expect(err).NotTo(HaveOccurred())
-			}
+			r := <-clientConn.Invoke("InvokeMe", "A", 1)
+			Expect(r.Value).To(Equal("A1"))
+			Expect(r.Error).NotTo(HaveOccurred())
 			close(done)
-		})
+		}, 1000)
 		It("should invoke a server method and return the error when arguments don't match", func(done Done) {
-			ch, errCh := clientConn.Invoke("InvokeMe", "A", "B")
-			select {
-			case <-ch:
-				Fail("Value should not be returned")
-			case err := <-errCh:
-				Expect(err).To(HaveOccurred())
-			}
+			r := <-clientConn.Invoke("InvokeMe", "A", "B")
+			Expect(r.Error).To(HaveOccurred())
 			close(done)
-		})
+		}, 1000)
 		It("should invoke a server method and return the result after a bad invocation", func(done Done) {
 			clientConn.Invoke("InvokeMe", "A", "B")
-			ch, errCh := clientConn.Invoke("InvokeMe", "A", 1)
-			select {
-			case val := <-ch:
-				Expect(val).To(Equal("A1"))
-			case err := <-errCh:
-				Expect(err).NotTo(HaveOccurred())
-			}
+			r := <-clientConn.Invoke("InvokeMe", "A", 1)
+			Expect(r.Value).To(Equal("A1"))
+			Expect(r.Error).NotTo(HaveOccurred())
 			close(done)
-		})
+		}, 1000)
 	})
 	Context("Send", func() {
 		server, _ := NewServer(SimpleHubFactory(&simpleHub{}),
@@ -227,13 +228,34 @@ var _ = Describe("ClientConnection", func() {
 		clientConn.SetReceiver(receiver)
 		<-clientConn.Start()
 		It("should pull a stream from the server", func(done Done) {
-			ch, err := clientConn.PullStream("ReadStream")
-			Expect(err).NotTo(HaveOccurred())
+			ch := clientConn.PullStream("ReadStream")
 			values := make([]interface{}, 0)
-			for val := range ch {
-				values = append(values, val)
+			for r := range ch {
+				Expect(r.Error).NotTo(HaveOccurred())
+				values = append(values, r.Value)
 			}
 			Expect(values).To(Equal([]interface{}{"A", "B", "C", "D"}))
+			close(done)
+		})
+		It("should return no error when the method returns no stream but a single result", func(done Done) {
+			r := <-clientConn.PullStream("InvokeMe", "A", 1)
+			Expect(r.Error).NotTo(HaveOccurred())
+			Expect(r.Value).To(Equal("A1"))
+			close(done)
+		})
+		It("should return an error when the method returns no result", func(done Done) {
+			r := <-clientConn.PullStream("Callback", "A")
+			Expect(r.Error).To(HaveOccurred())
+			close(done)
+		})
+		It("should return an error when the method does not exist on the server", func(done Done) {
+			r := <-clientConn.PullStream("ReadStream2")
+			Expect(r.Error).To(HaveOccurred())
+			close(done)
+		})
+		It("should return an error when the method arguments are not matching", func(done Done) {
+			r := <-clientConn.PullStream("ReadStream", "A", 1)
+			Expect(r.Error).To(HaveOccurred())
 			close(done)
 		})
 	})
@@ -243,11 +265,42 @@ var _ = Describe("ClientConnection", func() {
 			cc := c.(*clientConnection)
 			ids := make(map[string]string, 0)
 			for i := 1; i < 100000; i++ {
-				id := cc.GetNewInvocationID()
+				id := cc.GetNewID()
 				_, ok := ids[id]
 				Expect(ok).To(BeFalse())
 				ids[id] = id
 			}
+		})
+	})
+	Context("PushStreams", func() {
+		simpleHub := &simpleHub{}
+		simpleHub.receiveStreamDone = make(chan struct{}, 1)
+		server, _ := NewServer(HubFactory(func() HubInterface { return simpleHub }),
+			Logger(log.NewLogfmtLogger(os.Stderr), false),
+			ChanReceiveTimeout(200*time.Millisecond),
+			StreamBufferCapacity(5))
+		// Create both ends of the connection
+		cliConn, srvConn := newClientServerConnections()
+		// Start the server
+		go server.Run(context.TODO(), srvConn)
+		// Create the ClientConnection
+		clientConn, _ := NewClientConnection(cliConn)
+		// Start it
+		receiver := &simpleReceiver{}
+		clientConn.SetReceiver(receiver)
+		<-clientConn.Start()
+		It("should push a stream to the server", func(done Done) {
+			ch := make(chan int, 1)
+			_ = clientConn.PushStreams("ReceiveStream", "test", ch)
+			go func(ch chan int) {
+				for i := 1; i < 5; i++ {
+					ch <- i
+				}
+				close(ch)
+			}(ch)
+			<-simpleHub.receiveStreamDone
+			Expect(simpleHub.receiveStreamArg).To(Equal("test"))
+			close(done)
 		})
 	})
 })

@@ -13,7 +13,7 @@ type hubConnection interface {
 	ConnectionID() string
 	Receive() (interface{}, error)
 	SendInvocation(id string, target string, args []interface{}) (invocationMessage, error)
-	SendStreamInvocation(id string, target string, args []interface{}) (invocationMessage, error)
+	SendStreamInvocation(id string, target string, args []interface{}, streamIds []string) (invocationMessage, error)
 	StreamItem(id string, item interface{}) (streamItemMessage, error)
 	Completion(id string, result interface{}, error string) (completionMessage, error)
 	Close(error string, allowReconnect bool) (closeMessage, error)
@@ -158,12 +158,13 @@ func (c *defaultHubConnection) SendInvocation(id string, target string, args []i
 	return invocationMessage, c.writeMessage(invocationMessage)
 }
 
-func (c *defaultHubConnection) SendStreamInvocation(id string, target string, args []interface{}) (invocationMessage, error) {
+func (c *defaultHubConnection) SendStreamInvocation(id string, target string, args []interface{}, streamIds []string) (invocationMessage, error) {
 	var invocationMessage = invocationMessage{
 		Type:         4,
 		InvocationID: id,
 		Target:       target,
 		Arguments:    args,
+		StreamIds:    streamIds,
 	}
 	return invocationMessage, c.writeMessage(invocationMessage)
 }

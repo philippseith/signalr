@@ -15,9 +15,9 @@ type ClientConnection interface {
 	Start() <-chan error
 	Close() error
 	// Closed() <-chan error TODO Define connection state
-	Invoke(method string, arguments ...interface{}) (<-chan interface{}, <-chan error)
+	Invoke(method string, arguments ...interface{}) <-chan InvokeResult
 	Send(method string, arguments ...interface{}) <-chan error
-	PullStream(method string, arguments ...interface{}) (<-chan interface{}, error)
+	PullStream(method string, arguments ...interface{}) <-chan InvokeResult
 	PushStreams(method string, arguments ...interface{}) <-chan error
 	// It is not necessary to register callbacks with On(...),
 	// the server can "call back" all exported methods of the receiver
@@ -71,46 +71,75 @@ func (c *clientConnection) Close() error {
 	return err
 }
 
-func (c *clientConnection) Invoke(method string, arguments ...interface{}) (<-chan interface{}, <-chan error) {
-	id := c.GetNewInvocationID()
+func (c *clientConnection) Invoke(method string, arguments ...interface{}) <-chan InvokeResult {
+	id := c.GetNewID()
 	resultChan, errChan := c.loop.invokeClient.newInvocation(id)
+	ch := MakeInvokeResultChan(resultChan, errChan)
 	if _, err := c.loop.hubConn.SendInvocation(id, method, arguments); err != nil {
-		c.loop.invokeClient.deleteInvocation(id)
 		errChan <- err
+		c.loop.invokeClient.deleteInvocation(id)
 	}
-	return resultChan, errChan
+	return ch
 }
 
 func (c *clientConnection) Send(method string, arguments ...interface{}) <-chan error {
-	id := c.GetNewInvocationID()
+	id := c.GetNewID()
 	_, errChan := c.loop.invokeClient.newInvocation(id)
 	_, err := c.loop.hubConn.SendInvocation(id, method, arguments)
 	if err != nil {
-		c.loop.invokeClient.deleteInvocation(id)
 		errChan <- err
+		c.loop.invokeClient.deleteInvocation(id)
 	}
 	return errChan
 }
 
-func (c *clientConnection) PullStream(method string, arguments ...interface{}) (<-chan interface{}, error) {
-	id := c.GetNewInvocationID()
+func (c *clientConnection) PullStream(method string, arguments ...interface{}) <-chan InvokeResult {
+	id := c.GetNewID()
+	_, errChan := c.loop.invokeClient.newInvocation(id)
 	upChan := c.loop.streamClient.newUpstreamChannel(id)
-	if _, err := c.loop.hubConn.SendStreamInvocation(id, method, arguments); err != nil {
+	ch := MakeInvokeResultChan(upChan, errChan)
+	if _, err := c.loop.hubConn.SendStreamInvocation(id, method, arguments, nil); err != nil {
+		errChan <- err
 		c.loop.streamClient.deleteUpstreamChannel(id)
-		return nil, err
+		c.loop.invokeClient.deleteInvocation(id)
 	}
-	return upChan, nil
+	return ch
 }
 
 func (c *clientConnection) PushStreams(method string, arguments ...interface{}) <-chan error {
-	panic("implement me")
+	id := c.GetNewID()
+	_, errChan := c.loop.invokeClient.newInvocation(id)
+	invokeArgs := make([]interface{}, 0)
+	reflectedChannels := make([]reflect.Value, 0)
+	streamIds := make([]string, 0)
+	// Parse arguments for channels and other kind of arguments
+	for _, arg := range arguments {
+		if reflect.TypeOf(arg).Kind() == reflect.Chan {
+			reflectedChannels = append(reflectedChannels, reflect.ValueOf(arg))
+			streamIds = append(streamIds, c.GetNewID())
+		} else {
+			invokeArgs = append(invokeArgs, arg)
+		}
+	}
+	// Tell the server we are streaming now
+	if _, err := c.loop.hubConn.SendStreamInvocation(c.GetNewID(), method, invokeArgs, streamIds); err != nil {
+		errChan <- err
+		c.loop.invokeClient.deleteInvocation(id)
+		return errChan
+	}
+	// Start streaming on all channels
+	for i, reflectedChannel := range reflectedChannels {
+		c.loop.streamer.Start(streamIds[i], reflectedChannel)
+	}
+	return errChan
 }
 
 func (c *clientConnection) SetReceiver(receiver interface{}) {
 	c.receiver = receiver
 }
 
-func (c *clientConnection) GetNewInvocationID() string {
+// GetNewID returns a new, connection-unique id for invocations and streams
+func (c *clientConnection) GetNewID() string {
 	c.lastID++
 	return fmt.Sprint(c.lastID)
 }

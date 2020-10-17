@@ -51,7 +51,10 @@ func (c *streamClient) newUpstreamChannel(invocationID string) <-chan interface{
 
 func (c *streamClient) deleteUpstreamChannel(invocationID string) {
 	c.mx.Lock()
-	delete(c.upstreamChannels, invocationID)
+	if upChan, ok := c.upstreamChannels[invocationID]; ok {
+		upChan.Close()
+		delete(c.upstreamChannels, invocationID)
+	}
 	c.mx.Unlock()
 }
 
@@ -172,28 +175,35 @@ func (c *streamClient) handlesInvocationID(invocationID string) bool {
 	return ok
 }
 
-func (c *streamClient) receiveCompletionItem(completion completionMessage) error {
+func (c *streamClient) receiveCompletionItem(completion completionMessage, invokeClient *invokeClient) error {
 	c.mx.Lock()
 	channel, ok := c.upstreamChannels[completion.InvocationID]
 	c.mx.Unlock()
 	if ok {
 		var err error
-		if completion.Result != nil {
-			c.mx.Lock()
-			running := c.runningStreams[completion.InvocationID]
-			c.mx.Unlock()
-			if running {
-				err = fmt.Errorf("client side streaming: received completion with result %v", completion)
-			} else {
-				// handle result like a stream item
-				err = c.receiveStreamItem(streamItemMessage{
-					Type:         2,
-					InvocationID: completion.InvocationID,
-					Item:         completion.Result,
-				})
+		if completion.Error != "" {
+			// Push error to the error channel
+			err = invokeClient.receiveCompletionItem(completion)
+		} else {
+			if completion.Result != nil {
+				c.mx.Lock()
+				running := c.runningStreams[completion.InvocationID]
+				c.mx.Unlock()
+				if running {
+					err = fmt.Errorf("client side streaming: received completion with result %v", completion)
+				} else {
+					// handle result like a stream item
+					err = c.receiveStreamItem(streamItemMessage{
+						Type:         2,
+						InvocationID: completion.InvocationID,
+						Item:         completion.Result,
+					})
+				}
 			}
 		}
 		channel.Close()
+		// Close error channel
+		invokeClient.deleteInvocation(completion.InvocationID)
 		c.mx.Lock()
 		delete(c.upstreamChannels, completion.InvocationID)
 		delete(c.runningStreams, completion.InvocationID)
