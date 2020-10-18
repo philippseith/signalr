@@ -26,7 +26,7 @@ func MapHub(mux *http.ServeMux, path string, options ...func(party) error) Serve
 			connectionID := ws.Request().URL.Query().Get("id")
 			if len(connectionID) == 0 {
 				// Support websocket connection without negotiate
-				connectionID = NewConnectionId()
+				connectionID = newConnectionID()
 			}
 			server.Run(context.TODO(), &webSocketConnection{ws, connectionID, 0})
 		},
@@ -41,7 +41,7 @@ func negotiateHandler(w http.ResponseWriter, req *http.Request) {
 		slurp, _ := ioutil.ReadAll(req.Body)
 		fmt.Printf("%v", string(slurp))
 		response := negotiateResponse{
-			ConnectionID: NewConnectionId(),
+			ConnectionID: newConnectionID(),
 			AvailableTransports: []availableTransport{
 				{
 					Transport:       "WebSockets",
@@ -53,7 +53,7 @@ func negotiateHandler(w http.ResponseWriter, req *http.Request) {
 	}
 }
 
-func NewConnectionId() string {
+func newConnectionID() string {
 	bytes := make([]byte, 16)
 	// rand.Read only fails when the systems random number generator fails. Rare case, ignore
 	_, _ = rand.Read(bytes)

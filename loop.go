@@ -20,7 +20,7 @@ type loop struct {
 	streamClient *streamClient
 }
 
-func newLoop(p party, parentContext context.Context, conn Connection, protocol HubProtocol) *loop {
+func newLoop(parentContext context.Context, p party, conn Connection, protocol HubProtocol) *loop {
 	protocol = reflect.New(reflect.ValueOf(protocol).Elem().Type()).Interface().(HubProtocol)
 	info, dbg := p.loggers()
 	protocol.setDebugLogger(dbg)

@@ -10,6 +10,7 @@ import (
 	"reflect"
 )
 
+// ClientConnection is the signalR connection used on the client side
 type ClientConnection interface {
 	party
 	Start() <-chan error
@@ -24,6 +25,8 @@ type ClientConnection interface {
 	SetReceiver(receiver interface{})
 }
 
+// NewClientConnection build a new ClientConnection.
+// conn is a transport connection.
 func NewClientConnection(conn Connection, options ...func(party) error) (ClientConnection, error) {
 	info, dbg := buildInfoDebugLogger(log.NewLogfmtLogger(os.Stderr), true)
 	c := &clientConnection{
@@ -59,7 +62,7 @@ func (c *clientConnection) Start() <-chan error {
 			errCh <- nil
 			var ctx context.Context
 			ctx, c.cancel = context.WithCancel(context.Background())
-			c.loop = newLoop(c, ctx, c.conn, protocol)
+			c.loop = newLoop(ctx, c, c.conn, protocol)
 			c.loop.Run()
 		}
 	}()

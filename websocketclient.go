@@ -9,6 +9,7 @@ import (
 	"net/url"
 )
 
+// NewWebsocketClientConnection creates a signalR ClientConnection using the websocket transport
 func NewWebsocketClientConnection(address string) ClientConnection {
 	req, err := http.NewRequest("POST", fmt.Sprintf("%v/negotiate", address), nil)
 	if err != nil {
