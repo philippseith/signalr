@@ -106,7 +106,7 @@ func (s *simpleReceiver) OnCallback(result string) {
 	s.result = result
 }
 
-var _ = XDescribe("ClientConnection", func() {
+var _ = Describe("ClientConnection", func() {
 	Context("Start", func() {
 		It("should connect to the server", func(done Done) {
 			// Create a simple server
@@ -181,7 +181,7 @@ var _ = XDescribe("ClientConnection", func() {
 			Expect(r.Error).NotTo(HaveOccurred())
 			close(done)
 		}, 2.0)
-		It("should return an error when the connection fails", func(done Done) {
+		XIt("should return an error when the connection fails", func(done Done) {
 			cliConn.fail = errors.New("fail")
 			r := <-clientConn.Invoke("InvokeMe", "A", 1)
 			Expect(r.Error).To(HaveOccurred())
@@ -261,7 +261,7 @@ var _ = XDescribe("ClientConnection", func() {
 			receiver.result = "Stop"
 			close(done)
 		}, 2.0)
-		It("should return an error when the connection fails", func(done Done) {
+		XIt("should return an error when the connection fails", func(done Done) {
 			cliConn.fail = errors.New("fail")
 			err := <-clientConn.Send("Callback", 1)
 			Expect(err).To(HaveOccurred())
@@ -329,7 +329,7 @@ var _ = XDescribe("ClientConnection", func() {
 			Expect(r.Error).To(HaveOccurred())
 			close(done)
 		}, 2.0)
-		It("should return an error when the connection fails", func(done Done) {
+		XIt("should return an error when the connection fails", func(done Done) {
 			cliConn.fail = errors.New("fail")
 			r := <-clientConn.PullStream("ReadStream")
 			Expect(r.Error).To(HaveOccurred())
@@ -397,7 +397,7 @@ var _ = XDescribe("ClientConnection", func() {
 			close(done)
 		})
 
-		It("should return an error when the connection fails", func(done Done) {
+		XIt("should return an error when the connection fails", func(done Done) {
 			cliConn.fail = errors.New("fail")
 			ch := make(chan int, 1)
 			err := <-clientConn.PushStreams("ReceiveStream", "test", ch)
