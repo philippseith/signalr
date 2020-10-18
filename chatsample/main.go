@@ -130,9 +130,6 @@ func runHTTPServer(address string, hub signalr.HubInterface) {
 }
 
 func runHTTPClient(address string, client interface{}) {
-	// TODO post to address/negotiate
-	// TODO Create ws client connection
-	// TODO conn := &webSocketConnection(ws, signalR.NewConnectionId(), 0)
 	c := signalr.NewWebsocketClientConnection(address) // HubProtocol is determined inside
 	c.SetReceiver(client)
 	c.Start()
@@ -153,6 +150,6 @@ func main() {
 	go runHTTPServer("localhost:8086", hub)
 	<-time.After(time.Millisecond * 2)
 	go runHTTPClient("http://localhost:8086/chat", &client{})
-	ch := make(chan struct{}, 0)
+	ch := make(chan struct{})
 	<-ch
 }

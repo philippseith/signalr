@@ -130,63 +130,86 @@ var _ = Describe("ClientConnection", func() {
 			err = clientConn.Close()
 			Expect(err).NotTo(HaveOccurred())
 			close(done)
-		})
+		}, 1.0)
 	})
 	Context("Invoke", func() {
-		server, _ := NewServer(SimpleHubFactory(&simpleHub{}),
-			Logger(log.NewLogfmtLogger(os.Stderr), false),
-			ChanReceiveTimeout(200*time.Millisecond),
-			StreamBufferCapacity(5))
-		// Create both ends of the connection
-		cliConn, srvConn := newClientServerConnections()
-		// Start the server
-		go server.Run(context.TODO(), srvConn)
-		// Create the ClientConnection
-		clientConn, _ := NewClientConnection(cliConn)
-		// Start it
-		clientConn.SetReceiver(simpleReceiver{})
-		<-clientConn.Start()
+		var cliConn *pipeConnection
+		var srvConn *pipeConnection
+		var clientConn ClientConnection
+		BeforeEach(func(done Done) {
+			server, _ := NewServer(SimpleHubFactory(&simpleHub{}),
+				Logger(log.NewLogfmtLogger(os.Stderr), false),
+				ChanReceiveTimeout(200*time.Millisecond),
+				StreamBufferCapacity(5))
+			// Create both ends of the connection
+			cliConn, srvConn = newClientServerConnections()
+			// Start the server
+			go server.Run(context.TODO(), srvConn)
+			// Create the ClientConnection
+			clientConn, _ = NewClientConnection(cliConn)
+			// Start it
+			clientConn.SetReceiver(simpleReceiver{})
+			<-clientConn.Start()
+			close(done)
+		}, 2.0)
+		AfterEach(func(done Done) {
+			_ = clientConn.Close()
+			close(done)
+		}, 2.0)
+
 		It("should invoke a server method and return the result", func(done Done) {
 			r := <-clientConn.Invoke("InvokeMe", "A", 1)
 			Expect(r.Value).To(Equal("A1"))
 			Expect(r.Error).NotTo(HaveOccurred())
 			close(done)
-		}, 1000)
+		}, 2.0)
 		It("should invoke a server method and return the error when arguments don't match", func(done Done) {
 			r := <-clientConn.Invoke("InvokeMe", "A", "B")
 			Expect(r.Error).To(HaveOccurred())
 			close(done)
-		}, 1000)
+		}, 2.0)
 		It("should invoke a server method and return the result after a bad invocation", func(done Done) {
 			clientConn.Invoke("InvokeMe", "A", "B")
 			r := <-clientConn.Invoke("InvokeMe", "A", 1)
 			Expect(r.Value).To(Equal("A1"))
 			Expect(r.Error).NotTo(HaveOccurred())
 			close(done)
-		}, 1000)
+		}, 2.0)
 		It("should return an error when the connection fails", func(done Done) {
 			cliConn.fail = errors.New("fail")
 			defer func() { cliConn.fail = nil }()
 			r := <-clientConn.Invoke("InvokeMe", "A", 1)
 			Expect(r.Error).To(HaveOccurred())
 			close(done)
-		}, 1000)
+		}, 2.0)
 	})
 	Context("Send", func() {
-		server, _ := NewServer(SimpleHubFactory(&simpleHub{}),
-			Logger(log.NewLogfmtLogger(os.Stderr), false),
-			ChanReceiveTimeout(200*time.Millisecond),
-			StreamBufferCapacity(5))
-		// Create both ends of the connection
-		cliConn, srvConn := newClientServerConnections()
-		// Start the server
-		go server.Run(context.TODO(), srvConn)
-		// Create the ClientConnection
-		clientConn, _ := NewClientConnection(cliConn)
-		// Start it
-		receiver := &simpleReceiver{}
-		clientConn.SetReceiver(receiver)
-		<-clientConn.Start()
+		var cliConn *pipeConnection
+		var srvConn *pipeConnection
+		var clientConn ClientConnection
+		var receiver *simpleReceiver
+		BeforeEach(func(done Done) {
+			server, _ := NewServer(SimpleHubFactory(&simpleHub{}),
+				Logger(log.NewLogfmtLogger(os.Stderr), false),
+				ChanReceiveTimeout(200*time.Millisecond),
+				StreamBufferCapacity(5))
+			// Create both ends of the connection
+			cliConn, srvConn = newClientServerConnections()
+			// Start the server
+			go server.Run(context.TODO(), srvConn)
+			// Create the ClientConnection
+			clientConn, _ = NewClientConnection(cliConn)
+			// Start it
+			receiver = &simpleReceiver{}
+			clientConn.SetReceiver(receiver)
+			<-clientConn.Start()
+			close(done)
+		}, 2.0)
+		AfterEach(func(done Done) {
+			_ = clientConn.Close()
+			close(done)
+		}, 2.0)
+
 		It("should invoke a server method and get the result via callback", func(done Done) {
 			receiver.result = ""
 			errCh := clientConn.Send("Callback", "low")
@@ -206,7 +229,7 @@ var _ = Describe("ClientConnection", func() {
 				Expect(err).NotTo(HaveOccurred())
 			}
 			close(done)
-		})
+		}, 2.0)
 		It("should invoke a server method and return the error when arguments don't match", func(done Done) {
 			receiver.result = ""
 			errCh := clientConn.Send("Callback", 1)
@@ -226,30 +249,41 @@ var _ = Describe("ClientConnection", func() {
 				Expect(err).To(HaveOccurred())
 			}
 			close(done)
-		})
+		}, 2.0)
 		It("should return an error when the connection fails", func(done Done) {
 			cliConn.fail = errors.New("fail")
 			defer func() { cliConn.fail = nil }()
 			err := <-clientConn.Send("Callback", 1)
 			Expect(err).To(HaveOccurred())
 			close(done)
-		}, 1000)
+		}, 2.0)
 	})
 	Context("PullStream", func() {
-		server, _ := NewServer(SimpleHubFactory(&simpleHub{}),
-			Logger(log.NewLogfmtLogger(os.Stderr), false),
-			ChanReceiveTimeout(200*time.Millisecond),
-			StreamBufferCapacity(5))
-		// Create both ends of the connection
-		cliConn, srvConn := newClientServerConnections()
-		// Start the server
-		go server.Run(context.TODO(), srvConn)
-		// Create the ClientConnection
-		clientConn, _ := NewClientConnection(cliConn)
-		// Start it
-		receiver := &simpleReceiver{}
-		clientConn.SetReceiver(receiver)
-		<-clientConn.Start()
+		var cliConn *pipeConnection
+		var srvConn *pipeConnection
+		var clientConn ClientConnection
+		BeforeEach(func(done Done) {
+			server, _ := NewServer(SimpleHubFactory(&simpleHub{}),
+				Logger(log.NewLogfmtLogger(os.Stderr), false),
+				ChanReceiveTimeout(200*time.Millisecond),
+				StreamBufferCapacity(5))
+			// Create both ends of the connection
+			cliConn, srvConn = newClientServerConnections()
+			// Start the server
+			go server.Run(context.TODO(), srvConn)
+			// Create the ClientConnection
+			clientConn, _ = NewClientConnection(cliConn)
+			// Start it
+			receiver := &simpleReceiver{}
+			clientConn.SetReceiver(receiver)
+			<-clientConn.Start()
+			close(done)
+		}, 2.0)
+		AfterEach(func(done Done) {
+			_ = clientConn.Close()
+			close(done)
+		}, 2.0)
+
 		It("should pull a stream from the server", func(done Done) {
 			ch := clientConn.PullStream("ReadStream")
 			values := make([]interface{}, 0)
@@ -265,36 +299,36 @@ var _ = Describe("ClientConnection", func() {
 			Expect(r.Error).NotTo(HaveOccurred())
 			Expect(r.Value).To(Equal("A1"))
 			close(done)
-		})
+		}, 2.0)
 		It("should return an error when the method returns no result", func(done Done) {
 			r := <-clientConn.PullStream("Callback", "A")
 			Expect(r.Error).To(HaveOccurred())
 			close(done)
-		})
+		}, 2.0)
 		It("should return an error when the method does not exist on the server", func(done Done) {
 			r := <-clientConn.PullStream("ReadStream2")
 			Expect(r.Error).To(HaveOccurred())
 			close(done)
-		})
+		}, 2.0)
 		It("should return an error when the method arguments are not matching", func(done Done) {
 			r := <-clientConn.PullStream("ReadStream", "A", 1)
 			Expect(r.Error).To(HaveOccurred())
 			close(done)
-		})
+		}, 2.0)
 		It("should return an error when the connection fails", func(done Done) {
 			cliConn.fail = errors.New("fail")
 			defer func() { cliConn.fail = nil }()
 			r := <-clientConn.PullStream("ReadStream")
 			Expect(r.Error).To(HaveOccurred())
 			close(done)
-		}, 1000)
+		}, 2.0)
 	})
 	Context("GetConnectionID", func() {
 		It("should return distinct IDs", func() {
 			c, _ := NewClientConnection(nil)
 			cc := c.(*clientConnection)
-			ids := make(map[string]string, 0)
-			for i := 1; i < 100000; i++ {
+			ids := make(map[string]string)
+			for i := 1; i < 10000; i++ {
 				id := cc.GetNewID()
 				_, ok := ids[id]
 				Expect(ok).To(BeFalse())
@@ -303,22 +337,34 @@ var _ = Describe("ClientConnection", func() {
 		})
 	})
 	Context("PushStreams", func() {
-		simpleHub := &simpleHub{}
-		simpleHub.receiveStreamDone = make(chan struct{}, 1)
-		server, _ := NewServer(HubFactory(func() HubInterface { return simpleHub }),
-			Logger(log.NewLogfmtLogger(os.Stderr), false),
-			ChanReceiveTimeout(200*time.Millisecond),
-			StreamBufferCapacity(5))
-		// Create both ends of the connection
-		cliConn, srvConn := newClientServerConnections()
-		// Start the server
-		go server.Run(context.TODO(), srvConn)
-		// Create the ClientConnection
-		clientConn, _ := NewClientConnection(cliConn)
-		// Start it
-		receiver := &simpleReceiver{}
-		clientConn.SetReceiver(receiver)
-		<-clientConn.Start()
+		var cliConn *pipeConnection
+		var srvConn *pipeConnection
+		var clientConn ClientConnection
+		var hub *simpleHub
+		BeforeEach(func(done Done) {
+			hub = &simpleHub{}
+			hub.receiveStreamDone = make(chan struct{}, 1)
+			server, _ := NewServer(HubFactory(func() HubInterface { return hub }),
+				Logger(log.NewLogfmtLogger(os.Stderr), false),
+				ChanReceiveTimeout(200*time.Millisecond),
+				StreamBufferCapacity(5))
+			// Create both ends of the connection
+			cliConn, srvConn = newClientServerConnections()
+			// Start the server
+			go server.Run(context.TODO(), srvConn)
+			// Create the ClientConnection
+			clientConn, _ = NewClientConnection(cliConn)
+			// Start it
+			receiver := &simpleReceiver{}
+			clientConn.SetReceiver(receiver)
+			<-clientConn.Start()
+			close(done)
+		}, 2.0)
+		AfterEach(func(done Done) {
+			_ = clientConn.Close()
+			close(done)
+		}, 2.0)
+
 		It("should push a stream to the server", func(done Done) {
 			ch := make(chan int, 1)
 			_ = clientConn.PushStreams("ReceiveStream", "test", ch)
@@ -328,10 +374,11 @@ var _ = Describe("ClientConnection", func() {
 				}
 				close(ch)
 			}(ch)
-			<-simpleHub.receiveStreamDone
-			Expect(simpleHub.receiveStreamArg).To(Equal("test"))
+			<-hub.receiveStreamDone
+			Expect(hub.receiveStreamArg).To(Equal("test"))
 			close(done)
 		})
+
 		It("should return an error when the connection fails", func(done Done) {
 			cliConn.fail = errors.New("fail")
 			defer func() { cliConn.fail = nil }()
@@ -339,6 +386,6 @@ var _ = Describe("ClientConnection", func() {
 			err := <-clientConn.PushStreams("ReceiveStream", "test", ch)
 			Expect(err).To(HaveOccurred())
 			close(done)
-		}, 1000)
+		}, 2.0)
 	})
 })

@@ -11,6 +11,9 @@ import (
 
 func NewWebsocketClientConnection(address string) ClientConnection {
 	req, err := http.NewRequest("POST", fmt.Sprintf("%v/negotiate", address), nil)
+	if err != nil {
+		panic(err)
+	}
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
@@ -30,11 +33,17 @@ func NewWebsocketClientConnection(address string) ClientConnection {
 	}
 	wsAddress := fmt.Sprintf("ws://%v%v?id=%v", u.Host, u.Path, nr.ConnectionID)
 	ws, err := websocket.Dial(wsAddress, "", address)
+	if err != nil {
+		panic(err)
+	}
 	conn := &webSocketConnection{
 		conn:         ws,
 		connectionID: nr.ConnectionID,
 		timeout:      0,
 	}
 	result, err := NewClientConnection(conn)
+	if err != nil {
+		panic(err)
+	}
 	return result
 }
