@@ -2,6 +2,7 @@ package signalr
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"github.com/go-kit/kit/log"
 	. "github.com/onsi/ginkgo"
@@ -16,13 +17,20 @@ type pipeConnection struct {
 	reader  io.Reader
 	writer  io.Writer
 	timeout time.Duration
+	fail    error
 }
 
 func (pc *pipeConnection) Read(p []byte) (n int, err error) {
+	if pc.fail != nil {
+		return 0, pc.fail
+	}
 	return pc.reader.Read(p)
 }
 
 func (pc *pipeConnection) Write(p []byte) (n int, err error) {
+	if pc.fail != nil {
+		return 0, pc.fail
+	}
 	return pc.writer.Write(p)
 }
 
@@ -119,6 +127,8 @@ var _ = Describe("ClientConnection", func() {
 			// Start it
 			err = <-clientConn.Start()
 			Expect(err).NotTo(HaveOccurred())
+			err = clientConn.Close()
+			Expect(err).NotTo(HaveOccurred())
 			close(done)
 		})
 	})
@@ -152,6 +162,13 @@ var _ = Describe("ClientConnection", func() {
 			r := <-clientConn.Invoke("InvokeMe", "A", 1)
 			Expect(r.Value).To(Equal("A1"))
 			Expect(r.Error).NotTo(HaveOccurred())
+			close(done)
+		}, 1000)
+		It("should return an error when the connection fails", func(done Done) {
+			cliConn.fail = errors.New("fail")
+			defer func() { cliConn.fail = nil }()
+			r := <-clientConn.Invoke("InvokeMe", "A", 1)
+			Expect(r.Error).To(HaveOccurred())
 			close(done)
 		}, 1000)
 	})
@@ -210,7 +227,13 @@ var _ = Describe("ClientConnection", func() {
 			}
 			close(done)
 		})
-
+		It("should return an error when the connection fails", func(done Done) {
+			cliConn.fail = errors.New("fail")
+			defer func() { cliConn.fail = nil }()
+			err := <-clientConn.Send("Callback", 1)
+			Expect(err).To(HaveOccurred())
+			close(done)
+		}, 1000)
 	})
 	Context("PullStream", func() {
 		server, _ := NewServer(SimpleHubFactory(&simpleHub{}),
@@ -258,6 +281,13 @@ var _ = Describe("ClientConnection", func() {
 			Expect(r.Error).To(HaveOccurred())
 			close(done)
 		})
+		It("should return an error when the connection fails", func(done Done) {
+			cliConn.fail = errors.New("fail")
+			defer func() { cliConn.fail = nil }()
+			r := <-clientConn.PullStream("ReadStream")
+			Expect(r.Error).To(HaveOccurred())
+			close(done)
+		}, 1000)
 	})
 	Context("GetConnectionID", func() {
 		It("should return distinct IDs", func() {
@@ -302,5 +332,13 @@ var _ = Describe("ClientConnection", func() {
 			Expect(simpleHub.receiveStreamArg).To(Equal("test"))
 			close(done)
 		})
+		It("should return an error when the connection fails", func(done Done) {
+			cliConn.fail = errors.New("fail")
+			defer func() { cliConn.fail = nil }()
+			ch := make(chan int, 1)
+			err := <-clientConn.PushStreams("ReceiveStream", "test", ch)
+			Expect(err).To(HaveOccurred())
+			close(done)
+		}, 1000)
 	})
 })
