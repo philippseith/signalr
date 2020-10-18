@@ -324,7 +324,7 @@ var _ = Describe("ClientConnection", func() {
 		}, 2.0)
 	})
 	Context("GetConnectionID", func() {
-		It("should return distinct IDs", func() {
+		It("should return distinct IDs", func(done Done) {
 			c, _ := NewClientConnection(nil)
 			cc := c.(*clientConnection)
 			ids := make(map[string]string)
@@ -334,6 +334,7 @@ var _ = Describe("ClientConnection", func() {
 				Expect(ok).To(BeFalse())
 				ids[id] = id
 			}
+			close(done)
 		})
 	})
 	Context("PushStreams", func() {

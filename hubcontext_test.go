@@ -92,7 +92,7 @@ func connectMany() []*testingConnection {
 
 var _ = Describe("HubContext", func() {
 	Context("Clients().All()", func() {
-		It("should invoke all clients", func() {
+		It("should invoke all clients", func(didIt Done) {
 			conns := connectMany()
 			conns[0].ClientSend(`{"type":1,"invocationId": "123","target":"callall"}`)
 			callCount := make(chan int, 1)
@@ -122,11 +122,12 @@ var _ = Describe("HubContext", func() {
 			case <-time.After(3000 * time.Millisecond):
 				Fail("timed out")
 			}
-		})
+			close(didIt)
+		}, 4.0)
 	})
 
 	Context("Clients().Caller()", func() {
-		It("should invoke only the caller", func() {
+		It("should invoke only the caller", func(didIt Done) {
 			conns := connectMany()
 			conns[0].ClientSend(`{"type":1,"invocationId": "123","target":"callcaller"}`)
 			done := make(chan bool)
@@ -160,11 +161,12 @@ var _ = Describe("HubContext", func() {
 			case <-time.After(3000 * time.Millisecond):
 				Fail("timed out")
 			}
-		})
+			close(didIt)
+		}, 4.0)
 	})
 
 	Context("Clients().Client()", func() {
-		It("should invoke only the client which was addressed", func() {
+		It("should invoke only the client which was addressed", func(didIt Done) {
 			conns := connectMany()
 			conns[0].ClientSend(fmt.Sprintf(`{"type":1,"invocationId": "123","target":"callclient","arguments":["%v"]}`, conns[2].ConnectionID()))
 			done := make(chan bool)
@@ -200,11 +202,12 @@ var _ = Describe("HubContext", func() {
 			case <-time.After(3000 * time.Millisecond):
 				Fail("timed out")
 			}
-		})
+			close(didIt)
+		}, 4.0)
 	})
 
 	Context("Clients().Group()", func() {
-		It("should invoke only the clients in the group", func() {
+		It("should invoke only the clients in the group", func(ditIt Done) {
 			conns := connectMany()
 			conns[0].ClientSend(fmt.Sprintf(`{"type":1,"invocationId": "123","target":"buildgroup","arguments":["%v","%v"]}`, conns[1].ConnectionID(), conns[2].ConnectionID()))
 			<-hubContextInvocationQueue
@@ -241,11 +244,12 @@ var _ = Describe("HubContext", func() {
 			case <-time.After(3000 * time.Millisecond):
 				Fail("timed out")
 			}
-		})
+			close(ditIt)
+		}, 4.0)
 	})
 
 	Context("RemoveFromGroup should remove clients from the group", func() {
-		It("should invoke only the clients in the group", func() {
+		It("should invoke only the clients in the group", func(ditIt Done) {
 			conns := connectMany()
 			conns[0].ClientSend(fmt.Sprintf(`{"type":1,"invocationId": "123","target":"buildgroup","arguments":["%v","%v"]}`, conns[1].ConnectionID(), conns[2].ConnectionID()))
 			Expect(<-hubContextInvocationQueue).To(Equal("BuildGroup()"))
@@ -288,11 +292,12 @@ var _ = Describe("HubContext", func() {
 			case <-time.After(3000 * time.Millisecond):
 				Fail("timed out")
 			}
-		})
+			close(ditIt)
+		}, 4.0)
 	})
 
 	Context("Items()", func() {
-		It("should hold Items connection wise", func() {
+		It("should hold Items connection wise", func(done Done) {
 			conns := connectMany()
 			conns[0].ClientSend(`{"type":1,"invocationId": "123","target":"additem","arguments":["first",1]}`)
 			// Wait for execution
@@ -312,11 +317,12 @@ var _ = Describe("HubContext", func() {
 			msg = <-conns[1].received
 			Expect(msg).To(BeAssignableToTypeOf(completionMessage{}))
 			Expect(msg.(completionMessage).Result).To(BeNil())
-		})
+			close(done)
+		}, 2.0)
 	})
 
 	Context("Abort()", func() {
-		It("should abort the connection of the current caller", func() {
+		It("should abort the connection of the current caller", func(done Done) {
 			conn0 := connect(&contextHub{})
 			conn1 := connect(&contextHub{})
 			conn0.ClientSend(`{"type":1,"invocationId": "ab0ab0","target":"abort"}`)
@@ -338,8 +344,8 @@ var _ = Describe("HubContext", func() {
 			msg = <-conn1.received
 			Expect(msg).To(BeAssignableToTypeOf(completionMessage{}))
 			Expect(msg.(completionMessage).Result).To(Equal(float64(2)))
-
-		})
+			close(done)
+		}, 2.0)
 	})
 })
 

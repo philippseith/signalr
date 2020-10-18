@@ -28,7 +28,7 @@ func (w *webSocketHub) Add2(i int) int {
 var _ = Describe("Websocket server", func() {
 
 	Context("A correct negotiation request is sent", func() {
-		It("should send a correct negotiation response with support for Websockets with text and binary protocol", func() {
+		It("should send a correct negotiation response with support for Websockets with text and binary protocol", func(done Done) {
 			// Start server
 			router := http.NewServeMux()
 			MapHub(router, "/hub", SimpleHubFactory(&webSocketHub{}))
@@ -49,11 +49,12 @@ var _ = Describe("Websocket server", func() {
 			tf := avtv["transferFormats"].([]interface{})
 			Expect(tf).To(ContainElement("Text"))
 			Expect(tf).To(ContainElement("Binary"))
+			close(done)
 		})
 	})
 
 	Context("A invalid negotiation request is sent", func() {
-		It("should send a correct negotiation response with support for Websockets with text and binary protocol", func() {
+		It("should send a correct negotiation response with support for Websockets with text and binary protocol", func(done Done) {
 			// Start server
 			router := http.NewServeMux()
 			MapHub(router, "/hub", SimpleHubFactory(&webSocketHub{}))
@@ -67,11 +68,12 @@ var _ = Describe("Websocket server", func() {
 			Expect(err).To(BeNil())
 			Expect(resp).NotTo(BeNil())
 			Expect(resp.StatusCode).ToNot(Equal(200))
+			close(done)
 		})
 	})
 
 	Context("When no negotiation is send", func() {
-		It("should serve websocket requests without", func() {
+		It("should serve websocket requests without", func(done Done) {
 			// Start server
 			router := http.NewServeMux()
 			MapHub(router, "/hub", SimpleHubFactory(&webSocketHub{}))
@@ -81,11 +83,12 @@ var _ = Describe("Websocket server", func() {
 			}()
 			waitForPort(port)
 			handShakeAndCallWebSocketTestServer(port, "")
+			close(done)
 		})
 	})
 
 	Context("When a negotiation is send", func() {
-		It("should serve websocket requests", func() {
+		It("should serve websocket requests", func(done Done) {
 			// Start server
 			router := http.NewServeMux()
 			MapHub(router, "/hub", SimpleHubFactory(&webSocketHub{}))
@@ -95,6 +98,7 @@ var _ = Describe("Websocket server", func() {
 			}()
 			jsonMap := negotiateWebSocketTestServer(port)
 			handShakeAndCallWebSocketTestServer(port, fmt.Sprint(jsonMap["connectionId"]))
+			close(done)
 		})
 	})
 })
@@ -102,12 +106,13 @@ var _ = Describe("Websocket server", func() {
 var _ = Describe("Websocket connection", func() {
 
 	Context("The timeout is set with SetTimeout()", func() {
-		It("should return the same value in Timeout()", func() {
+		It("should return the same value in Timeout()", func(done Done) {
 			c := &webSocketConnection{}
 			c.SetTimeout(time.Millisecond * 100)
 			Expect(c.Timeout()).To(Equal(time.Millisecond * 100))
 			c.SetTimeout(time.Millisecond * 200)
 			Expect(c.Timeout()).To(Equal(time.Millisecond * 200))
+			close(done)
 		})
 	})
 })
