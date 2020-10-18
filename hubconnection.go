@@ -26,6 +26,7 @@ type hubConnection interface {
 func newHubConnection(parentContext context.Context, connection Connection, protocol HubProtocol, maximumReceiveMessageSize uint) hubConnection {
 	return &defaultHubConnection{
 		protocol:                  protocol,
+		mx:                        sync.Mutex{},
 		connection:                connection,
 		maximumReceiveMessageSize: maximumReceiveMessageSize,
 		items:                     &sync.Map{},
@@ -75,15 +76,17 @@ func (c *defaultHubConnection) ConnectionID() string {
 }
 
 func (c *defaultHubConnection) Abort() {
-	defer c.mx.Unlock()
 	c.mx.Lock()
 	if c.connected {
 		err := errors.New("connection aborted from hub")
 		for _, ch := range c.abortChans {
-			ch <- err
+			go func(ch chan error) {
+				ch <- err
+			}(ch)
 		}
 		c.connected = false
 	}
+	c.mx.Unlock()
 }
 
 func (c *defaultHubConnection) Aborted() <-chan error {

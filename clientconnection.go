@@ -4,10 +4,12 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/go-kit/kit/log"
 	"os"
 	"reflect"
+	"sync"
 )
 
 // ClientConnection is the signalR connection used on the client side
@@ -46,16 +48,18 @@ func NewClientConnection(conn Connection, options ...func(party) error) (ClientC
 
 type clientConnection struct {
 	partyBase
-	conn     Connection
-	cancel   context.CancelFunc
-	loop     *loop
-	receiver interface{}
-	lastID   int64
+	conn      Connection
+	cancel    context.CancelFunc
+	loop      *loop
+	receiver  interface{}
+	lastID    int64
+	loopMx    sync.Mutex
+	loopEnded bool
 }
 
 func (c *clientConnection) Start() <-chan error {
 	errCh := make(chan error, 1)
-	go func() {
+	go func(c *clientConnection) {
 		if protocol, err := c.processHandshake(); err != nil {
 			errCh <- err
 		} else {
@@ -64,45 +68,62 @@ func (c *clientConnection) Start() <-chan error {
 			ctx, c.cancel = context.WithCancel(context.Background())
 			c.loop = newLoop(ctx, c, c.conn, protocol)
 			c.loop.Run()
+			c.loopMx.Lock()
+			c.loopEnded = true
+			c.loopMx.Unlock()
 		}
-	}()
+	}(c)
 	return errCh
 }
 
 func (c *clientConnection) Close() error {
 	_, err := c.loop.hubConn.Close("", false)
+	c.cancel()
 	return err
 }
 
 func (c *clientConnection) Invoke(method string, arguments ...interface{}) <-chan InvokeResult {
+	if ok, ch, _ := c.isLoopEnded(); ok {
+		return ch
+	}
 	id := c.GetNewID()
 	resultChan, errChan := c.loop.invokeClient.newInvocation(id)
 	ch := MakeInvokeResultChan(resultChan, errChan)
 	if _, err := c.loop.hubConn.SendInvocation(id, method, arguments); err != nil {
-		errChan <- err
+		// When we get an error here, the loop is closed and the errChan might be already closed
+		// We create a new one to deliver our error
+		ch, _ = createResultChansWithError(err)
 		c.loop.invokeClient.deleteInvocation(id)
 	}
 	return ch
 }
 
 func (c *clientConnection) Send(method string, arguments ...interface{}) <-chan error {
+	if ok, _, ch := c.isLoopEnded(); ok {
+		return ch
+	}
 	id := c.GetNewID()
 	_, errChan := c.loop.invokeClient.newInvocation(id)
 	_, err := c.loop.hubConn.SendInvocation(id, method, arguments)
 	if err != nil {
-		errChan <- err
+		_, errChan = createResultChansWithError(err)
 		c.loop.invokeClient.deleteInvocation(id)
 	}
 	return errChan
 }
 
 func (c *clientConnection) PullStream(method string, arguments ...interface{}) <-chan InvokeResult {
+	if ok, ch, _ := c.isLoopEnded(); ok {
+		return ch
+	}
 	id := c.GetNewID()
 	_, errChan := c.loop.invokeClient.newInvocation(id)
 	upChan := c.loop.streamClient.newUpstreamChannel(id)
 	ch := MakeInvokeResultChan(upChan, errChan)
 	if _, err := c.loop.hubConn.SendStreamInvocation(id, method, arguments, nil); err != nil {
-		errChan <- err
+		// When we get an error here, the loop is closed and the errChan might be already closed
+		// We create a new one to deliver our error
+		ch, _ = createResultChansWithError(err)
 		c.loop.streamClient.deleteUpstreamChannel(id)
 		c.loop.invokeClient.deleteInvocation(id)
 	}
@@ -110,6 +131,9 @@ func (c *clientConnection) PullStream(method string, arguments ...interface{}) <
 }
 
 func (c *clientConnection) PushStreams(method string, arguments ...interface{}) <-chan error {
+	if ok, _, ch := c.isLoopEnded(); ok {
+		return ch
+	}
 	id := c.GetNewID()
 	_, errChan := c.loop.invokeClient.newInvocation(id)
 	invokeArgs := make([]interface{}, 0)
@@ -126,7 +150,9 @@ func (c *clientConnection) PushStreams(method string, arguments ...interface{}) 
 	}
 	// Tell the server we are streaming now
 	if _, err := c.loop.hubConn.SendStreamInvocation(c.GetNewID(), method, invokeArgs, streamIds); err != nil {
-		errChan <- err
+		// When we get an error here, the loop is closed and the errChan might be already closed
+		// We create a new one to deliver our error
+		_, errChan = createResultChansWithError(err)
 		c.loop.invokeClient.deleteInvocation(id)
 		return errChan
 	}
@@ -145,6 +171,27 @@ func (c *clientConnection) SetReceiver(receiver interface{}) {
 func (c *clientConnection) GetNewID() string {
 	c.lastID++
 	return fmt.Sprint(c.lastID)
+}
+
+func (c *clientConnection) isLoopEnded() (bool, <-chan InvokeResult, <-chan error) {
+	defer c.loopMx.Unlock()
+	c.loopMx.Lock()
+	loopEnded := c.loopEnded
+	if loopEnded {
+		irCh, errCh := createResultChansWithError(errors.New("message loop ended"))
+		return true, irCh, errCh
+	}
+	return false, nil, nil
+}
+
+func createResultChansWithError(err error) (<-chan InvokeResult, chan error) {
+	resultChan := make(chan interface{}, 1)
+	errChan := make(chan error, 1)
+	errChan <- err
+	invokeResultChan := MakeInvokeResultChan(resultChan, errChan)
+	close(errChan)
+	close(resultChan)
+	return invokeResultChan, errChan
 }
 
 func (c *clientConnection) onConnected(hubConnection) {}

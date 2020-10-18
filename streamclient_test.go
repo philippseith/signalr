@@ -485,7 +485,7 @@ var _ = Describe("ClientStreaming", func() {
 					Fail("timed out")
 				}
 				close(done)
-			})
+			}, 2.0)
 		})
 
 		Context("When an completion message with an result is sent after a stream item was received", func() {

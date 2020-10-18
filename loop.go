@@ -122,6 +122,7 @@ loop:
 		return l.hubConn.Close(fmt.Sprintf("%v", err), l.party.allowReconnect())
 	}, l.info)
 	_ = l.dbg.Log(evt, "message loop ended")
+	l.invokeClient.cancelAllInvokes()
 }
 
 func (l *loop) receive() (message interface{}, err error) {
