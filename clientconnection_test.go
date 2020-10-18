@@ -106,7 +106,7 @@ func (s *simpleReceiver) OnCallback(result string) {
 	s.result = result
 }
 
-var _ = Describe("ClientConnection", func() {
+var _ = XDescribe("ClientConnection", func() {
 	Context("Start", func() {
 		It("should connect to the server", func(done Done) {
 			// Create a simple server
@@ -238,7 +238,7 @@ var _ = Describe("ClientConnection", func() {
 				Expect(err).NotTo(HaveOccurred())
 			}
 			close(done)
-		}, 10.0)
+		}, 2.0)
 		It("should invoke a server method and return the error when arguments don't match", func(done Done) {
 			receiver.result = ""
 			errCh := clientConn.Send("Callback", 1)
@@ -260,7 +260,7 @@ var _ = Describe("ClientConnection", func() {
 			// Stop the above go func
 			receiver.result = "Stop"
 			close(done)
-		}, 10.0)
+		}, 2.0)
 		It("should return an error when the connection fails", func(done Done) {
 			cliConn.fail = errors.New("fail")
 			err := <-clientConn.Send("Callback", 1)
