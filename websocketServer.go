@@ -7,11 +7,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"golang.org/x/net/websocket"
+	"io/ioutil"
 	"net/http"
 )
 
 // MapHub used to register a SignalR Hub with the specified ServeMux
-func MapHub(mux *http.ServeMux, path string, options ...func(*Server) error) *Server {
+func MapHub(mux *http.ServeMux, path string, options ...func(party) error) Server {
 	mux.HandleFunc(fmt.Sprintf("%s/negotiate", path), negotiateHandler)
 	server, _ := NewServer(options...)
 	mux.Handle(path, websocket.Server{
@@ -24,8 +25,8 @@ func MapHub(mux *http.ServeMux, path string, options ...func(*Server) error) *Se
 		Handler: func(ws *websocket.Conn) {
 			connectionID := ws.Request().URL.Query().Get("id")
 			if len(connectionID) == 0 {
-				// Support websocket connection without negotiateWebSocketTestServer
-				connectionID = getConnectionID()
+				// Support websocket connection without negotiate
+				connectionID = NewConnectionId()
 			}
 			server.Run(context.TODO(), &webSocketConnection{ws, connectionID, 0})
 		},
@@ -37,8 +38,10 @@ func negotiateHandler(w http.ResponseWriter, req *http.Request) {
 	if req.Method != "POST" {
 		w.WriteHeader(400)
 	} else {
+		slurp, _ := ioutil.ReadAll(req.Body)
+		fmt.Printf("%v", string(slurp))
 		response := negotiateResponse{
-			ConnectionID: getConnectionID(),
+			ConnectionID: NewConnectionId(),
 			AvailableTransports: []availableTransport{
 				{
 					Transport:       "WebSockets",
@@ -50,7 +53,7 @@ func negotiateHandler(w http.ResponseWriter, req *http.Request) {
 	}
 }
 
-func getConnectionID() string {
+func NewConnectionId() string {
 	bytes := make([]byte, 16)
 	// rand.Read only fails when the systems random number generator fails. Rare case, ignore
 	_, _ = rand.Read(bytes)

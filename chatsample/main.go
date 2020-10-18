@@ -26,11 +26,11 @@ func (c *chat) OnDisconnected(connectionID string) {
 }
 
 func (c *chat) Send(message string) {
-	c.Clients().Group("group").Send("Send", message)
+	c.Clients().Group("group").Send("receive", message)
 }
 
 func (c *chat) Echo(message string) {
-	c.Clients().Caller().Send("send", message)
+	c.Clients().Caller().Send("receive", message)
 }
 
 func (c *chat) Panic() {
@@ -93,7 +93,7 @@ func (c *chat) UploadStream(upload1 <-chan int, factor float64, upload2 <-chan f
 	}
 }
 
-func runTCP(address string, hub signalr.HubInterface) {
+func runTCPServer(address string, hub signalr.HubInterface) {
 	listener, err := net.Listen("tcp", address)
 
 	if err != nil {
@@ -117,24 +117,42 @@ func runTCP(address string, hub signalr.HubInterface) {
 	}
 }
 
-func runHTTP(address string, hub signalr.HubInterface) {
+func runHTTPServer(address string, hub signalr.HubInterface) {
 	router := http.NewServeMux()
 	router.Handle("/", http.FileServer(http.Dir("./public")))
 
 	signalr.MapHub(router, "/chat", signalr.SimpleHubFactory(hub))
 
 	fmt.Printf("Listening for websocket connections on %s\n", address)
-
 	if err := http.ListenAndServe(address, router); err != nil {
 		log.Fatal("ListenAndServe:", err)
 	}
 }
 
+func runHTTPClient(address string, client interface{}) {
+	// TODO post to address/negotiate
+	// TODO Create ws client connection
+	// TODO conn := &webSocketConnection(ws, signalR.NewConnectionId(), 0)
+	c := signalr.NewWebsocketClientConnection(address) // HubProtocol is determined inside
+	c.SetReceiver(client)
+	c.Start()
+}
+
+type client struct {
+	signalr.Hub
+}
+
+func (c *client) Receive(msg string) {
+	fmt.Println(msg)
+}
+
 func main() {
 	hub := &chat{}
 
-	go runTCP("127.0.0.1:8007", hub)
-
-	// Block on the HTTP server
-	runHTTP("localhost:8086", hub)
+	//go runTCPServer("127.0.0.1:8007", hub)
+	go runHTTPServer("localhost:8086", hub)
+	<-time.After(time.Millisecond * 2)
+	go runHTTPClient("http://localhost:8086/chat", &client{})
+	ch := make(chan struct{}, 0)
+	<-ch
 }

@@ -63,7 +63,7 @@ var _ = Describe("Websocket server", func() {
 			}()
 			waitForPort(port)
 			// Negotiate the wrong way
-			resp, err := http.Get(fmt.Sprintf("http://127.0.0.1:%v/hub/negotiateWebSocketTestServer", port))
+			resp, err := http.Get(fmt.Sprintf("http://127.0.0.1:%v/hub/negotiate", port))
 			Expect(err).To(BeNil())
 			Expect(resp).NotTo(BeNil())
 			Expect(resp.StatusCode).ToNot(Equal(200))

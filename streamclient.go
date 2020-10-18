@@ -3,26 +3,31 @@ package signalr
 import (
 	"fmt"
 	"reflect"
+	"sync"
 	"time"
 )
 
-func (s *Server) newStreamClient() *streamClient {
+func newStreamClient(chanReceiveTimeout time.Duration, streamBufferCapacity uint) *streamClient {
 	return &streamClient{
-		upstreamChannels:      make(map[string]reflect.Value),
-		runningStreams:        make(map[string]bool),
-		hubChanReceiveTimeout: s.hubChanReceiveTimeout,
-		streamBufferCapacity:  s.streamBufferCapacity,
+		mx:                   sync.Mutex{},
+		upstreamChannels:     make(map[string]reflect.Value),
+		runningStreams:       make(map[string]bool),
+		chanReceiveTimeout:   chanReceiveTimeout,
+		streamBufferCapacity: streamBufferCapacity,
 	}
 }
 
 type streamClient struct {
-	upstreamChannels      map[string]reflect.Value
-	runningStreams        map[string]bool
-	hubChanReceiveTimeout time.Duration
-	streamBufferCapacity  uint
+	mx                   sync.Mutex
+	upstreamChannels     map[string]reflect.Value
+	runningStreams       map[string]bool
+	chanReceiveTimeout   time.Duration
+	streamBufferCapacity uint
 }
 
 func (c *streamClient) buildChannelArgument(invocation invocationMessage, argType reflect.Type, chanCount int) (arg reflect.Value, canClientStreaming bool, err error) {
+	c.mx.Lock()
+	defer c.mx.Unlock()
 	if argType.Kind() != reflect.Chan || argType.ChanDir() == reflect.SendDir {
 		return reflect.Value{}, false, nil
 	} else if len(invocation.StreamIds) > chanCount {
@@ -36,7 +41,26 @@ func (c *streamClient) buildChannelArgument(invocation invocationMessage, argTyp
 	}
 }
 
+func (c *streamClient) newUpstreamChannel(invocationID string) <-chan interface{} {
+	c.mx.Lock()
+	defer c.mx.Unlock()
+	upChan := make(chan interface{}, c.streamBufferCapacity)
+	c.upstreamChannels[invocationID] = reflect.ValueOf(upChan)
+	return upChan
+}
+
+func (c *streamClient) deleteUpstreamChannel(invocationID string) {
+	c.mx.Lock()
+	if upChan, ok := c.upstreamChannels[invocationID]; ok {
+		upChan.Close()
+		delete(c.upstreamChannels, invocationID)
+	}
+	c.mx.Unlock()
+}
+
 func (c *streamClient) receiveStreamItem(streamItem streamItemMessage) error {
+	c.mx.Lock()
+	defer c.mx.Unlock()
 	if upChan, ok := c.upstreamChannels[streamItem.InvocationID]; ok {
 		// Mark stream as running to detect illegal completion with result on this id
 		c.runningStreams[streamItem.InvocationID] = true
@@ -98,8 +122,8 @@ func (c *streamClient) sendChanValSave(upChan reflect.Value, chanVal reflect.Val
 	select {
 	case err := <-done:
 		return err
-	case <-time.After(c.hubChanReceiveTimeout):
-		return &hubChanTimeoutError{fmt.Sprintf("timeout (%v) waiting for hub to receive client streamed value", c.hubChanReceiveTimeout)}
+	case <-time.After(c.chanReceiveTimeout):
+		return &hubChanTimeoutError{fmt.Sprintf("timeout (%v) waiting for hub to receive client streamed value", c.chanReceiveTimeout)}
 	}
 }
 
@@ -144,24 +168,46 @@ func convertNumberToChannelType(chanElm interface{}, number float64) (chanVal re
 	}
 }
 
-func (c *streamClient) receiveCompletionItem(completion completionMessage) error {
-	if channel, ok := c.upstreamChannels[completion.InvocationID]; ok {
+func (c *streamClient) handlesInvocationID(invocationID string) bool {
+	c.mx.Lock()
+	defer c.mx.Unlock()
+	_, ok := c.upstreamChannels[invocationID]
+	return ok
+}
+
+func (c *streamClient) receiveCompletionItem(completion completionMessage, invokeClient *invokeClient) error {
+	c.mx.Lock()
+	channel, ok := c.upstreamChannels[completion.InvocationID]
+	c.mx.Unlock()
+	if ok {
 		var err error
-		if completion.Result != nil {
-			if c.runningStreams[completion.InvocationID] {
-				err = fmt.Errorf("client side streaming: received completion with result %v", completion)
-			} else {
-				// handle result like a stream item
-				err = c.receiveStreamItem(streamItemMessage{
-					Type:         2,
-					InvocationID: completion.InvocationID,
-					Item:         completion.Result,
-				})
+		if completion.Error != "" {
+			// Push error to the error channel
+			err = invokeClient.receiveCompletionItem(completion)
+		} else {
+			if completion.Result != nil {
+				c.mx.Lock()
+				running := c.runningStreams[completion.InvocationID]
+				c.mx.Unlock()
+				if running {
+					err = fmt.Errorf("client side streaming: received completion with result %v", completion)
+				} else {
+					// handle result like a stream item
+					err = c.receiveStreamItem(streamItemMessage{
+						Type:         2,
+						InvocationID: completion.InvocationID,
+						Item:         completion.Result,
+					})
+				}
 			}
 		}
 		channel.Close()
+		// Close error channel
+		invokeClient.deleteInvocation(completion.InvocationID)
+		c.mx.Lock()
 		delete(c.upstreamChannels, completion.InvocationID)
 		delete(c.runningStreams, completion.InvocationID)
+		c.mx.Unlock()
 		return err
 	}
 	return fmt.Errorf("received completion with unknown id %v", completion.InvocationID)

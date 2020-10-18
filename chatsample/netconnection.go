@@ -17,32 +17,32 @@ func newNetConnection(conn net.Conn) *netConnection {
 	return &netConnection{connectionID: getConnectionID(), conn: conn}
 }
 
-func (w *netConnection) SetTimeout(timeout time.Duration) {
-	w.timeout = timeout
+func (nc *netConnection) SetTimeout(timeout time.Duration) {
+	nc.timeout = timeout
 }
 
-func (w *netConnection) Timeout() time.Duration {
-	return w.timeout
+func (nc *netConnection) Timeout() time.Duration {
+	return nc.timeout
 }
 
-func (w *netConnection) ConnectionID() string {
-	return w.connectionID
+func (nc *netConnection) ConnectionID() string {
+	return nc.connectionID
 }
 
-func (w *netConnection) Write(p []byte) (n int, err error) {
-	if w.timeout > 0 {
-		defer func() { _ = w.conn.SetWriteDeadline(time.Time{}) }()
-		_ = w.conn.SetWriteDeadline(time.Now().Add(w.timeout))
+func (nc *netConnection) Write(p []byte) (n int, err error) {
+	if nc.timeout > 0 {
+		defer func() { _ = nc.conn.SetWriteDeadline(time.Time{}) }()
+		_ = nc.conn.SetWriteDeadline(time.Now().Add(nc.timeout))
 	}
-	return w.conn.Write(p)
+	return nc.conn.Write(p)
 }
 
-func (w *netConnection) Read(p []byte) (n int, err error) {
-	if w.timeout > 0 {
-		defer func() { _ = w.conn.SetReadDeadline(time.Time{}) }()
-		_ = w.conn.SetReadDeadline(time.Now().Add(w.timeout))
+func (nc *netConnection) Read(p []byte) (n int, err error) {
+	if nc.timeout > 0 {
+		defer func() { _ = nc.conn.SetReadDeadline(time.Time{}) }()
+		_ = nc.conn.SetReadDeadline(time.Now().Add(nc.timeout))
 	}
-	return w.conn.Read(p)
+	return nc.conn.Read(p)
 }
 
 func getConnectionID() string {

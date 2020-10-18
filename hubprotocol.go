@@ -58,3 +58,7 @@ type handshakeRequest struct {
 	Protocol string `json:"Protocol"`
 	Version  int    `json:"version"`
 }
+
+type handshakeResponse struct {
+	Error string `json:"error,omitempty"`
+}
