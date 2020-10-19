@@ -135,91 +135,42 @@ var _ = Describe("ClientConnection", func() {
 		}, 1.0)
 	})
 	Context("Invoke", func() {
-		var cliConn *pipeConnection
-		var srvConn *pipeConnection
-		var clientConn ClientConnection
-		var svrCtx context.Context
-		var svrCancel context.CancelFunc
-		BeforeEach(func(done Done) {
-			server, _ := NewServer(SimpleHubFactory(&simpleHub{}),
-				Logger(log.NewLogfmtLogger(os.Stderr), false),
-				ChanReceiveTimeout(200*time.Millisecond),
-				StreamBufferCapacity(5))
-			// Create both ends of the connection
-			cliConn, srvConn = newClientServerConnections()
-			// Start the server
-			svrCtx, svrCancel = context.WithCancel(context.Background())
-			go server.Run(svrCtx, srvConn)
-			// Create the ClientConnection
-			clientConn, _ = NewClientConnection(cliConn)
-			// Start it
-			clientConn.SetReceiver(simpleReceiver{})
-			<-clientConn.Start()
-			close(done)
-		}, 2.0)
-		AfterEach(func(done Done) {
-			_ = clientConn.Close()
-			svrCancel()
-			close(done)
-		}, 2.0)
-
 		It("should invoke a server method and return the result", func(done Done) {
+			clientConn, _, _, closeServer := createTestBed()
 			r := <-clientConn.Invoke("InvokeMe", "A", 1)
 			Expect(r.Value).To(Equal("A1"))
 			Expect(r.Error).NotTo(HaveOccurred())
+			closeServer()
 			close(done)
 		}, 2.0)
 		It("should invoke a server method and return the error when arguments don't match", func(done Done) {
+			clientConn, _, _, closeServer := createTestBed()
 			r := <-clientConn.Invoke("InvokeMe", "A", "B")
 			Expect(r.Error).To(HaveOccurred())
+			closeServer()
 			close(done)
 		}, 2.0)
 		It("should invoke a server method and return the result after a bad invocation", func(done Done) {
+			clientConn, _, _, closeServer := createTestBed()
 			clientConn.Invoke("InvokeMe", "A", "B")
 			r := <-clientConn.Invoke("InvokeMe", "A", 1)
 			Expect(r.Value).To(Equal("A1"))
 			Expect(r.Error).NotTo(HaveOccurred())
+			closeServer()
 			close(done)
 		}, 2.0)
-		XIt("should return an error when the connection fails", func(done Done) {
+		It("should return an error when the connection fails", func(done Done) {
+			clientConn, cliConn, _, closeServer := createTestBed()
 			cliConn.fail = errors.New("fail")
 			r := <-clientConn.Invoke("InvokeMe", "A", 1)
 			Expect(r.Error).To(HaveOccurred())
+			closeServer()
 			close(done)
 		}, 2.0)
 	})
 	Context("Send", func() {
-		var cliConn *pipeConnection
-		var srvConn *pipeConnection
-		var clientConn ClientConnection
-		var receiver *simpleReceiver
-		var svrCtx context.Context
-		var svrCancel context.CancelFunc
-		BeforeEach(func(done Done) {
-			server, _ := NewServer(SimpleHubFactory(&simpleHub{}),
-				Logger(log.NewLogfmtLogger(os.Stderr), false),
-				ChanReceiveTimeout(200*time.Millisecond),
-				StreamBufferCapacity(5))
-			// Create both ends of the connection
-			cliConn, srvConn = newClientServerConnections()
-			// Start the server
-			svrCtx, svrCancel = context.WithCancel(context.Background())
-			go server.Run(svrCtx, srvConn)
-			// Create the ClientConnection
-			clientConn, _ = NewClientConnection(cliConn)
-			// Start it
-			receiver = &simpleReceiver{}
-			clientConn.SetReceiver(receiver)
-			<-clientConn.Start()
-			close(done)
-		}, 2.0)
-		AfterEach(func(done Done) {
-			_ = clientConn.Close()
-			svrCancel()
-			close(done)
-		}, 2.0)
-
 		It("should invoke a server method and get the result via callback", func(done Done) {
+			clientConn, _, receiver, closeServer := createTestBed()
 			receiver.result = ""
 			errCh := clientConn.Send("Callback", "low")
 			ch := make(chan string, 1)
@@ -237,9 +188,11 @@ var _ = Describe("ClientConnection", func() {
 			case err := <-errCh:
 				Expect(err).NotTo(HaveOccurred())
 			}
+			closeServer()
 			close(done)
 		}, 2.0)
 		It("should invoke a server method and return the error when arguments don't match", func(done Done) {
+			clientConn, _, receiver, closeServer := createTestBed()
 			receiver.result = ""
 			errCh := clientConn.Send("Callback", 1)
 			ch := make(chan string, 1)
@@ -259,46 +212,21 @@ var _ = Describe("ClientConnection", func() {
 			}
 			// Stop the above go func
 			receiver.result = "Stop"
+			closeServer()
 			close(done)
 		}, 2.0)
-		XIt("should return an error when the connection fails", func(done Done) {
+		It("should return an error when the connection fails", func(done Done) {
+			clientConn, cliConn, _, closeServer := createTestBed()
 			cliConn.fail = errors.New("fail")
 			err := <-clientConn.Send("Callback", 1)
 			Expect(err).To(HaveOccurred())
+			closeServer()
 			close(done)
 		}, 2.0)
 	})
 	Context("PullStream", func() {
-		var cliConn *pipeConnection
-		var srvConn *pipeConnection
-		var clientConn ClientConnection
-		var svrCtx context.Context
-		var svrCancel context.CancelFunc
-		BeforeEach(func(done Done) {
-			server, _ := NewServer(SimpleHubFactory(&simpleHub{}),
-				Logger(log.NewLogfmtLogger(os.Stderr), false),
-				ChanReceiveTimeout(200*time.Millisecond),
-				StreamBufferCapacity(5))
-			// Create both ends of the connection
-			cliConn, srvConn = newClientServerConnections()
-			// Start the server
-			svrCtx, svrCancel = context.WithCancel(context.Background())
-			go server.Run(svrCtx, srvConn)
-			// Create the ClientConnection
-			clientConn, _ = NewClientConnection(cliConn)
-			// Start it
-			receiver := &simpleReceiver{}
-			clientConn.SetReceiver(receiver)
-			<-clientConn.Start()
-			close(done)
-		}, 2.0)
-		AfterEach(func(done Done) {
-			_ = clientConn.Close()
-			svrCancel()
-			close(done)
-		}, 2.0)
-
 		It("should pull a stream from the server", func(done Done) {
+			clientConn, _, _, closeServer := createTestBed()
 			ch := clientConn.PullStream("ReadStream")
 			values := make([]interface{}, 0)
 			for r := range ch {
@@ -306,33 +234,44 @@ var _ = Describe("ClientConnection", func() {
 				values = append(values, r.Value)
 			}
 			Expect(values).To(Equal([]interface{}{"A", "B", "C", "D"}))
+			closeServer()
 			close(done)
 		})
 		It("should return no error when the method returns no stream but a single result", func(done Done) {
+			clientConn, _, _, closeServer := createTestBed()
 			r := <-clientConn.PullStream("InvokeMe", "A", 1)
 			Expect(r.Error).NotTo(HaveOccurred())
 			Expect(r.Value).To(Equal("A1"))
+			closeServer()
 			close(done)
 		}, 2.0)
 		It("should return an error when the method returns no result", func(done Done) {
+			clientConn, _, _, closeServer := createTestBed()
 			r := <-clientConn.PullStream("Callback", "A")
 			Expect(r.Error).To(HaveOccurred())
+			closeServer()
 			close(done)
 		}, 2.0)
 		It("should return an error when the method does not exist on the server", func(done Done) {
+			clientConn, _, _, closeServer := createTestBed()
 			r := <-clientConn.PullStream("ReadStream2")
 			Expect(r.Error).To(HaveOccurred())
+			closeServer()
 			close(done)
 		}, 2.0)
 		It("should return an error when the method arguments are not matching", func(done Done) {
+			clientConn, _, _, closeServer := createTestBed()
 			r := <-clientConn.PullStream("ReadStream", "A", 1)
 			Expect(r.Error).To(HaveOccurred())
+			closeServer()
 			close(done)
 		}, 2.0)
-		XIt("should return an error when the connection fails", func(done Done) {
+		It("should return an error when the connection fails", func(done Done) {
+			clientConn, cliConn, _, closeServer := createTestBed()
 			cliConn.fail = errors.New("fail")
 			r := <-clientConn.PullStream("ReadStream")
 			Expect(r.Error).To(HaveOccurred())
+			closeServer()
 			close(done)
 		}, 2.0)
 	})
@@ -351,39 +290,24 @@ var _ = Describe("ClientConnection", func() {
 		})
 	})
 	Context("PushStreams", func() {
-		var cliConn *pipeConnection
-		var srvConn *pipeConnection
-		var clientConn ClientConnection
-		var hub *simpleHub
-		var svrCtx context.Context
-		var svrCancel context.CancelFunc
-		BeforeEach(func(done Done) {
-			hub = &simpleHub{}
+		It("should push a stream to the server", func(done Done) {
+			hub := &simpleHub{}
 			hub.receiveStreamDone = make(chan struct{}, 1)
 			server, _ := NewServer(HubFactory(func() HubInterface { return hub }),
 				Logger(log.NewLogfmtLogger(os.Stderr), false),
 				ChanReceiveTimeout(200*time.Millisecond),
 				StreamBufferCapacity(5))
 			// Create both ends of the connection
-			cliConn, srvConn = newClientServerConnections()
+			cliConn, srvConn := newClientServerConnections()
 			// Start the server
-			svrCtx, svrCancel = context.WithCancel(context.Background())
+			svrCtx, closeServer := context.WithCancel(context.Background())
 			go server.Run(svrCtx, srvConn)
 			// Create the ClientConnection
-			clientConn, _ = NewClientConnection(cliConn)
+			clientConn, _ := NewClientConnection(cliConn)
 			// Start it
 			receiver := &simpleReceiver{}
 			clientConn.SetReceiver(receiver)
 			<-clientConn.Start()
-			close(done)
-		}, 2.0)
-		AfterEach(func(done Done) {
-			_ = clientConn.Close()
-			svrCancel()
-			close(done)
-		}, 2.0)
-
-		It("should push a stream to the server", func(done Done) {
 			ch := make(chan int, 1)
 			_ = clientConn.PushStreams("ReceiveStream", "test", ch)
 			go func(ch chan int) {
@@ -394,15 +318,37 @@ var _ = Describe("ClientConnection", func() {
 			}(ch)
 			<-hub.receiveStreamDone
 			Expect(hub.receiveStreamArg).To(Equal("test"))
+			closeServer()
 			close(done)
 		})
 
-		XIt("should return an error when the connection fails", func(done Done) {
+		It("should return an error when the connection fails", func(done Done) {
+			clientConn, cliConn, _, closeServer := createTestBed()
 			cliConn.fail = errors.New("fail")
 			ch := make(chan int, 1)
 			err := <-clientConn.PushStreams("ReceiveStream", "test", ch)
 			Expect(err).To(HaveOccurred())
+			closeServer()
 			close(done)
 		}, 2.0)
 	})
 })
+
+func createTestBed() (ClientConnection, *pipeConnection, *simpleReceiver, context.CancelFunc) {
+	server, _ := NewServer(SimpleHubFactory(&simpleHub{}),
+		Logger(log.NewLogfmtLogger(os.Stderr), false),
+		ChanReceiveTimeout(200*time.Millisecond),
+		StreamBufferCapacity(5))
+	// Create both ends of the connection
+	cliConn, srvConn := newClientServerConnections()
+	// Start the server
+	svrCtx, svrCancel := context.WithCancel(context.Background())
+	go server.Run(svrCtx, srvConn)
+	// Create the ClientConnection
+	clientConn, _ := NewClientConnection(cliConn)
+	// Start it
+	receiver := &simpleReceiver{}
+	clientConn.SetReceiver(receiver)
+	<-clientConn.Start()
+	return clientConn, cliConn, receiver, svrCancel
+}
