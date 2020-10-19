@@ -63,10 +63,10 @@ func (c *clientConnection) Start() <-chan error {
 		if protocol, err := c.processHandshake(); err != nil {
 			errCh <- err
 		} else {
-			errCh <- nil
 			var ctx context.Context
 			ctx, c.cancel = context.WithCancel(context.Background())
 			c.loop = newLoop(ctx, c, c.conn, protocol)
+			errCh <- nil
 			c.loop.Run()
 			c.loopMx.Lock()
 			c.loopEnded = true

@@ -129,10 +129,10 @@ func runHTTPServer(address string, hub signalr.HubInterface) {
 	}
 }
 
-func runHTTPClient(address string, client interface{}) {
+func runHTTPClient(address string, client interface{}) <-chan error {
 	c := signalr.NewWebsocketClientConnection(address) // HubProtocol is determined inside
 	c.SetReceiver(client)
-	c.Start()
+	return c.Start()
 }
 
 type client struct {
