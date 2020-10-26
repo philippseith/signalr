@@ -206,10 +206,10 @@ func (c *clientConnection) allowReconnect() bool {
 	return false // Servers don't care?
 }
 
-func (c *clientConnection) prefixLoggers() (info StructuredLogger, dbg StructuredLogger) {
+func (c *clientConnection) prefixLoggers(connectionID string) (info StructuredLogger, dbg StructuredLogger) {
 	if c.receiver == nil {
-		return log.WithPrefix(c.info, "ts", log.DefaultTimestampUTC, "class", "Client"),
-			log.WithPrefix(c.dbg, "ts", log.DefaultTimestampUTC, "class", "Client")
+		return log.WithPrefix(c.info, "ts", log.DefaultTimestampUTC, "class", "Client", "connection", connectionID),
+			log.WithPrefix(c.dbg, "ts", log.DefaultTimestampUTC, "class", "Client", "connection", connectionID)
 	}
 	var t reflect.Type = nil
 	switch reflect.ValueOf(c.receiver).Kind() {
@@ -220,24 +220,31 @@ func (c *clientConnection) prefixLoggers() (info StructuredLogger, dbg Structure
 	}
 	return log.WithPrefix(c.info, "ts", log.DefaultTimestampUTC,
 			"class", "Client",
+			"connection", connectionID,
 			"hub", t),
 		log.WithPrefix(c.dbg, "ts", log.DefaultTimestampUTC,
 			"class", "Client",
+			"connection", connectionID,
 			"hub", t)
 }
 
 func (c *clientConnection) processHandshake() (HubProtocol, error) {
+	info, dbg := c.prefixLoggers(c.conn.ConnectionID())
 	const request = "{\"Protocol\":\"json\",\"Version\":1}\u001e"
 	_, err := c.conn.Write([]byte(request))
 	if err != nil {
-		fmt.Println(err)
+		_ = info.Log(evt, "handshake sent", "msg", request, "error", err)
+		return nil, err
 	}
+	_ = dbg.Log(evt, "handshake sent", "msg", request)
 	var buf bytes.Buffer
 	data := make([]byte, 1<<12)
+loop:
 	for {
 		var n int
 		if n, err = c.conn.Read(data); err != nil {
-			break
+			_ = info.Log(evt, "handshake received", "msg", request, "error", err)
+			break loop
 		} else {
 			buf.Write(data[:n])
 			var rawHandshake []byte
@@ -248,12 +255,21 @@ func (c *clientConnection) processHandshake() (HubProtocol, error) {
 				response := handshakeResponse{}
 				if err = json.Unmarshal(rawHandshake, &response); err != nil {
 					// Malformed handshake
-					break
+					_ = info.Log(evt, "handshake received", "msg", string(rawHandshake), "error", err)
+				} else {
+
+					if response.Error != "" {
+						_ = info.Log(evt, "handshake received", "error", response.Error)
+						return nil, errors.New(response.Error)
+					}
+					_ = dbg.Log(evt, "handshake received", "msg", fmtMsg(response))
+					protocol := &JSONHubProtocol{}
+					_, pDbg := c.loggers()
+					protocol.setDebugLogger(pDbg)
+					return protocol, nil
 				}
-				fmt.Println(response.Error)
-				break
 			}
 		}
 	}
-	return &JSONHubProtocol{dbg: log.NewLogfmtLogger(os.Stderr)}, nil
+	return nil, err
 }

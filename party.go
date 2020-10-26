@@ -36,7 +36,7 @@ type party interface {
 	loggers() (info StructuredLogger, dbg StructuredLogger)
 	setLoggers(info StructuredLogger, dbg StructuredLogger)
 
-	prefixLoggers() (info StructuredLogger, dbg StructuredLogger)
+	prefixLoggers(connectionID string) (info StructuredLogger, dbg StructuredLogger)
 
 	maximumReceiveMessageSize() uint
 	setMaximumReceiveMessageSize(size uint)

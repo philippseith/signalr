@@ -102,18 +102,21 @@ func (s *server) allowReconnect() bool {
 func (s *server) recoverHubLifeCyclePanic(hc hubConnection) {
 	if err := recover(); err != nil {
 		s.reconnectAllowed = false
-		info, dbg := s.prefixLoggers()
+		info, dbg := s.prefixLoggers("")
 		_ = info.Log(evt, "panic in hub lifecycle", "error", err, react, "close connection, allow no reconnect")
 		_ = dbg.Log(evt, "panic in hub lifecycle", "error", err, react, "close connection, allow no reconnect", "stack", string(debug.Stack()))
 		hc.Abort()
 	}
 }
 
-func (s *server) prefixLoggers() (info StructuredLogger, debug StructuredLogger) {
+func (s *server) prefixLoggers(connectionID string) (info StructuredLogger, dbg StructuredLogger) {
 	return log.WithPrefix(s.info, "ts", log.DefaultTimestampUTC,
 			"class", "Server",
-			"hub", reflect.ValueOf(s.newHub()).Elem().Type()), log.WithPrefix(s.dbg, "ts", log.DefaultTimestampUTC,
+			"connection", connectionID,
+			"hub", reflect.ValueOf(s.newHub()).Elem().Type()),
+		log.WithPrefix(s.dbg, "ts", log.DefaultTimestampUTC,
 			"class", "Server",
+			"connection", connectionID,
 			"hub", reflect.ValueOf(s.newHub()).Elem().Type())
 }
 
@@ -136,7 +139,7 @@ func (s *server) processHandshake(conn Connection) (HubProtocol, error) {
 	var ok bool
 	const handshakeResponse = "{}\u001e"
 	const errorHandshakeResponse = "{\"error\":\"%s\"}\u001e"
-	info, dbg := s.prefixLoggers()
+	info, dbg := s.prefixLoggers(conn.ConnectionID())
 
 	defer conn.SetTimeout(0)
 	conn.SetTimeout(s._handshakeTimeout)

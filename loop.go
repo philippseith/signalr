@@ -25,7 +25,7 @@ func newLoop(parentContext context.Context, p party, conn Connection, protocol H
 	protocol = reflect.New(reflect.ValueOf(protocol).Elem().Type()).Interface().(HubProtocol)
 	info, dbg := p.loggers()
 	protocol.setDebugLogger(dbg)
-	pInfo, pDbg := p.prefixLoggers()
+	pInfo, pDbg := p.prefixLoggers(conn.ConnectionID())
 	hubConn := newHubConnection(parentContext, conn, protocol, p.maximumReceiveMessageSize())
 	return &loop{
 		party:        p,
@@ -335,6 +335,7 @@ func getMethod(target interface{}, name string) (reflect.Value, bool) {
 	return reflect.Value{}, false
 }
 
+// TODO Move logging to defaultHubConnection
 func sendMessageAndLog(connFunc func() (interface{}, error), info StructuredLogger) {
 	if msg, err := connFunc(); err != nil {
 		_ = info.Log(evt, msgSend, "message", fmtMsg(msg), "error", err)
@@ -342,5 +343,5 @@ func sendMessageAndLog(connFunc func() (interface{}, error), info StructuredLogg
 }
 
 func fmtMsg(msg interface{}) string {
-	return fmt.Sprintf("%v", msg)
+	return fmt.Sprintf("%#v", msg)
 }

@@ -91,7 +91,7 @@ var _ = Describe("Handshake", func() {
 
 	Context("When the handshake is sent as one message to the server", func() {
 		It("should be connected", func(done Done) {
-			server, _ := NewServer(SimpleHubFactory(&handshakeHub{}))
+			server, _ := NewServer(context.TODO(), SimpleHubFactory(&handshakeHub{}))
 			conn := newTestingConnection()
 			go server.Run(context.TODO(), conn)
 			conn.ClientSend(`{"protocol": "json","version": 1}`)
@@ -102,7 +102,7 @@ var _ = Describe("Handshake", func() {
 	})
 	Context("When the handshake is sent as partial message to the server", func() {
 		It("should be connected", func(done Done) {
-			server, _ := NewServer(SimpleHubFactory(&handshakeHub{}))
+			server, _ := NewServer(context.TODO(), SimpleHubFactory(&handshakeHub{}))
 			conn := newTestingConnection()
 			go server.Run(context.TODO(), conn)
 			_, _ = conn.cliWriter.Write([]byte(`{"protocol"`))
@@ -114,7 +114,7 @@ var _ = Describe("Handshake", func() {
 	})
 	Context("When an invalid handshake is sent as partial message to the server", func() {
 		It("should not be connected", func(done Done) {
-			server, _ := NewServer(SimpleHubFactory(&handshakeHub{}))
+			server, _ := NewServer(context.TODO(), SimpleHubFactory(&handshakeHub{}))
 			conn := newTestingConnection()
 			go server.Run(context.TODO(), conn)
 			_, _ = conn.cliWriter.Write([]byte(`{"protocol"`))
@@ -131,7 +131,7 @@ var _ = Describe("Handshake", func() {
 	})
 	Context("When a handshake is sent with an unsupported protocol", func() {
 		It("should return an error handshake response and be not connected", func(done Done) {
-			server, _ := NewServer(SimpleHubFactory(&handshakeHub{}))
+			server, _ := NewServer(context.TODO(), SimpleHubFactory(&handshakeHub{}))
 			conn := newTestingConnection()
 			go server.Run(context.TODO(), conn)
 			conn.ClientSend(`{"protocol": "bson","version": 1}`)
@@ -153,7 +153,7 @@ var _ = Describe("Handshake", func() {
 	})
 	Context("When the connection fails before the server can receive handshake request", func() {
 		It("should not be connected", func(done Done) {
-			server, _ := NewServer(SimpleHubFactory(&handshakeHub{}))
+			server, _ := NewServer(context.TODO(), SimpleHubFactory(&handshakeHub{}))
 			conn := newTestingConnection()
 			go server.Run(context.TODO(), conn)
 			conn.SetFailRead("failed read in handshake")
@@ -169,7 +169,7 @@ var _ = Describe("Handshake", func() {
 	})
 	Context("When the handshake is received by the server but the connection fails when the response should be sent ", func() {
 		It("should not be connected", func(done Done) {
-			server, _ := NewServer(SimpleHubFactory(&handshakeHub{}))
+			server, _ := NewServer(context.TODO(), SimpleHubFactory(&handshakeHub{}))
 			conn := newTestingConnection()
 			go server.Run(context.TODO(), conn)
 			conn.SetFailWrite("failed write in handshake")
@@ -185,7 +185,7 @@ var _ = Describe("Handshake", func() {
 	})
 	Context("When the handshake with an unsupported protocol is received by the server but the connection fails when the response should be sent ", func() {
 		It("should not be connected", func(done Done) {
-			server, _ := NewServer(SimpleHubFactory(&handshakeHub{}))
+			server, _ := NewServer(context.TODO(), SimpleHubFactory(&handshakeHub{}))
 			conn := newTestingConnection()
 			go server.Run(context.TODO(), conn)
 			conn.SetFailWrite("failed write in handshake")
@@ -201,7 +201,7 @@ var _ = Describe("Handshake", func() {
 	})
 	Context("When the handshake connection is initiated, but the client does not send a handshake request within the handshake timeout ", func() {
 		It("should not be connected", func(done Done) {
-			server, _ := NewServer(SimpleHubFactory(&handshakeHub{}), HandshakeTimeout(time.Millisecond*100))
+			server, _ := NewServer(context.TODO(), SimpleHubFactory(&handshakeHub{}), HandshakeTimeout(time.Millisecond*100))
 			conn := newTestingConnection()
 			go server.Run(context.TODO(), conn)
 			time.Sleep(time.Millisecond * 200)
