@@ -10,6 +10,7 @@
     <input type="button" value="Stream" id="stream" />
     <input type="button" value="Stop Stream" id="stopstream" />
     <input type="button" value="Upstream" id="upstream" />
+    <input type="button" value="Stop/Start" id="stop" />
     <ul id="messages">
     </ul>
 
@@ -104,14 +105,18 @@
                     }
                 }, 100);
             });
-
+            document.getElementById('stop').addEventListener('click', () => {
+                connection.stop().then(() => {
+                    connection.start();
+                });
+            });
             connection.on('receive', message => {
                 var li = document.createElement('li');
                 li.innerText = 'sent ' + message;
                 document.getElementById('messages').appendChild(li);
             });
 
-            await connection.start();
+            connection.start();
         })();
     </script>
 </body>
