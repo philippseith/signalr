@@ -2,6 +2,7 @@ package signalr
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"reflect"
 	"runtime/debug"
@@ -51,39 +52,21 @@ func (l *loop) Run() {
 	abortConnCh := l.hubConn.Aborted()
 	// Process messages
 	var err error
-loop:
+msgLoop:
 	for {
 		ch := make(chan loopEvent, 1)
-		go func() {
-			<-time.After(l.party.keepAliveInterval())
-			ch <- loopEvent{
-				keepAliveTimeout: true,
-			}
-		}()
-		go func() {
-			<-time.After(l.party.timeout())
-			ch <- loopEvent{
-				clientTimeout: true,
-			}
-		}()
 		go func() {
 			message, err := l.receive()
 			ch <- loopEvent{
 				message: message,
 				err:     err,
 			}
+			close(ch)
 		}()
-		select {
-		case evt := <-ch:
-			// First sender wins
-			go func() {
-				// Ignore the loosers
-				<-ch
-				<-ch
-				close(ch)
-			}()
-			// Parse the winning event
-			if evt.message != nil || evt.err != nil {
+	pingLoop:
+		for {
+			select {
+			case evt := <-ch:
 				err = evt.err
 				if err == nil {
 					switch message := evt.message.(type) {
@@ -98,23 +81,27 @@ loop:
 						err = l.handleCompletionMessage(message)
 					case closeMessage:
 						_ = l.dbg.Log(evt, msgRecv, msg, fmtMsg(message))
-						break loop
+						// Bogus error to break the msgLoop
+						err = errors.New("")
 					case hubMessage:
+						// Mostly ping
 						err = l.handleOtherMessage(message)
 						// No default case necessary, because the protocol would return either a hubMessage or an error
 					}
 				}
-				if err != nil {
-					break loop
-				}
-			} else if evt.keepAliveTimeout {
+				break pingLoop
+			case <-time.After(l.party.keepAliveInterval()):
 				sendMessageAndLog(func() (interface{}, error) { return l.hubConn.Ping() }, l.info)
-			} else if evt.clientTimeout {
+				// Don't break the pingLoop, it exists for this case
+			case <-time.After(l.party.timeout()):
 				err = fmt.Errorf("client timeout interval elapsed (%v)", l.party.timeout())
-				break loop
+				break pingLoop
+			case err = <-abortConnCh:
+				break pingLoop
 			}
-		case <-abortConnCh:
-			break loop
+		}
+		if err != nil {
+			break msgLoop
 		}
 	}
 	l.party.onDisconnected(l.hubConn)
