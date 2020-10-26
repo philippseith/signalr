@@ -120,7 +120,7 @@ var _ = Describe("ClientConnection", func() {
 			cliConn, srvConn := newClientServerConnections()
 			// Start the server
 			svrCtx, svrCancel := context.WithCancel(context.Background())
-			go server.Run(svrCtx, srvConn)
+			go server.ServeConnection(svrCtx, srvConn)
 			// Create the ClientConnection
 			clientConn, err := NewClientConnection(context.TODO(), cliConn)
 			Expect(err).NotTo(HaveOccurred())
@@ -149,7 +149,7 @@ var _ = Describe("ClientConnection", func() {
 			cliConn, srvConn = newClientServerConnections()
 			// Start the server
 			svrCtx, svrCancel = context.WithCancel(context.Background())
-			go server.Run(svrCtx, srvConn)
+			go server.ServeConnection(svrCtx, srvConn)
 			// Create the ClientConnection
 			clientConn, _ = NewClientConnection(context.TODO(), cliConn)
 			// Start it
@@ -204,7 +204,7 @@ var _ = Describe("ClientConnection", func() {
 			cliConn, srvConn = newClientServerConnections()
 			// Start the server
 			svrCtx, svrCancel = context.WithCancel(context.Background())
-			go server.Run(svrCtx, srvConn)
+			go server.ServeConnection(svrCtx, srvConn)
 			// Create the ClientConnection
 			clientConn, _ = NewClientConnection(context.TODO(), cliConn)
 			// Start it
@@ -283,7 +283,7 @@ var _ = Describe("ClientConnection", func() {
 			cliConn, srvConn = newClientServerConnections()
 			// Start the server
 			svrCtx, svrCancel = context.WithCancel(context.Background())
-			go server.Run(svrCtx, srvConn)
+			go server.ServeConnection(svrCtx, srvConn)
 			// Create the ClientConnection
 			clientConn, _ = NewClientConnection(context.TODO(), cliConn)
 			// Start it
@@ -368,7 +368,7 @@ var _ = Describe("ClientConnection", func() {
 			cliConn, srvConn = newClientServerConnections()
 			// Start the server
 			svrCtx, svrCancel = context.WithCancel(context.Background())
-			go server.Run(svrCtx, srvConn)
+			go server.ServeConnection(svrCtx, srvConn)
 			// Create the ClientConnection
 			clientConn, _ = NewClientConnection(context.TODO(), cliConn)
 			// Start it

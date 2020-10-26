@@ -12,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/go-kit/kit/log"
+	"net/http"
 	"os"
 	"reflect"
 	"runtime/debug"
@@ -20,7 +21,8 @@ import (
 // Server is a SignalR server for one type of hub
 type Server interface {
 	party
-	Run(parentContext context.Context, conn Connection)
+	MapHub(path string) *http.ServeMux
+	ServeConnection(parentContext context.Context, conn Connection)
 }
 
 type server struct {
@@ -62,10 +64,19 @@ func NewServer(ctx context.Context, options ...func(party) error) (Server, error
 	return server, nil
 }
 
-// run runs the server on one connection. The same server might be run on different connections in parallel
-func (s *server) Run(parentContext context.Context, conn Connection) {
+// MapHub maps the hub to a path and returns the http.ServerMux which handles it
+func (s *server) MapHub(path string) *http.ServeMux {
+	httpMux := newHttpMux(s)
+	mux := http.NewServeMux()
+	mux.HandleFunc(fmt.Sprintf("%s/negotiate", path), httpMux.negotiate)
+	mux.Handle(path, httpMux)
+	return mux
+}
+
+// ServeConnection serves one connection. The same server might serve different connections in parallel
+func (s *server) ServeConnection(parentContext context.Context, conn Connection) {
 	if protocol, err := s.processHandshake(conn); err != nil {
-		info, _ := s.prefixLoggers()
+		info, _ := s.prefixLoggers("")
 		_ = info.Log(evt, "processHandshake", "connectionId", conn.ConnectionID(), "error", err, react, "do not connect")
 	} else {
 		newLoop(parentContext, s, conn, protocol).Run()
