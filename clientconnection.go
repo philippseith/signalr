@@ -29,11 +29,11 @@ type ClientConnection interface {
 
 // NewClientConnection build a new ClientConnection.
 // conn is a transport connection.
-func NewClientConnection(conn Connection, options ...func(party) error) (ClientConnection, error) {
+func NewClientConnection(ctx context.Context, conn Connection, options ...func(party) error) (ClientConnection, error) {
 	info, dbg := buildInfoDebugLogger(log.NewLogfmtLogger(os.Stderr), true)
 	c := &clientConnection{
 		conn:      conn,
-		partyBase: newPartyBase(info, dbg),
+		partyBase: newPartyBase(ctx, info, dbg),
 		lastID:    -1,
 	}
 	for _, option := range options {

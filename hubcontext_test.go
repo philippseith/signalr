@@ -73,7 +73,7 @@ func (c *contextHub) Abort() {
 var hubContextInvocationQueue = make(chan string, 10)
 
 func connectMany() []*testingConnection {
-	server, err := NewServer(SimpleHubFactory(&contextHub{}),
+	server, err := NewServer(context.TODO(), SimpleHubFactory(&contextHub{}),
 		Logger(log.NewLogfmtLogger(os.Stderr), false))
 	if err != nil {
 		Fail(err.Error())

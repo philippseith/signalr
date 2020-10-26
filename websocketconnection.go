@@ -7,24 +7,22 @@ import (
 )
 
 type webSocketConnection struct {
-	conn         *websocket.Conn
-	connectionID string
-	timeout      time.Duration
+	baseConnection
+	conn *websocket.Conn
 }
 
-func (w *webSocketConnection) SetTimeout(timeout time.Duration) {
-	w.timeout = timeout
-}
-
-func (w *webSocketConnection) Timeout() time.Duration {
-	return w.timeout
-}
-
-func (w *webSocketConnection) ConnectionID() string {
-	return w.connectionID
+func newWebSocketConnection(connectionID string, conn *websocket.Conn) *webSocketConnection {
+	w := &webSocketConnection{
+		conn:           conn,
+		baseConnection: baseConnection{connectionID: connectionID},
+	}
+	return w
 }
 
 func (w *webSocketConnection) Write(p []byte) (n int, err error) {
+	if err := w.context().Err(); err != nil {
+		return 0, err
+	}
 	if w.timeout > 0 {
 		defer func() { _ = w.conn.SetWriteDeadline(time.Time{}) }()
 		_ = w.conn.SetWriteDeadline(time.Now().Add(w.timeout))
@@ -33,6 +31,9 @@ func (w *webSocketConnection) Write(p []byte) (n int, err error) {
 }
 
 func (w *webSocketConnection) Read(p []byte) (n int, err error) {
+	if err := w.context().Err(); err != nil {
+		return 0, err
+	}
 	if w.timeout > 0 {
 		defer func() { _ = w.conn.SetReadDeadline(time.Time{}) }()
 		_ = w.conn.SetReadDeadline(time.Now().Add(w.timeout))

@@ -1,6 +1,7 @@
 package signalr
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"golang.org/x/net/websocket"
@@ -10,41 +11,40 @@ import (
 )
 
 // NewWebsocketClientConnection creates a signalR ClientConnection using the websocket transport
-func NewWebsocketClientConnection(address string) ClientConnection {
+func NewWebsocketClientConnection(ctx context.Context, address string, options ...func(party) error) (ClientConnection, error) {
 	req, err := http.NewRequest("POST", fmt.Sprintf("%v/negotiate", address), nil)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 	defer func() { _ = resp.Body.Close() }()
-
+	if resp.StatusCode != 200 {
+		return nil, fmt.Errorf("%v -> %v", req, resp.Status)
+	}
 	body, _ := ioutil.ReadAll(resp.Body)
 	nr := negotiateResponse{}
 	err = json.Unmarshal(body, &nr)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 	u, err := url.Parse(address)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 	wsAddress := fmt.Sprintf("ws://%v%v?id=%v", u.Host, u.Path, nr.ConnectionID)
 	ws, err := websocket.Dial(wsAddress, "", address)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
-	conn := &webSocketConnection{
-		conn:         ws,
-		connectionID: nr.ConnectionID,
-		timeout:      0,
-	}
-	result, err := NewClientConnection(conn)
+	conn := newWebSocketConnection(nr.ConnectionID, ws)
+	conn.initCancel(ctx)
+	result, err := NewClientConnection(conn.context(), conn, options...)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
-	return result
+	return result, nil
 }

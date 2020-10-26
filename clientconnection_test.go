@@ -110,7 +110,7 @@ var _ = Describe("ClientConnection", func() {
 	Context("Start", func() {
 		It("should connect to the server", func(done Done) {
 			// Create a simple server
-			server, err := NewServer(SimpleHubFactory(&simpleHub{}),
+			server, err := NewServer(context.TODO(), SimpleHubFactory(&simpleHub{}),
 				Logger(log.NewLogfmtLogger(os.Stderr), false),
 				ChanReceiveTimeout(200*time.Millisecond),
 				StreamBufferCapacity(5))
@@ -122,7 +122,7 @@ var _ = Describe("ClientConnection", func() {
 			svrCtx, svrCancel := context.WithCancel(context.Background())
 			go server.Run(svrCtx, srvConn)
 			// Create the ClientConnection
-			clientConn, err := NewClientConnection(cliConn)
+			clientConn, err := NewClientConnection(context.TODO(), cliConn)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(clientConn).NotTo(BeNil())
 			// Start it
@@ -141,7 +141,7 @@ var _ = Describe("ClientConnection", func() {
 		var svrCtx context.Context
 		var svrCancel context.CancelFunc
 		BeforeEach(func(done Done) {
-			server, _ := NewServer(SimpleHubFactory(&simpleHub{}),
+			server, _ := NewServer(context.TODO(), SimpleHubFactory(&simpleHub{}),
 				Logger(log.NewLogfmtLogger(os.Stderr), false),
 				ChanReceiveTimeout(200*time.Millisecond),
 				StreamBufferCapacity(5))
@@ -151,7 +151,7 @@ var _ = Describe("ClientConnection", func() {
 			svrCtx, svrCancel = context.WithCancel(context.Background())
 			go server.Run(svrCtx, srvConn)
 			// Create the ClientConnection
-			clientConn, _ = NewClientConnection(cliConn)
+			clientConn, _ = NewClientConnection(context.TODO(), cliConn)
 			// Start it
 			clientConn.SetReceiver(simpleReceiver{})
 			<-clientConn.Start()
@@ -196,7 +196,7 @@ var _ = Describe("ClientConnection", func() {
 		var svrCtx context.Context
 		var svrCancel context.CancelFunc
 		BeforeEach(func(done Done) {
-			server, _ := NewServer(SimpleHubFactory(&simpleHub{}),
+			server, _ := NewServer(context.TODO(), SimpleHubFactory(&simpleHub{}),
 				Logger(log.NewLogfmtLogger(os.Stderr), false),
 				ChanReceiveTimeout(200*time.Millisecond),
 				StreamBufferCapacity(5))
@@ -206,7 +206,7 @@ var _ = Describe("ClientConnection", func() {
 			svrCtx, svrCancel = context.WithCancel(context.Background())
 			go server.Run(svrCtx, srvConn)
 			// Create the ClientConnection
-			clientConn, _ = NewClientConnection(cliConn)
+			clientConn, _ = NewClientConnection(context.TODO(), cliConn)
 			// Start it
 			receiver = &simpleReceiver{}
 			clientConn.SetReceiver(receiver)
@@ -275,7 +275,7 @@ var _ = Describe("ClientConnection", func() {
 		var svrCtx context.Context
 		var svrCancel context.CancelFunc
 		BeforeEach(func(done Done) {
-			server, _ := NewServer(SimpleHubFactory(&simpleHub{}),
+			server, _ := NewServer(context.TODO(), SimpleHubFactory(&simpleHub{}),
 				Logger(log.NewLogfmtLogger(os.Stderr), false),
 				ChanReceiveTimeout(200*time.Millisecond),
 				StreamBufferCapacity(5))
@@ -285,7 +285,7 @@ var _ = Describe("ClientConnection", func() {
 			svrCtx, svrCancel = context.WithCancel(context.Background())
 			go server.Run(svrCtx, srvConn)
 			// Create the ClientConnection
-			clientConn, _ = NewClientConnection(cliConn)
+			clientConn, _ = NewClientConnection(context.TODO(), cliConn)
 			// Start it
 			receiver := &simpleReceiver{}
 			clientConn.SetReceiver(receiver)
@@ -338,7 +338,7 @@ var _ = Describe("ClientConnection", func() {
 	})
 	Context("GetConnectionID", func() {
 		It("should return distinct IDs", func(done Done) {
-			c, _ := NewClientConnection(nil)
+			c, _ := NewClientConnection(context.TODO(), nil)
 			cc := c.(*clientConnection)
 			ids := make(map[string]string)
 			for i := 1; i < 10000; i++ {
@@ -360,7 +360,7 @@ var _ = Describe("ClientConnection", func() {
 		BeforeEach(func(done Done) {
 			hub = &simpleHub{}
 			hub.receiveStreamDone = make(chan struct{}, 1)
-			server, _ := NewServer(HubFactory(func() HubInterface { return hub }),
+			server, _ := NewServer(context.TODO(), HubFactory(func() HubInterface { return hub }),
 				Logger(log.NewLogfmtLogger(os.Stderr), false),
 				ChanReceiveTimeout(200*time.Millisecond),
 				StreamBufferCapacity(5))
@@ -370,7 +370,7 @@ var _ = Describe("ClientConnection", func() {
 			svrCtx, svrCancel = context.WithCancel(context.Background())
 			go server.Run(svrCtx, srvConn)
 			// Create the ClientConnection
-			clientConn, _ = NewClientConnection(cliConn)
+			clientConn, _ = NewClientConnection(context.TODO(), cliConn)
 			// Start it
 			receiver := &simpleReceiver{}
 			clientConn.SetReceiver(receiver)

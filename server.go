@@ -34,7 +34,7 @@ type server struct {
 
 // NewServer creates a new server for one type of hub. The hub type is set by one of the
 // options UseHub, HubFactory or SimpleHubFactory
-func NewServer(options ...func(party) error) (Server, error) {
+func NewServer(ctx context.Context, options ...func(party) error) (Server, error) {
 	info, dbg := buildInfoDebugLogger(log.NewLogfmtLogger(os.Stderr), false)
 	lifetimeManager := newLifeTimeManager(info)
 	server := &server{
@@ -46,7 +46,7 @@ func NewServer(options ...func(party) error) (Server, error) {
 		groupManager: &defaultGroupManager{
 			lifetimeManager: &lifetimeManager,
 		},
-		partyBase:        newPartyBase(info, dbg),
+		partyBase:        newPartyBase(ctx, info, dbg),
 		reconnectAllowed: true,
 	}
 	for _, option := range options {

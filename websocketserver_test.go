@@ -30,8 +30,9 @@ var _ = Describe("Websocket server", func() {
 	Context("A correct negotiation request is sent", func() {
 		It("should send a correct negotiation response with support for Websockets with text and binary protocol", func(done Done) {
 			// Start server
-			router := http.NewServeMux()
-			MapHub(router, "/hub", SimpleHubFactory(&webSocketHub{}))
+			server, err := NewServer(context.TODO(), SimpleHubFactory(&webSocketHub{}))
+			Expect(err).NotTo(HaveOccurred())
+			router := server.MapHub("/hub")
 			port := freePort()
 			go func() {
 				_ = http.ListenAndServe(fmt.Sprintf("127.0.0.1:%v", port), router)
@@ -56,8 +57,9 @@ var _ = Describe("Websocket server", func() {
 	Context("A invalid negotiation request is sent", func() {
 		It("should send a correct negotiation response with support for Websockets with text and binary protocol", func(done Done) {
 			// Start server
-			router := http.NewServeMux()
-			MapHub(router, "/hub", SimpleHubFactory(&webSocketHub{}))
+			server, err := NewServer(context.TODO(), SimpleHubFactory(&webSocketHub{}))
+			Expect(err).NotTo(HaveOccurred())
+			router := server.MapHub("/hub")
 			port := freePort()
 			go func() {
 				_ = http.ListenAndServe(fmt.Sprintf("127.0.0.1:%v", port), router)
@@ -73,10 +75,11 @@ var _ = Describe("Websocket server", func() {
 	})
 
 	Context("When no negotiation is send", func() {
-		It("should serve websocket requests without", func(done Done) {
+		It("should serve websocket requests", func(done Done) {
 			// Start server
-			router := http.NewServeMux()
-			MapHub(router, "/hub", SimpleHubFactory(&webSocketHub{}))
+			server, err := NewServer(context.TODO(), SimpleHubFactory(&webSocketHub{}))
+			Expect(err).NotTo(HaveOccurred())
+			router := server.MapHub("/hub")
 			port := freePort()
 			go func() {
 				_ = http.ListenAndServe(fmt.Sprintf("127.0.0.1:%v", port), router)
@@ -90,8 +93,9 @@ var _ = Describe("Websocket server", func() {
 	Context("When a negotiation is send", func() {
 		It("should serve websocket requests", func(done Done) {
 			// Start server
-			router := http.NewServeMux()
-			MapHub(router, "/hub", SimpleHubFactory(&webSocketHub{}))
+			server, err := NewServer(context.TODO(), SimpleHubFactory(&webSocketHub{}))
+			Expect(err).NotTo(HaveOccurred())
+			router := server.MapHub("/hub")
 			port := freePort()
 			go func() {
 				_ = http.ListenAndServe(fmt.Sprintf("127.0.0.1:%v", port), router)

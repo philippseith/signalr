@@ -1,11 +1,14 @@
 package signalr
 
 import (
+	"context"
 	"github.com/go-kit/kit/log"
 	"time"
 )
 
 type party interface {
+	context() context.Context
+
 	onConnected(hc hubConnection)
 	onDisconnected(hc hubConnection)
 
@@ -39,8 +42,9 @@ type party interface {
 	setMaximumReceiveMessageSize(size uint)
 }
 
-func newPartyBase(info log.Logger, dbg log.Logger) partyBase {
+func newPartyBase(ctx context.Context, info log.Logger, dbg log.Logger) partyBase {
 	return partyBase{
+		ctx:                        ctx,
 		_timeout:                   time.Second * 30,
 		_handshakeTimeout:          time.Second * 15,
 		_keepAliveInterval:         time.Second * 5,
@@ -54,6 +58,7 @@ func newPartyBase(info log.Logger, dbg log.Logger) partyBase {
 }
 
 type partyBase struct {
+	ctx                        context.Context
 	_timeout                   time.Duration
 	_handshakeTimeout          time.Duration
 	_keepAliveInterval         time.Duration
@@ -63,6 +68,10 @@ type partyBase struct {
 	_enableDetailedErrors      bool
 	info                       StructuredLogger
 	dbg                        StructuredLogger
+}
+
+func (p *partyBase) context() context.Context {
+	return p.ctx
 }
 
 func (p *partyBase) timeout() time.Duration {
