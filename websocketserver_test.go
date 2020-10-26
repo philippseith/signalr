@@ -105,7 +105,55 @@ var _ = Describe("Websocket server", func() {
 			close(done)
 		})
 	})
+	Context("Connection with client", func() {
+		It("should successfully handle an Invoke call", func(done Done) {
+			logger := &nonProtocolLogger{log.NewLogfmtLogger(os.Stderr)}
+			// Start server
+			server, err := NewServer(context.TODO(),
+				SimpleHubFactory(&webSocketHub{}),
+				Logger(logger, true))
+			Expect(err).NotTo(HaveOccurred())
+			router := server.MapHub("/hub")
+			port := freePort()
+			go func() {
+				_ = http.ListenAndServe(fmt.Sprintf("127.0.0.1:%v", port), router)
+			}()
+			waitForPort(port)
+			conn, err := NewWebsocketClientConnection(context.TODO(),
+				fmt.Sprintf("http://127.0.0.1:%v/hub", port),
+				Logger(logger, true))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(conn).NotTo(BeNil())
+			<-conn.Start()
+			result := <-conn.Invoke("Add2", 1)
+			Expect(result.Error).NotTo(HaveOccurred())
+			Expect(result.Value).To(Equal(float64(3)))
+			conn2, err := NewWebsocketClientConnection(context.TODO(),
+				fmt.Sprintf("http://127.0.0.1:%v/hub", port),
+				Logger(logger, true))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(conn2).NotTo(BeNil())
+			<-conn2.Start()
+			result = <-conn2.Invoke("Add2", 2)
+			Expect(result.Error).NotTo(HaveOccurred())
+			Expect(result.Value).To(Equal(float64(4)))
+			close(done)
+		}, 100)
+	})
 })
+
+type nonProtocolLogger struct {
+	logger StructuredLogger
+}
+
+func (n *nonProtocolLogger) Log(keyVals ...interface{}) error {
+	for _, kv := range keyVals {
+		if kv == "protocol" {
+			return nil
+		}
+	}
+	return n.logger.Log(keyVals...)
+}
 
 var _ = Describe("Websocket connection", func() {
 
@@ -153,8 +201,9 @@ func handShakeAndCallWebSocketTestServer(port int, connectionID string) {
 	defer func() {
 		_ = ws.Close()
 	}()
-	wsConn := webSocketConnection{ws, connectionID, 0}
-	cliConn := newHubConnection(context.TODO(), &wsConn, &protocol, 1<<15)
+	wsConn := newWebSocketConnection(connectionID, ws)
+	wsConn.initCancel(context.TODO())
+	cliConn := newHubConnection(context.TODO(), wsConn, &protocol, 1<<15)
 	_, _ = wsConn.Write(append([]byte(`{"protocol": "json","version": 1}`), 30))
 	_, _ = wsConn.Write(append([]byte(`{"type":1,"invocationId":"666","target":"add2","arguments":[1]}`), 30))
 	cliConn.Start()
