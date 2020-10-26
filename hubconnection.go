@@ -97,13 +97,17 @@ func (c *defaultHubConnection) Aborted() <-chan error {
 	return ch
 }
 
+type receiveResult struct {
+	message interface{}
+	err     error
+}
+
 func (c *defaultHubConnection) Receive() (interface{}, error) {
 	if !c.IsConnected() {
 		return nil, c.context.Err()
 	}
-	m := make(chan interface{}, 1)
-	e := make(chan error, 1)
-	go func() {
+	recvResCh := make(chan receiveResult, 1)
+	go func(chan receiveResult) {
 		var buf bytes.Buffer
 		var data = make([]byte, c.maximumReceiveMessageSize)
 		var n int
@@ -112,42 +116,42 @@ func (c *defaultHubConnection) Receive() (interface{}, error) {
 				// Partial message, need more data
 				// ReadMessage read data out of the buf, so its gone there: refill
 				buf.Write(data[:n])
-				nc := make(chan int)
-				e2 := make(chan error)
-				go func() {
-					if n, err = c.connection.Read(data); err == nil {
+				readResCh := make(chan receiveResult, 1)
+				go func(chan receiveResult) {
+					n, err = c.connection.Read(data)
+					if err == nil {
 						buf.Write(data[:n])
-						nc <- n
-					} else {
-						e2 <- err
 					}
-				}()
+					readResCh <- receiveResult{n, err}
+					close(readResCh)
+				}(readResCh)
 				select {
-				case n = <-nc:
-				case err = <-e2:
-					c.Abort()
-					e <- err
-					m <- nil
-					return
+				case readRes := <-readResCh:
+					if readRes.err != nil {
+						c.Abort()
+						recvResCh <- readRes
+						close(recvResCh)
+						return
+					} else {
+						n = readRes.message.(int)
+					}
 				case <-c.context.Done():
-					e <- c.context.Err()
-					m <- nil
+					recvResCh <- receiveResult{err: c.context.Err()}
+					close(recvResCh)
 					return
 				}
 			} else {
-				m <- message
-				e <- err
+				recvResCh <- receiveResult{message, err}
+				close(recvResCh)
 				return
 			}
 		}
-	}()
+	}(recvResCh)
 	select {
+	case recvRes := <-recvResCh:
+		return recvRes.message, recvRes.err
 	case <-c.context.Done():
 		return nil, c.context.Err()
-	case err := <-e:
-		return <-m, err
-	case message := <-m:
-		return message, <-e
 	}
 }
 
