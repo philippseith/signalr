@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"golang.org/x/net/websocket"
 	"net/http"
 	"strings"
@@ -45,23 +46,14 @@ func (h *httpMux) handlePost(writer http.ResponseWriter, request *http.Request) 
 	c, ok := h.connectionMap[connectionID]
 	h.mx.Unlock()
 	if ok {
-		if c == nil {
-			// Connection is negotiated but not initiated
-			if request.Header.Get("Accept") == "text/event-stream" {
-				h.serveConnection(newServerSentEventConnection())
-			} else {
-				//  TODO Long polling
-			}
-		} else {
-			// Connection is initiated
-			switch conn := c.(type) {
-			case *serverSentEventConnection:
-				writer.WriteHeader(conn.consumeRequest(request))
-			// TODO case longPolling
-			default:
-				// ConnectionID for WebSocket
-				writer.WriteHeader(409) // Conflict
-			}
+		// Connection is initiated
+		switch conn := c.(type) {
+		case *serverSentEventConnection:
+			writer.WriteHeader(conn.consumeRequest(request))
+		// TODO case longPolling
+		default:
+			// ConnectionID for WebSocket or
+			writer.WriteHeader(409) // Conflict
 		}
 	} else {
 		writer.WriteHeader(404) // Not found
@@ -89,8 +81,41 @@ func (h *httpMux) handleGet(writer http.ResponseWriter, request *http.Request) {
 			Handler: h.handleWebsocket,
 		}
 		h.wsServer.ServeHTTP(writer, request)
+	} else if strings.ToLower(request.Header.Get("Accept")) == "text/event-stream" {
+		connectionID := request.URL.Query().Get("id")
+		if connectionID == "" {
+			writer.WriteHeader(400) // Bad request
+			return
+		}
+		h.mx.Lock()
+		c, ok := h.connectionMap[connectionID]
+		h.mx.Unlock()
+		if ok {
+			if c == nil {
+				// Connection is negotiated but not initiated
+				// Check for SSE
+				if strings.ToLower(request.Header.Get("Accept")) == "text/event-stream" {
+					// We compose http and send it over sse
+					writer.Header().Set("Content-Type", "text/event-stream")
+					writer.Header().Set("Connection", "keep-alive")
+					writer.Header().Set("Cache-Control", "no-cache")
+					writer.WriteHeader(200)
+					// End this Server Sent Event (yes, your response now is one)
+					_, _ = fmt.Fprint(writer, "\n\n")
+					writer.(http.Flusher).Flush()
+					h.serveConnection(newServerSentEventConnection(connectionID, writer))
+				} else {
+					//  TODO Long polling
+				}
+			} else {
+				// connectionID in use
+				writer.WriteHeader(409) // Conflict
+			}
+		} else {
+			writer.WriteHeader(404) // Not found
+		}
 	} else {
-		writer.WriteHeader(400)
+		writer.WriteHeader(400) // Bad request
 	}
 }
 
@@ -134,8 +159,10 @@ func (h *httpMux) negotiate(w http.ResponseWriter, req *http.Request) {
 			ConnectionID: connectionID,
 			AvailableTransports: []availableTransport{
 				{
-					Transport:       "WebSockets",
-					TransferFormats: []string{"Text", "Binary"},
+					Transport:       "ServerSentEvents",
+					TransferFormats: []string{"Text"},
+					//Transport:       "WebSockets",
+					//TransferFormats: []string{"Text", "Binary"},
 				},
 			},
 		}
