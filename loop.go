@@ -91,7 +91,10 @@ msgLoop:
 				}
 				break pingLoop
 			case <-time.After(l.party.keepAliveInterval()):
-				sendMessageAndLog(func() (interface{}, error) { return l.hubConn.Ping() }, l.info)
+				// Send ping only when there was no write in the keepAliveInterval before
+				if time.Now().Sub(l.hubConn.LastWriteStamp()) > l.party.keepAliveInterval() {
+					_ = l.hubConn.Ping()
+				}
 				// Don't break the pingLoop, it exists for this case
 			case <-time.After(l.party.timeout()):
 				err = fmt.Errorf("client timeout interval elapsed (%v)", l.party.timeout())

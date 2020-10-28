@@ -13,12 +13,13 @@ type hubConnection interface {
 	IsConnected() bool
 	ConnectionID() string
 	Receive() (interface{}, error)
-	SendInvocation(id string, target string, args []interface{}) (invocationMessage, error)
-	SendStreamInvocation(id string, target string, args []interface{}, streamIds []string) (invocationMessage, error)
-	StreamItem(id string, item interface{}) (streamItemMessage, error)
-	Completion(id string, result interface{}, error string) (completionMessage, error)
-	Close(error string, allowReconnect bool) (closeMessage, error)
-	Ping() (hubMessage, error)
+	SendInvocation(id string, target string, args []interface{}) error
+	SendStreamInvocation(id string, target string, args []interface{}, streamIds []string) error
+	StreamItem(id string, item interface{}) error
+	Completion(id string, result interface{}, error string) error
+	Close(error string, allowReconnect bool) error
+	Ping() error
+	LastWriteStamp() time.Time
 	Items() *sync.Map
 	Abort()
 	Aborted() <-chan error
@@ -46,6 +47,8 @@ type defaultHubConnection struct {
 	maximumReceiveMessageSize uint
 	items                     *sync.Map
 	context                   context.Context
+	lastWriteStamp            time.Time
+	info                      StructuredLogger
 }
 
 func (c *defaultHubConnection) Items() *sync.Map {
@@ -202,6 +205,10 @@ func (c *defaultHubConnection) Ping() error {
 		Type: 6,
 	}
 	return c.writeMessage(pingMessage)
+}
+
+func (c *defaultHubConnection) LastWriteStamp() time.Time {
+	return c.lastWriteStamp
 }
 
 func (c *defaultHubConnection) writeMessage(message interface{}) error {
