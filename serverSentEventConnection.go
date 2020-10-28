@@ -68,7 +68,7 @@ func (s *serverSentEventConnection) Write(p []byte) (n int, err error) {
 		return 0, err
 	}
 	payload := ""
-	for _, line := range strings.Split(string(p), "\n") {
+	for _, line := range strings.Split(strings.TrimRight(string(p), "\n"), "\n") {
 		payload = payload + "data: " + line + "\n"
 	}
 	n, err = s.sseWriter.Write([]byte(payload + "\n"))
