@@ -100,8 +100,8 @@ func (h *httpMux) handleGet(writer http.ResponseWriter, request *http.Request) {
 					writer.Header().Set("Connection", "keep-alive")
 					writer.Header().Set("Cache-Control", "no-cache")
 					writer.WriteHeader(200)
-					// End this Server Sent Event (yes, your response now is one)
-					_, _ = fmt.Fprint(writer, "\n\n")
+					// End this Server Sent Event (yes, your response now is one and the client will wait for this initial event to end)
+					_, _ = fmt.Fprint(writer, ":\r\n\r\n")
 					writer.(http.Flusher).Flush()
 					h.serveConnection(newServerSentEventConnection(connectionID, writer))
 				} else {
