@@ -1,23 +1,18 @@
 package signalr
 
 import (
-	"github.com/go-kit/kit/log"
 	"reflect"
 	"sync"
 )
 
 func newStreamer(conn hubConnection, info StructuredLogger) *streamer {
-	info = log.WithPrefix(info, "ts", log.DefaultTimestampUTC,
-		"class", "streamer",
-		"connection", conn.ConnectionID())
-	return &streamer{make(map[string]chan bool), sync.Mutex{}, conn, info}
+	return &streamer{make(map[string]chan bool), sync.Mutex{}, conn}
 }
 
 type streamer struct {
 	streamCancelChans map[string]chan bool
 	sccMutex          sync.Mutex
 	conn              hubConnection
-	info              StructuredLogger
 }
 
 func (s *streamer) Start(invocationID string, reflectedChannel reflect.Value) {
@@ -38,23 +33,17 @@ func (s *streamer) Start(invocationID string, reflectedChannel reflect.Value) {
 				if s.conn.IsConnected() {
 					select {
 					case <-cancelChan:
-						sendMessageAndLog(func() (i interface{}, err error) {
-							return s.conn.Completion(invocationID, nil, "")
-						}, s.info)
+						_ = s.conn.Completion(invocationID, nil, "")
 						return
 					default:
 					}
-					sendMessageAndLog(func() (i interface{}, err error) {
-						return s.conn.StreamItem(invocationID, chanResult.Interface())
-					}, s.info)
+					_ = s.conn.StreamItem(invocationID, chanResult.Interface())
 				} else {
 					return
 				}
 			} else {
 				if s.conn.IsConnected() {
-					sendMessageAndLog(func() (i interface{}, err error) {
-						return s.conn.Completion(invocationID, nil, "")
-					}, s.info)
+					_ = s.conn.Completion(invocationID, nil, "")
 				}
 				return
 			}

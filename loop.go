@@ -26,7 +26,7 @@ func newLoop(parentContext context.Context, p party, conn Connection, protocol H
 	info, dbg := p.loggers()
 	protocol.setDebugLogger(dbg)
 	pInfo, pDbg := p.prefixLoggers(conn.ConnectionID())
-	hubConn := newHubConnection(parentContext, conn, protocol, p.maximumReceiveMessageSize())
+	hubConn := newHubConnection(parentContext, conn, protocol, p.maximumReceiveMessageSize(), info)
 	return &loop{
 		party:        p,
 		protocol:     protocol,
@@ -105,9 +105,7 @@ msgLoop:
 		}
 	}
 	l.party.onDisconnected(l.hubConn)
-	sendMessageAndLog(func() (interface{}, error) {
-		return l.hubConn.Close(fmt.Sprintf("%v", err), l.party.allowReconnect())
-	}, l.info)
+	_ = l.hubConn.Close(fmt.Sprintf("%v", err), l.party.allowReconnect())
 	_ = l.dbg.Log(evt, "message loop ended")
 	l.invokeClient.cancelAllInvokes()
 }
@@ -125,15 +123,11 @@ func (l *loop) handleInvocationMessage(invocation invocationMessage) {
 	if method, ok := getMethod(l.party.invocationTarget(l.hubConn), invocation.Target); !ok {
 		// Unable to find the method
 		_ = l.info.Log(evt, "getMethod", "error", "missing method", "name", invocation.Target, react, "send completion with error")
-		sendMessageAndLog(func() (interface{}, error) {
-			return l.hubConn.Completion(invocation.InvocationID, nil, fmt.Sprintf("Unknown method %s", invocation.Target))
-		}, l.info)
+		_ = l.hubConn.Completion(invocation.InvocationID, nil, fmt.Sprintf("Unknown method %s", invocation.Target))
 	} else if in, clientStreaming, err := buildMethodArguments(method, invocation, l.streamClient, l.protocol); err != nil {
 		// argument build failed
 		_ = l.info.Log(evt, "buildMethodArguments", "error", err, "name", invocation.Target, react, "send completion with error")
-		sendMessageAndLog(func() (interface{}, error) {
-			return l.hubConn.Completion(invocation.InvocationID, nil, err.Error())
-		}, l.info)
+		_ = l.hubConn.Completion(invocation.InvocationID, nil, err.Error())
 	} else if clientStreaming {
 		// let the receiving method run independently
 		go func() {
@@ -144,10 +138,8 @@ func (l *loop) handleInvocationMessage(invocation invocationMessage) {
 		// Stream invocation is only allowed when the method has only one return value
 		// We allow no channel return values, because a client can receive as stream with only one item
 		if invocation.Type == 4 && method.Type().NumOut() != 1 {
-			sendMessageAndLog(func() (interface{}, error) {
-				return l.hubConn.Completion(invocation.InvocationID, nil,
-					fmt.Sprintf("Stream invocation of method %s which has not return value kind channel", invocation.Target))
-			}, l.info)
+			_ = l.hubConn.Completion(invocation.InvocationID, nil,
+				fmt.Sprintf("Stream invocation of method %s which has not return value kind channel", invocation.Target))
 		} else {
 			// hub method might take a long time
 			go func() {
@@ -174,9 +166,8 @@ func (l *loop) returnInvocationResult(invocation invocationMessage, result []ref
 					if chanResult, ok := result[0].Recv(); ok {
 						l.sendResult(invocation, completion, []reflect.Value{chanResult})
 					} else {
-						sendMessageAndLog(func() (interface{}, error) {
-							return l.hubConn.Completion(invocation.InvocationID, nil, "hub func returned closed chan")
-						}, l.info)
+
+						_ = l.hubConn.Completion(invocation.InvocationID, nil, "hub func returned closed chan")
 					}
 				}()
 			// StreamInvocation
@@ -192,9 +183,7 @@ func (l *loop) returnInvocationResult(invocation invocationMessage, result []ref
 				// Stream invocation of method with no stream result.
 				// Return a single StreamItem and an empty Completion
 				l.sendResult(invocation, streamItem, result)
-				sendMessageAndLog(func() (interface{}, error) {
-					return l.hubConn.Completion(invocation.InvocationID, nil, "")
-				}, l.info)
+				_ = l.hubConn.Completion(invocation.InvocationID, nil, "")
 			}
 		}
 	}
@@ -205,9 +194,7 @@ func (l *loop) handleStreamItemMessage(streamItemMessage streamItemMessage) erro
 	if err := l.streamClient.receiveStreamItem(streamItemMessage); err != nil {
 		switch t := err.(type) {
 		case *hubChanTimeoutError:
-			sendMessageAndLog(func() (interface{}, error) {
-				return l.hubConn.Completion(streamItemMessage.InvocationID, nil, t.Error())
-			}, l.info)
+			_ = l.hubConn.Completion(streamItemMessage.InvocationID, nil, t.Error())
 		default:
 			_ = l.info.Log(evt, msgRecv, "error", err, msg, fmtMsg(streamItemMessage), react, "close connection")
 			return err
@@ -250,9 +237,7 @@ func (l *loop) sendResult(invocation invocationMessage, connFunc connFunc, resul
 	}
 	switch len(result) {
 	case 0:
-		sendMessageAndLog(func() (interface{}, error) {
-			return l.hubConn.Completion(invocation.InvocationID, nil, "")
-		}, l.info)
+		_ = l.hubConn.Completion(invocation.InvocationID, nil, "")
 	case 1:
 		connFunc(l, invocation, values[0])
 	default:
@@ -263,15 +248,12 @@ func (l *loop) sendResult(invocation invocationMessage, connFunc connFunc, resul
 type connFunc func(sl *loop, invocation invocationMessage, value interface{})
 
 func completion(sl *loop, invocation invocationMessage, value interface{}) {
-	sendMessageAndLog(func() (interface{}, error) {
-		return sl.hubConn.Completion(invocation.InvocationID, value, "")
-	}, sl.info)
+	_ = sl.hubConn.Completion(invocation.InvocationID, value, "")
 }
 
 func streamItem(sl *loop, invocation invocationMessage, value interface{}) {
-	sendMessageAndLog(func() (interface{}, error) {
-		return sl.hubConn.StreamItem(invocation.InvocationID, value)
-	}, sl.info)
+
+	_ = sl.hubConn.StreamItem(invocation.InvocationID, value)
 }
 
 func (l *loop) recoverInvocationPanic(invocation invocationMessage) {
@@ -283,9 +265,7 @@ func (l *loop) recoverInvocationPanic(invocation invocationMessage) {
 			if !l.party.enableDetailedErrors() {
 				stack = ""
 			}
-			sendMessageAndLog(func() (interface{}, error) {
-				return l.hubConn.Completion(invocation.InvocationID, nil, fmt.Sprintf("%v\n%v", err, stack))
-			}, l.info)
+			_ = l.hubConn.Completion(invocation.InvocationID, nil, fmt.Sprintf("%v\n%v", err, stack))
 		}
 	}
 }
@@ -335,13 +315,6 @@ func getMethod(target interface{}, name string) (reflect.Value, bool) {
 	return reflect.Value{}, false
 }
 
-// TODO Move logging to defaultHubConnection
-func sendMessageAndLog(connFunc func() (interface{}, error), info StructuredLogger) {
-	if msg, err := connFunc(); err != nil {
-		_ = info.Log(evt, msgSend, "message", fmtMsg(msg), "error", err)
-	}
-}
-
-func fmtMsg(msg interface{}) string {
-	return fmt.Sprintf("%#v", msg)
+func fmtMsg(message interface{}) string {
+	return fmt.Sprintf("%#v", message)
 }

@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"sync"
+	"time"
 )
 
 type hubConnection interface {
@@ -23,7 +24,7 @@ type hubConnection interface {
 	Aborted() <-chan error
 }
 
-func newHubConnection(parentContext context.Context, connection Connection, protocol HubProtocol, maximumReceiveMessageSize uint) hubConnection {
+func newHubConnection(parentContext context.Context, connection Connection, protocol HubProtocol, maximumReceiveMessageSize uint, info StructuredLogger) hubConnection {
 	return &defaultHubConnection{
 		protocol:                  protocol,
 		mx:                        sync.Mutex{},
@@ -32,6 +33,7 @@ func newHubConnection(parentContext context.Context, connection Connection, prot
 		items:                     &sync.Map{},
 		context:                   parentContext,
 		abortChans:                make([]chan error, 0),
+		info:                      info,
 	}
 }
 
@@ -62,13 +64,13 @@ func (c *defaultHubConnection) IsConnected() bool {
 	return c.connected
 }
 
-func (c *defaultHubConnection) Close(error string, allowReconnect bool) (closeMessage, error) {
+func (c *defaultHubConnection) Close(error string, allowReconnect bool) error {
 	var closeMessage = closeMessage{
 		Type:           7,
 		Error:          error,
 		AllowReconnect: allowReconnect,
 	}
-	return closeMessage, c.writeMessage(closeMessage)
+	return c.writeMessage(closeMessage)
 }
 
 func (c *defaultHubConnection) ConnectionID() string {
@@ -155,17 +157,17 @@ func (c *defaultHubConnection) Receive() (interface{}, error) {
 	}
 }
 
-func (c *defaultHubConnection) SendInvocation(id string, target string, args []interface{}) (invocationMessage, error) {
+func (c *defaultHubConnection) SendInvocation(id string, target string, args []interface{}) error {
 	var invocationMessage = invocationMessage{
 		Type:         1,
 		InvocationID: id,
 		Target:       target,
 		Arguments:    args,
 	}
-	return invocationMessage, c.writeMessage(invocationMessage)
+	return c.writeMessage(invocationMessage)
 }
 
-func (c *defaultHubConnection) SendStreamInvocation(id string, target string, args []interface{}, streamIds []string) (invocationMessage, error) {
+func (c *defaultHubConnection) SendStreamInvocation(id string, target string, args []interface{}, streamIds []string) error {
 	var invocationMessage = invocationMessage{
 		Type:         4,
 		InvocationID: id,
@@ -173,54 +175,63 @@ func (c *defaultHubConnection) SendStreamInvocation(id string, target string, ar
 		Arguments:    args,
 		StreamIds:    streamIds,
 	}
-	return invocationMessage, c.writeMessage(invocationMessage)
+	return c.writeMessage(invocationMessage)
 }
 
-func (c *defaultHubConnection) StreamItem(id string, item interface{}) (streamItemMessage, error) {
+func (c *defaultHubConnection) StreamItem(id string, item interface{}) error {
 	var streamItemMessage = streamItemMessage{
 		Type:         2,
 		InvocationID: id,
 		Item:         item,
 	}
-	return streamItemMessage, c.writeMessage(streamItemMessage)
+	return c.writeMessage(streamItemMessage)
 }
 
-func (c *defaultHubConnection) Completion(id string, result interface{}, error string) (completionMessage, error) {
+func (c *defaultHubConnection) Completion(id string, result interface{}, error string) error {
 	var completionMessage = completionMessage{
 		Type:         3,
 		InvocationID: id,
 		Result:       result,
 		Error:        error,
 	}
-	return completionMessage, c.writeMessage(completionMessage)
+	return c.writeMessage(completionMessage)
 }
 
-func (c *defaultHubConnection) Ping() (hubMessage, error) {
+func (c *defaultHubConnection) Ping() error {
 	var pingMessage = hubMessage{
 		Type: 6,
 	}
-	return pingMessage, c.writeMessage(pingMessage)
+	return c.writeMessage(pingMessage)
 }
 
 func (c *defaultHubConnection) writeMessage(message interface{}) error {
-	_, isCloseMsg := message.(closeMessage)
-	if !c.IsConnected() &&
-		// Allow sending closeMessage when not connected
-		!isCloseMsg {
-		return c.context.Err()
-	}
-	e := make(chan error, 1)
-	go func() { e <- c.protocol.WriteMessage(message, c.connection) }()
-	select {
-	case <-c.context.Done():
-		// Wait for WriteMessage to return
-		<-e
-		c.Abort()
-		return c.context.Err()
-	case err := <-e:
-		if err != nil {
-			c.Abort()
+	c.mx.Lock()
+	c.lastWriteStamp = time.Now()
+	c.mx.Unlock()
+	err := func() error {
+		_, isCloseMsg := message.(closeMessage)
+		if !c.IsConnected() &&
+			// Allow sending closeMessage when not connected
+			!isCloseMsg {
+			return c.context.Err()
 		}
-		return err
+		e := make(chan error, 1)
+		go func() { e <- c.protocol.WriteMessage(message, c.connection) }()
+		select {
+		case <-c.context.Done():
+			// Wait for WriteMessage to return
+			<-e
+			c.Abort()
+			return c.context.Err()
+		case err := <-e:
+			if err != nil {
+				c.Abort()
+			}
+			return err
+		}
+	}()
+	if err != nil {
+		_ = c.info.Log(evt, msgSend, "message", fmtMsg(message), "error", err)
 	}
+	return err
 }

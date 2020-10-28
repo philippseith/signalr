@@ -77,7 +77,7 @@ func (c *clientConnection) Start() <-chan error {
 }
 
 func (c *clientConnection) Close() error {
-	_, err := c.loop.hubConn.Close("", false)
+	err := c.loop.hubConn.Close("", false)
 	c.cancel()
 	return err
 }
@@ -89,7 +89,7 @@ func (c *clientConnection) Invoke(method string, arguments ...interface{}) <-cha
 	id := c.GetNewID()
 	resultChan, errChan := c.loop.invokeClient.newInvocation(id)
 	ch := MakeInvokeResultChan(resultChan, errChan)
-	if _, err := c.loop.hubConn.SendInvocation(id, method, arguments); err != nil {
+	if err := c.loop.hubConn.SendInvocation(id, method, arguments); err != nil {
 		// When we get an error here, the loop is closed and the errChan might be already closed
 		// We create a new one to deliver our error
 		ch, _ = createResultChansWithError(err)
@@ -104,7 +104,7 @@ func (c *clientConnection) Send(method string, arguments ...interface{}) <-chan 
 	}
 	id := c.GetNewID()
 	_, errChan := c.loop.invokeClient.newInvocation(id)
-	_, err := c.loop.hubConn.SendInvocation(id, method, arguments)
+	err := c.loop.hubConn.SendInvocation(id, method, arguments)
 	if err != nil {
 		_, errChan = createResultChansWithError(err)
 		c.loop.invokeClient.deleteInvocation(id)
@@ -120,7 +120,7 @@ func (c *clientConnection) PullStream(method string, arguments ...interface{}) <
 	_, errChan := c.loop.invokeClient.newInvocation(id)
 	upChan := c.loop.streamClient.newUpstreamChannel(id)
 	ch := MakeInvokeResultChan(upChan, errChan)
-	if _, err := c.loop.hubConn.SendStreamInvocation(id, method, arguments, nil); err != nil {
+	if err := c.loop.hubConn.SendStreamInvocation(id, method, arguments, nil); err != nil {
 		// When we get an error here, the loop is closed and the errChan might be already closed
 		// We create a new one to deliver our error
 		ch, _ = createResultChansWithError(err)
@@ -149,7 +149,7 @@ func (c *clientConnection) PushStreams(method string, arguments ...interface{}) 
 		}
 	}
 	// Tell the server we are streaming now
-	if _, err := c.loop.hubConn.SendStreamInvocation(c.GetNewID(), method, invokeArgs, streamIds); err != nil {
+	if err := c.loop.hubConn.SendStreamInvocation(c.GetNewID(), method, invokeArgs, streamIds); err != nil {
 		// When we get an error here, the loop is closed and the errChan might be already closed
 		// We create a new one to deliver our error
 		_, errChan = createResultChansWithError(err)
