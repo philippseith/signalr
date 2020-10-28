@@ -42,7 +42,7 @@ func (c *chat) RequestAsync(message string) <-chan map[string]string {
 	r := make(chan map[string]string)
 	go func() {
 		defer close(r)
-		time.Sleep(5 * time.Second)
+		time.Sleep(4 * time.Second)
 		m := make(map[string]string)
 		m["ToUpper"] = strings.ToUpper(message)
 		m["ToLower"] = strings.ToLower(message)
@@ -120,6 +120,7 @@ func (c *chat) UploadStream(upload1 <-chan int, factor float64, upload2 <-chan f
 
 func runHTTPServer(address string, hub signalr.HubInterface) {
 	server, _ := signalr.NewServer(context.TODO(), signalr.SimpleHubFactory(hub),
+		signalr.KeepAliveInterval(2*time.Second),
 		signalr.Logger(kitlog.NewLogfmtLogger(os.Stderr), true))
 	router := server.MapHub("/chat")
 	router.Handle("/", http.FileServer(http.Dir("./public")))
