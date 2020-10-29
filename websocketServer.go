@@ -12,7 +12,7 @@ import (
 )
 
 // MapHub used to register a SignalR Hub with the specified ServeMux
-func MapHub(mux *http.ServeMux, path string, options ...func(party) error) Server {
+func MapHub(mux *http.ServeMux, path string, options ...func(Party) error) Server {
 	mux.HandleFunc(fmt.Sprintf("%s/negotiate", path), negotiateHandler)
 	server, _ := NewServer(options...)
 	mux.Handle(path, websocket.Server{

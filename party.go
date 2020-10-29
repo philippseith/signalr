@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-type party interface {
+type Party interface {
 	onConnected(hc hubConnection)
 	onDisconnected(hc hubConnection)
 

@@ -11,8 +11,8 @@ import (
 // if it hasn't received a message (including keep-alive) in it.
 // The recommended value is double the KeepAliveInterval value.
 // Default is 30 seconds.
-func TimeoutInterval(timeout time.Duration) func(party) error {
-	return func(p party) error {
+func TimeoutInterval(timeout time.Duration) func(Party) error {
+	return func(p Party) error {
 		p.setTimeout(timeout)
 		return nil
 	}
@@ -23,8 +23,8 @@ func TimeoutInterval(timeout time.Duration) func(party) error {
 // if handshake timeout errors are occurring due to severe network latency.
 // For more detail on the handshake process,
 // see https://github.com/dotnet/aspnetcore/blob/master/src/SignalR/docs/specs/HubProtocol.md
-func HandshakeTimeout(timeout time.Duration) func(party) error {
-	return func(p party) error {
+func HandshakeTimeout(timeout time.Duration) func(Party) error {
+	return func(p Party) error {
 		p.setHandshakeTimeout(timeout)
 		return nil
 	}
@@ -35,8 +35,8 @@ func HandshakeTimeout(timeout time.Duration) func(party) error {
 // When changing KeepAliveInterval, change the Timeout setting on the other party.
 // The recommended Timeout value is double the KeepAliveInterval value.
 // Default is 15 seconds.
-func KeepAliveInterval(interval time.Duration) func(party) error {
-	return func(p party) error {
+func KeepAliveInterval(interval time.Duration) func(Party) error {
+	return func(p Party) error {
 		p.setKeepAliveInterval(interval)
 		return nil
 	}
@@ -45,8 +45,8 @@ func KeepAliveInterval(interval time.Duration) func(party) error {
 // StreamBufferCapacity is the maximum number of items that can be buffered for client upload streams.
 // If this limit is reached, the processing of invocations is blocked until the the server processes stream items.
 // Default is 10.
-func StreamBufferCapacity(capacity uint) func(party) error {
-	return func(p party) error {
+func StreamBufferCapacity(capacity uint) func(Party) error {
+	return func(p Party) error {
 		if capacity == 0 {
 			return errors.New("unsupported StreamBufferCapacity 0")
 		}
@@ -57,8 +57,8 @@ func StreamBufferCapacity(capacity uint) func(party) error {
 
 // MaximumReceiveMessageSize is the maximum size of a single incoming hub message.
 // Default is 32KB
-func MaximumReceiveMessageSize(size uint) func(party) error {
-	return func(p party) error {
+func MaximumReceiveMessageSize(size uint) func(Party) error {
+	return func(p Party) error {
 		if size == 0 {
 			return errors.New("unsupported maximumReceiveMessageSize 0")
 		}
@@ -71,8 +71,8 @@ func MaximumReceiveMessageSize(size uint) func(party) error {
 // If the hub method is not able to process a stream item during the timeout duration,
 // the server will send a completion with error.
 // Default is 5 seconds.
-func ChanReceiveTimeout(timeout time.Duration) func(party) error {
-	return func(p party) error {
+func ChanReceiveTimeout(timeout time.Duration) func(Party) error {
+	return func(p Party) error {
 		p.setChanReceiveTimeout(timeout)
 		return nil
 	}
@@ -80,8 +80,8 @@ func ChanReceiveTimeout(timeout time.Duration) func(party) error {
 
 // EnableDetailedErrors - if true, detailed exception messages are returned to the other party when an exception is thrown in a Hub method.
 // The default is false, as these exception messages can contain sensitive information.
-func EnableDetailedErrors(enable bool) func(party) error {
-	return func(p party) error {
+func EnableDetailedErrors(enable bool) func(Party) error {
+	return func(p Party) error {
 		p.setEnableDetailedErrors(enable)
 		return nil
 	}
@@ -95,8 +95,8 @@ type StructuredLogger interface {
 
 // Logger stets the logger used by the party to log info events.
 // If debug is true, debug log event are generated, too
-func Logger(logger StructuredLogger, debug bool) func(party) error {
-	return func(p party) error {
+func Logger(logger StructuredLogger, debug bool) func(Party) error {
+	return func(p Party) error {
 		i, d := buildInfoDebugLogger(logger, debug)
 		p.setLoggers(i, d)
 		return nil

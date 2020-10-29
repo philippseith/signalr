@@ -6,8 +6,8 @@ import (
 )
 
 // UseHub sets the hub instance used by the server
-func UseHub(hub HubInterface) func(party) error {
-	return func(p party) error {
+func UseHub(hub HubInterface) func(Party) error {
+	return func(p Party) error {
 		if s, ok := p.(*server); ok {
 			s.newHub = func() HubInterface { return hub }
 			return nil
@@ -20,8 +20,8 @@ func UseHub(hub HubInterface) func(party) error {
 // The function might create a new hub instance on every invocation.
 // If hub instances should be created and initialized by a DI framework,
 // the frameworks factory method can be called here.
-func HubFactory(factoryFunc func() HubInterface) func(party) error {
-	return func(p party) error {
+func HubFactory(factoryFunc func() HubInterface) func(Party) error {
+	return func(p Party) error {
 		if s, ok := p.(*server); ok {
 			s.newHub = factoryFunc
 			return nil
@@ -32,7 +32,7 @@ func HubFactory(factoryFunc func() HubInterface) func(party) error {
 
 // SimpleHubFactory sets a HubFactory which creates a new hub with the underlying type
 // of hubProto on each hub method invocation.
-func SimpleHubFactory(hubProto HubInterface) func(party) error {
+func SimpleHubFactory(hubProto HubInterface) func(Party) error {
 	return HubFactory(
 		func() HubInterface {
 			return reflect.New(reflect.ValueOf(hubProto).Elem().Type()).Interface().(HubInterface)

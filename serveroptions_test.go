@@ -198,7 +198,7 @@ var _ = Describe("Server options", func() {
 		})
 		Context("When an option returns an error, NewServer", func() {
 			It("should return an error", func(done Done) {
-				_, err := NewServer(func(party) error { return errors.New("bad option") })
+				_, err := NewServer(func(Party) error { return errors.New("bad option") })
 				Expect(err).NotTo(BeNil())
 				close(done)
 			})

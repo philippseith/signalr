@@ -19,7 +19,7 @@ import (
 
 // Server is a SignalR server for one type of hub
 type Server interface {
-	party
+	Party
 	Run(parentContext context.Context, conn Connection)
 }
 
@@ -34,7 +34,7 @@ type server struct {
 
 // NewServer creates a new server for one type of hub. The hub type is set by one of the
 // options UseHub, HubFactory or SimpleHubFactory
-func NewServer(options ...func(party) error) (Server, error) {
+func NewServer(options ...func(Party) error) (Server, error) {
 	info, dbg := buildInfoDebugLogger(log.NewLogfmtLogger(os.Stderr), false)
 	lifetimeManager := newLifeTimeManager(info)
 	server := &server{

@@ -10,7 +10,7 @@ import (
 )
 
 type loop struct {
-	party        party
+	party        Party
 	info         StructuredLogger
 	dbg          StructuredLogger
 	protocol     HubProtocol
@@ -20,7 +20,7 @@ type loop struct {
 	streamClient *streamClient
 }
 
-func newLoop(parentContext context.Context, p party, conn Connection, protocol HubProtocol) *loop {
+func newLoop(parentContext context.Context, p Party, conn Connection, protocol HubProtocol) *loop {
 	protocol = reflect.New(reflect.ValueOf(protocol).Elem().Type()).Interface().(HubProtocol)
 	info, dbg := p.loggers()
 	protocol.setDebugLogger(dbg)
