@@ -5,6 +5,8 @@ import (
 	"time"
 )
 
+// Party is the common base of Server and Client. The Party methods are only used internally,
+// but the interface is public to allow using Options on Party as parameters for external functions
 type Party interface {
 	onConnected(hc hubConnection)
 	onDisconnected(hc hubConnection)
