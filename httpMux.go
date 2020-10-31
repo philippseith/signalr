@@ -155,16 +155,27 @@ func (h *httpMux) negotiate(w http.ResponseWriter, req *http.Request) {
 		h.mx.Lock()
 		h.connectionMap[connectionID] = nil
 		h.mx.Unlock()
+		var availableTransports []availableTransport
+		for _, transport := range h.server.availableTransports() {
+			switch transport {
+			case "ServerSentEvents":
+				availableTransports = append(availableTransports,
+					availableTransport{
+						Transport:       "ServerSentEvents",
+						TransferFormats: []string{"Text"},
+					})
+			case "WebSockets":
+				availableTransports = append(availableTransports,
+					availableTransport{
+						Transport:       "WebSockets",
+						TransferFormats: []string{"Text"},
+						// TODO TransferFormats: []string{"Text", "Binary"},
+					})
+			}
+		}
 		response := negotiateResponse{
-			ConnectionID: connectionID,
-			AvailableTransports: []availableTransport{
-				{
-					Transport:       "ServerSentEvents",
-					TransferFormats: []string{"Text"},
-					//Transport:       "WebSockets",
-					//TransferFormats: []string{"Text", "Binary"},
-				},
-			},
+			ConnectionID:        connectionID,
+			AvailableTransports: availableTransports,
 		}
 		_ = json.NewEncoder(w).Encode(response) // Can't imagine an error when encoding
 	}

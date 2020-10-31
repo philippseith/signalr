@@ -2,6 +2,7 @@ package signalr
 
 import (
 	"errors"
+	"fmt"
 	"reflect"
 )
 
@@ -37,4 +38,24 @@ func SimpleHubFactory(hubProto HubInterface) func(party) error {
 		func() HubInterface {
 			return reflect.New(reflect.ValueOf(hubProto).Elem().Type()).Interface().(HubInterface)
 		})
+}
+
+// HttpTransports sets the list of available transports for http connections. Allowed transports are
+// "WebSockets", "ServerSentEvents". Default is both transports are available.
+func HttpTransports(transports ...string) func(party) error {
+	return func(p party) error {
+		if s, ok := p.(*server); ok {
+			for _, transport := range transports {
+				switch transport {
+				case "WebSockets", "ServerSentEvents":
+					s.transports = append(s.transports, transport)
+				default:
+					return fmt.Errorf("unsupported transport: %v", transport)
+				}
+			}
+
+			return nil
+		}
+		return errors.New("option Transports is server only")
+	}
 }

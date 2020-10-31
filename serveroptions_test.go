@@ -327,6 +327,44 @@ var _ = Describe("Server options", func() {
 			})
 		})
 	})
+	Describe("HttpTransports option", func() {
+		Context("When HttpTransports is one of WebSockets, ServerSentEvents or both", func() {
+			It("should set these transports", func(done Done) {
+				s, err := NewServer(context.TODO(), UseHub(&singleHub{}), HttpTransports("WebSockets"))
+				Expect(err).NotTo(HaveOccurred())
+				Expect(s.availableTransports()).To(ContainElement("WebSockets"))
+				close(done)
+			})
+			It("should set these transports", func(done Done) {
+				s, err := NewServer(context.TODO(), UseHub(&singleHub{}), HttpTransports("ServerSentEvents"))
+				Expect(err).NotTo(HaveOccurred())
+				Expect(s.availableTransports()).To(ContainElement("ServerSentEvents"))
+				close(done)
+			})
+			It("should set these transports", func(done Done) {
+				s, err := NewServer(context.TODO(), UseHub(&singleHub{}), HttpTransports("ServerSentEvents", "WebSockets"))
+				Expect(err).NotTo(HaveOccurred())
+				Expect(s.availableTransports()).To(ContainElement("WebSockets"))
+				Expect(s.availableTransports()).To(ContainElement("ServerSentEvents"))
+				close(done)
+			})
+		})
+		Context("When HttpTransports is none of WebSockets, ServerSentEvents", func() {
+			It("should return an error", func(done Done) {
+				_, err := NewServer(context.TODO(), UseHub(&singleHub{}), HttpTransports("WebTransport"))
+				Expect(err).To(HaveOccurred())
+				close(done)
+			})
+		})
+		Context("When HttpTransports is used on a client", func() {
+			It("should return an error", func(done Done) {
+				_, err := NewClientConnection(context.TODO(), newTestingConnection(), HttpTransports("ServerSentEvents"))
+				Expect(err).To(HaveOccurred())
+				close(done)
+			})
+		})
+
+	})
 })
 
 type channelWriter struct {

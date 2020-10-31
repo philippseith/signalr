@@ -23,6 +23,7 @@ type Server interface {
 	party
 	MapHub(path string) *http.ServeMux
 	ServeConnection(parentContext context.Context, conn Connection)
+	availableTransports() []string
 }
 
 type server struct {
@@ -32,6 +33,7 @@ type server struct {
 	defaultHubClients *defaultHubClients
 	groupManager      GroupManager
 	reconnectAllowed  bool
+	transports        []string
 }
 
 // NewServer creates a new server for one type of hub. The hub type is set by one of the
@@ -58,6 +60,9 @@ func NewServer(ctx context.Context, options ...func(party) error) (Server, error
 			}
 		}
 	}
+	if server.transports == nil {
+		server.transports = []string{"WebSockets", "ServerSentEvents"}
+	}
 	if server.newHub == nil {
 		return server, errors.New("cannot determine hub type. Neither UseHub, HubFactory or SimpleHubFactory given as option")
 	}
@@ -81,6 +86,10 @@ func (s *server) ServeConnection(parentContext context.Context, conn Connection)
 	} else {
 		newLoop(parentContext, s, conn, protocol).Run()
 	}
+}
+
+func (s *server) availableTransports() []string {
+	return s.transports
 }
 
 func (s *server) onConnected(hc hubConnection) {
