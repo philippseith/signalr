@@ -28,7 +28,8 @@ func (w *webSocketHub) Add2(i int) int {
 var _ = Describe("Websocket server", func() {
 
 	Context("A correct negotiation request is sent", func() {
-		It("should send a correct negotiation response with support for Websockets with text and binary protocol", func(done Done) {
+		// Until SSE and websockets are supported
+		XIt("should send a correct negotiation response with support for Websockets with text and binary protocol", func(done Done) {
 			// Start server
 			server, err := NewServer(context.TODO(), SimpleHubFactory(&webSocketHub{}))
 			Expect(err).NotTo(HaveOccurred())

@@ -1,0 +1,27 @@
+{
+	"name": "signalr_test",
+	"version": "0.0.0",
+	"description": "e2e test for signalr server",
+	"private": true,
+	"license": "UNLICENSED",
+	"dependencies": {
+		"@aspnet/signalr": "^1.1.4",
+		"@types/jest": "^26.0.8",
+		"@types/node": "^12.12.31",
+		"jest": "^26.2.2",
+		"jest-preset-typescript": "^1.2.0",
+		"ts-jest": "^26.1.4",
+		"typescript": "^3.9.7"
+	},
+	"jest": {
+		"testEnvironment": "node",
+		"testTimeout": 10000,
+		"preset": "jest-preset-typescript",
+		"setupFilesAfterEnv": [
+			"<rootDir>/setupJest.ts"
+		],
+		"transformIgnorePatterns": [
+			"node_modules/(?!(@aspnet/signalr)/)"
+		]
+	}
+}
