@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -38,12 +39,25 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
-func TestServer(t *testing.T) {
+func TestServerWebSockets(t *testing.T) {
+	testServer(t, "WebSockets")
+}
+
+func TestServerSSE(t *testing.T) {
+	testServer(t, "ServerSentEvents")
+}
+
+func testServer(t *testing.T, connection string) {
 	serverIsUp := make(chan struct{}, 1)
 	quitServer := make(chan struct{}, 1)
-	go runServer(t, serverIsUp, quitServer)
+	serverIsDown := make(chan struct{}, 1)
+	go func() {
+		runServer(t, serverIsUp, quitServer, []string{connection})
+		serverIsDown <- struct{}{}
+	}()
 	<-serverIsUp
 	runJest(t, quitServer)
+	<-serverIsDown
 }
 
 func runJest(t *testing.T, quitServer chan struct{}) {
@@ -72,11 +86,12 @@ func runJest(t *testing.T, quitServer chan struct{}) {
 	}
 }
 
-func runServer(t *testing.T, serverIsUp chan struct{}, quitServer chan struct{}) {
+func runServer(t *testing.T, serverIsUp chan struct{}, quitServer chan struct{}, transports []string) {
 	// Install a handler to cancel the server
 	doneQuit := make(chan struct{}, 1)
 	sRServer, _ := signalr.NewServer(context.TODO(), signalr.SimpleHubFactory(&hub{}),
 		signalr.KeepAliveInterval(2*time.Second),
+		signalr.HttpTransports(transports...),
 		signalr.Logger(log.NewLogfmtLogger(os.Stderr), true))
 	router := sRServer.MapHub("/hub")
 
@@ -110,4 +125,57 @@ func runServer(t *testing.T, serverIsUp chan struct{}, quitServer chan struct{})
 
 type hub struct {
 	signalr.Hub
+}
+
+func (h *hub) Ping() string {
+	return "Pong"
+}
+
+func (h *hub) TriumphantTriple(club string) []string {
+	if strings.Contains(club, "FC Bayern") {
+		return []string{"German Championship", "DFB Cup", "Champions League"}
+	}
+	return []string{}
+}
+
+type AlcoholicContent struct {
+	Drink    string  `json:"drink"`
+	Strength float32 `json:"strength"`
+}
+
+func (h *hub) AlcoholicContents() []AlcoholicContent {
+	return []AlcoholicContent{
+		{
+			Drink:    "Brunello",
+			Strength: 13.5,
+		},
+		{
+			Drink:    "Beer",
+			Strength: 4.9,
+		},
+		{
+			Drink:    "Lagavulin Cask Strength",
+			Strength: 56.2,
+		},
+	}
+}
+
+func (h *hub) AlcoholicContentMap() map[string]float64 {
+	return map[string]float64{
+		"Brunello":                13.5,
+		"Beer":                    4.9,
+		"Lagavulin Cask Strength": 56.2,
+	}
+}
+
+func (h *hub) FiveDates() <-chan string {
+	r := make(chan string)
+	go func() {
+		for i := 0; i < 5; i++ {
+			r <- fmt.Sprint(time.Now().Nanosecond())
+			time.Sleep(time.Millisecond * 100)
+		}
+		close(r)
+	}()
+	return r
 }

@@ -23,16 +23,16 @@ type loop struct {
 
 func newLoop(parentContext context.Context, p party, conn Connection, protocol HubProtocol) *loop {
 	protocol = reflect.New(reflect.ValueOf(protocol).Elem().Type()).Interface().(HubProtocol)
-	info, dbg := p.loggers()
+	_, dbg := p.loggers()
 	protocol.setDebugLogger(dbg)
 	pInfo, pDbg := p.prefixLoggers(conn.ConnectionID())
-	hubConn := newHubConnection(parentContext, conn, protocol, p.maximumReceiveMessageSize(), info)
+	hubConn := newHubConnection(parentContext, conn, protocol, p.maximumReceiveMessageSize(), pInfo)
 	return &loop{
 		party:        p,
 		protocol:     protocol,
 		hubConn:      hubConn,
 		invokeClient: newInvokeClient(p.chanReceiveTimeout()),
-		streamer:     newStreamer(hubConn, info),
+		streamer:     newStreamer(hubConn, pInfo),
 		streamClient: newStreamClient(p.chanReceiveTimeout(), p.streamBufferCapacity()),
 		info:         pInfo,
 		dbg:          pDbg,
