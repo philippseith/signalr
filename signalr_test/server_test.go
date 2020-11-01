@@ -178,3 +178,11 @@ func (h *hub) FiveDates() <-chan string {
 	}()
 	return r
 }
+
+func (h *hub) UploadStream(upload <-chan int) {
+	var allUs []int
+	for u := range upload {
+		allUs = append(allUs, u)
+	}
+	h.Clients().Caller().Send("OnUploadComplete", allUs)
+}

@@ -1,6 +1,6 @@
-import * as signalR from '@aspnet/signalr';
+import * as signalR from '@microsoft/signalr';
+import { Subject, from } from 'rxjs'
 import { eachValueFrom } from 'rxjs-for-await';
-import {Subject} from "rxjs";
 
 // IMPORTANT: When a proxy (e.g. px) is in use, the server will get the request,
 // but the client will not get the response
@@ -72,5 +72,16 @@ describe("e2e test with aspnet/signalr client", () =>{
         }
         expect(i).toEqual(5)
     })
-
+    it("should upload a stream", async() =>{
+        let received: number[];
+        const receive = new Promise<number[]>(resolve => {
+            connection.on("onUploadComplete", (r: number[]) => {
+                received = r;
+                resolve();
+            });
+        });
+        await connection.send("uploadStream", from([2, 0, 7]));
+        await receive;
+        expect(received).toEqual([2, 0, 7])
+    })
 });
