@@ -1,6 +1,7 @@
 package signalr
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
@@ -13,14 +14,14 @@ import (
 
 type httpMux struct {
 	mx            sync.Mutex
-	connectionMap map[string]cancelableConnection
+	connectionMap map[string]Connection
 	server        Server
 	wsServer      websocket.Server
 }
 
 func newHttpMux(server Server) *httpMux {
 	return &httpMux{
-		connectionMap: make(map[string]cancelableConnection),
+		connectionMap: make(map[string]Connection),
 		server:        server,
 	}
 }
@@ -78,7 +79,7 @@ func (h *httpMux) handleGet(writer http.ResponseWriter, request *http.Request) {
 				config.Origin, err = websocket.Origin(config, req)
 				return err
 			},
-			Handler: h.handleWebsocket,
+			Handler: func(ws *websocket.Conn) { h.handleWebsocket(ws, request.Context()) },
 		}
 		h.wsServer.ServeHTTP(writer, request)
 	} else if strings.ToLower(request.Header.Get("Accept")) == "text/event-stream" {
@@ -103,7 +104,11 @@ func (h *httpMux) handleGet(writer http.ResponseWriter, request *http.Request) {
 					// End this Server Sent Event (yes, your response now is one and the client will wait for this initial event to end)
 					_, _ = fmt.Fprint(writer, ":\r\n\r\n")
 					writer.(http.Flusher).Flush()
-					h.serveConnection(newServerSentEventConnection(connectionID, writer))
+					if sseConn, err := newServerSentEventConnection(h.server.context(), request.Context(), connectionID, writer); err != nil {
+						writer.WriteHeader(500) // Internal server error
+					} else {
+						h.serveConnection(sseConn)
+					}
 				} else {
 					//  TODO Long polling
 				}
@@ -119,7 +124,7 @@ func (h *httpMux) handleGet(writer http.ResponseWriter, request *http.Request) {
 	}
 }
 
-func (h *httpMux) handleWebsocket(ws *websocket.Conn) {
+func (h *httpMux) handleWebsocket(ws *websocket.Conn, requestContext context.Context) {
 	connectionID := ws.Request().URL.Query().Get("id")
 	if connectionID == "" {
 		// Support websocket connection without negotiate
@@ -134,7 +139,7 @@ func (h *httpMux) handleWebsocket(ws *websocket.Conn) {
 	if ok {
 		if c == nil {
 			// Connection is negotiated but not initiated
-			h.serveConnection(newWebSocketConnection(connectionID, ws))
+			h.serveConnection(newWebSocketConnection(h.server.context(), requestContext, connectionID, ws))
 		} else {
 			// Already initiated
 			_ = ws.WriteClose(409) // Bad request
@@ -181,12 +186,11 @@ func (h *httpMux) negotiate(w http.ResponseWriter, req *http.Request) {
 	}
 }
 
-func (h *httpMux) serveConnection(cc cancelableConnection) {
+func (h *httpMux) serveConnection(c Connection) {
 	h.mx.Lock()
-	cc.initCancel(h.server.context())
-	h.connectionMap[cc.ConnectionID()] = cc
+	h.connectionMap[c.ConnectionID()] = c
 	h.mx.Unlock()
-	h.server.ServeConnection(cc.context(), cc)
+	h.server.ServeConnection(c)
 }
 
 func newConnectionID() string {

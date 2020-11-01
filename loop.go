@@ -1,9 +1,9 @@
 package signalr
 
 import (
-	"context"
 	"errors"
 	"fmt"
+	"github.com/rotisserie/eris"
 	"reflect"
 	"runtime/debug"
 	"strings"
@@ -21,12 +21,12 @@ type loop struct {
 	streamClient *streamClient
 }
 
-func newLoop(parentContext context.Context, p party, conn Connection, protocol HubProtocol) *loop {
+func newLoop(p party, conn Connection, protocol HubProtocol) *loop {
 	protocol = reflect.New(reflect.ValueOf(protocol).Elem().Type()).Interface().(HubProtocol)
 	_, dbg := p.loggers()
 	protocol.setDebugLogger(dbg)
 	pInfo, pDbg := p.prefixLoggers(conn.ConnectionID())
-	hubConn := newHubConnection(parentContext, conn, protocol, p.maximumReceiveMessageSize(), pInfo)
+	hubConn := newHubConnection(conn, protocol, p.maximumReceiveMessageSize(), pInfo)
 	return &loop{
 		party:        p,
 		protocol:     protocol,
@@ -49,7 +49,6 @@ type loopEvent struct {
 func (l *loop) Run() {
 	l.hubConn.Start()
 	l.party.onConnected(l.hubConn)
-	abortConnCh := l.hubConn.Aborted()
 	// Process messages
 	var err error
 msgLoop:
@@ -99,7 +98,8 @@ msgLoop:
 			case <-time.After(l.party.timeout()):
 				err = fmt.Errorf("client timeout interval elapsed (%v)", l.party.timeout())
 				break pingLoop
-			case err = <-abortConnCh:
+			case <-l.hubConn.Context().Done():
+				err = eris.Wrap(l.hubConn.Context().Err(), "hubConnection canceled")
 				break pingLoop
 			}
 		}

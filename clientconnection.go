@@ -49,7 +49,6 @@ func NewClientConnection(ctx context.Context, conn Connection, options ...func(p
 type clientConnection struct {
 	partyBase
 	conn      Connection
-	cancel    context.CancelFunc
 	loop      *loop
 	receiver  interface{}
 	lastID    int64
@@ -64,9 +63,7 @@ func (c *clientConnection) Start() <-chan error {
 			errCh <- err
 		} else {
 			errCh <- nil
-			var ctx context.Context
-			ctx, c.cancel = context.WithCancel(context.Background())
-			c.loop = newLoop(ctx, c, c.conn, protocol)
+			c.loop = newLoop(c, c.conn, protocol)
 			c.loop.Run()
 			c.loopMx.Lock()
 			c.loopEnded = true

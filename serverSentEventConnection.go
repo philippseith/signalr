@@ -1,6 +1,10 @@
 package signalr
 
 import (
+	"context"
+	"errors"
+	"github.com/rotisserie/eris"
+	"github.com/teivah/onecontext"
 	"io"
 	"io/ioutil"
 	"net/http"
@@ -19,18 +23,27 @@ type serverSentEventConnection struct {
 	sseFlusher  http.Flusher
 }
 
-func newServerSentEventConnection(connectionID string, writer http.ResponseWriter) *serverSentEventConnection {
+func newServerSentEventConnection(parentContext context.Context, requestContext context.Context,
+	connectionID string, writer http.ResponseWriter) (*serverSentEventConnection, error) {
+	sseFlusher, ok := writer.(http.Flusher)
+	if !ok {
+		return nil, errors.New("connection over Server Sent Events not supported with http.ResponseWriter: http.Flusher not implemented")
+	}
+	ctx, _ := onecontext.Merge(parentContext, requestContext)
 	s := serverSentEventConnection{
-		baseConnection: baseConnection{connectionID: connectionID},
-		sseWriter:      writer,
-		sseFlusher:     writer.(http.Flusher),
+		baseConnection: baseConnection{
+			ctx:          ctx,
+			connectionID: connectionID,
+		},
+		sseWriter:  writer,
+		sseFlusher: sseFlusher,
 	}
 	s.postReader, s.postWriter = io.Pipe()
-	return &s
+	return &s, nil
 }
 
 func (s *serverSentEventConnection) consumeRequest(request *http.Request) int {
-	if err := s.context().Err(); err != nil {
+	if err := s.Context().Err(); err != nil {
 		return 410 // Gone
 	}
 	s.mx.Lock()
@@ -57,15 +70,15 @@ func (s *serverSentEventConnection) consumeRequest(request *http.Request) int {
 }
 
 func (s *serverSentEventConnection) Read(p []byte) (n int, err error) {
-	if err := s.context().Err(); err != nil {
-		return 0, err
+	if err := s.Context().Err(); err != nil {
+		return 0, eris.Wrap(err, "serverSentEventConnection canceled")
 	}
 	return s.postReader.Read(p)
 }
 
 func (s *serverSentEventConnection) Write(p []byte) (n int, err error) {
-	if err := s.context().Err(); err != nil {
-		return 0, err
+	if err := s.Context().Err(); err != nil {
+		return 0, eris.Wrap(err, "serverSentEventConnection canceled")
 	}
 	payload := ""
 	for _, line := range strings.Split(strings.TrimRight(string(p), "\n"), "\n") {

@@ -82,7 +82,7 @@ func connectMany() []*testingConnection {
 	conns := make([]*testingConnection, 3)
 	for i := 0; i < 3; i++ {
 		conns[i] = newTestingConnectionForServer()
-		go server.ServeConnection(context.TODO(), conns[i])
+		go server.ServeConnection(conns[i])
 		// Ensure to return all connection with connected hubs
 		<-hubContextOnConnectMsg
 	}
@@ -328,10 +328,20 @@ var _ = Describe("HubContext", func() {
 			conn0.ClientSend(`{"type":1,"invocationId": "ab0ab0","target":"abort"}`)
 			// Wait for execution
 			Expect(<-hubContextInvocationQueue).To(Equal("Abort()"))
-			// Abort should close
-			msg := <-conn0.received
-			Expect(msg).To(BeAssignableToTypeOf(closeMessage{}))
-			Expect(msg.(closeMessage).Error).NotTo(BeNil())
+			// We get the completion and the close message, the order depends on server timing
+			msg0 := <-conn0.received
+			msg1 := <-conn0.received
+			_, isClose0 := msg0.(closeMessage)
+			_, isClose1 := msg1.(closeMessage)
+			Expect(isClose0 || isClose1).To(Equal(true))
+			// This connection should not work anymore
+			conn0.ClientSend(`{"type":1,"invocationId": "ab123","target":"additem","arguments":["first",2]}`)
+			select {
+			case <-conn0.received:
+				Fail("closed connection still receives messages")
+			case <-time.After(10 * time.Millisecond):
+				// OK
+			}
 			// Other connections should still work
 			conn1.ClientSend(`{"type":1,"invocationId": "ab123","target":"additem","arguments":["first",2]}`)
 			// Wait for execution
@@ -341,7 +351,7 @@ var _ = Describe("HubContext", func() {
 			conn1.ClientSend(`{"type":1,"invocationId": "ab123","target":"getitem","arguments":["first"]}`)
 			// Wait for execution
 			Expect(<-hubContextInvocationQueue).To(Equal("GetItem()"))
-			msg = <-conn1.received
+			msg := <-conn1.received
 			Expect(msg).To(BeAssignableToTypeOf(completionMessage{}))
 			Expect(msg.(completionMessage).Result).To(Equal(float64(2)))
 			close(done)

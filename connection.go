@@ -1,6 +1,7 @@
 package signalr
 
 import (
+	"context"
 	"io"
 	"time"
 )
@@ -9,6 +10,7 @@ import (
 type Connection interface {
 	io.Reader
 	io.Writer
+	Context() context.Context
 	ConnectionID() string
 	SetTimeout(duration time.Duration)
 	Timeout() time.Duration

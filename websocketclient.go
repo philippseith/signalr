@@ -40,9 +40,8 @@ func NewWebsocketClientConnection(ctx context.Context, address string, options .
 	if err != nil {
 		return nil, err
 	}
-	conn := newWebSocketConnection(nr.ConnectionID, ws)
-	conn.initCancel(ctx)
-	result, err := NewClientConnection(conn.context(), conn, options...)
+	conn := newWebSocketConnection(ctx, context.Background(), nr.ConnectionID, ws)
+	result, err := NewClientConnection(ctx, conn, options...)
 	if err != nil {
 		return nil, err
 	}

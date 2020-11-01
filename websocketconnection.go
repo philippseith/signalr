@@ -2,6 +2,9 @@ package signalr
 
 import (
 	"bytes"
+	"context"
+	"github.com/rotisserie/eris"
+	"github.com/teivah/onecontext"
 	"golang.org/x/net/websocket"
 	"time"
 )
@@ -11,17 +14,21 @@ type webSocketConnection struct {
 	conn *websocket.Conn
 }
 
-func newWebSocketConnection(connectionID string, conn *websocket.Conn) *webSocketConnection {
+func newWebSocketConnection(parentContext context.Context, requestContext context.Context, connectionID string, conn *websocket.Conn) *webSocketConnection {
+	ctx, _ := onecontext.Merge(parentContext, requestContext)
 	w := &webSocketConnection{
-		conn:           conn,
-		baseConnection: baseConnection{connectionID: connectionID},
+		conn: conn,
+		baseConnection: baseConnection{
+			ctx:          ctx,
+			connectionID: connectionID,
+		},
 	}
 	return w
 }
 
 func (w *webSocketConnection) Write(p []byte) (n int, err error) {
-	if err := w.context().Err(); err != nil {
-		return 0, err
+	if err := w.Context().Err(); err != nil {
+		return 0, eris.Wrap(err, "webSocketConnection canceled")
 	}
 	if w.timeout > 0 {
 		defer func() { _ = w.conn.SetWriteDeadline(time.Time{}) }()
@@ -31,8 +38,8 @@ func (w *webSocketConnection) Write(p []byte) (n int, err error) {
 }
 
 func (w *webSocketConnection) Read(p []byte) (n int, err error) {
-	if err := w.context().Err(); err != nil {
-		return 0, err
+	if err := w.Context().Err(); err != nil {
+		return 0, eris.Wrap(err, "webSocketConnection canceled")
 	}
 	if w.timeout > 0 {
 		defer func() { _ = w.conn.SetReadDeadline(time.Time{}) }()

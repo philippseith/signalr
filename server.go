@@ -22,7 +22,7 @@ import (
 type Server interface {
 	party
 	MapHub(path string) *http.ServeMux
-	ServeConnection(parentContext context.Context, conn Connection)
+	ServeConnection(conn Connection)
 	availableTransports() []string
 }
 
@@ -79,12 +79,12 @@ func (s *server) MapHub(path string) *http.ServeMux {
 }
 
 // ServeConnection serves one connection. The same server might serve different connections in parallel
-func (s *server) ServeConnection(parentContext context.Context, conn Connection) {
+func (s *server) ServeConnection(conn Connection) {
 	if protocol, err := s.processHandshake(conn); err != nil {
 		info, _ := s.prefixLoggers("")
 		_ = info.Log(evt, "processHandshake", "connectionId", conn.ConnectionID(), "error", err, react, "do not connect")
 	} else {
-		newLoop(parentContext, s, conn, protocol).Run()
+		newLoop(s, conn, protocol).Run()
 	}
 }
 
@@ -95,14 +95,14 @@ func (s *server) availableTransports() []string {
 func (s *server) onConnected(hc hubConnection) {
 	s.lifetimeManager.OnConnected(hc)
 	go func() {
-		defer s.recoverHubLifeCyclePanic(hc)
+		defer s.recoverHubLifeCyclePanic()
 		s.invocationTarget(hc).(HubInterface).OnConnected(hc.ConnectionID())
 	}()
 }
 
 func (s *server) onDisconnected(hc hubConnection) {
 	go func() {
-		defer s.recoverHubLifeCyclePanic(hc)
+		defer s.recoverHubLifeCyclePanic()
 		s.invocationTarget(hc).(HubInterface).OnDisconnected(hc.ConnectionID())
 	}()
 	s.lifetimeManager.OnDisconnected(hc)
@@ -119,13 +119,13 @@ func (s *server) allowReconnect() bool {
 	return s.reconnectAllowed
 }
 
-func (s *server) recoverHubLifeCyclePanic(hc hubConnection) {
+func (s *server) recoverHubLifeCyclePanic() {
 	if err := recover(); err != nil {
 		s.reconnectAllowed = false
 		info, dbg := s.prefixLoggers("")
 		_ = info.Log(evt, "panic in hub lifecycle", "error", err, react, "close connection, allow no reconnect")
 		_ = dbg.Log(evt, "panic in hub lifecycle", "error", err, react, "close connection, allow no reconnect", "stack", string(debug.Stack()))
-		hc.Abort()
+		s.cancel()
 	}
 }
 
@@ -140,14 +140,15 @@ func (s *server) prefixLoggers(connectionID string) (info StructuredLogger, dbg 
 			"hub", reflect.ValueOf(s.newHub()).Elem().Type())
 }
 
-func (s *server) newConnectionHubContext(conn hubConnection) HubContext {
+func (s *server) newConnectionHubContext(hubConn hubConnection) HubContext {
 	return &connectionHubContext{
+		abort: hubConn.Abort,
 		clients: &callerHubClients{
 			defaultHubClients: s.defaultHubClients,
-			connectionID:      conn.ConnectionID(),
+			connectionID:      hubConn.ConnectionID(),
 		},
 		groups:     s.groupManager,
-		connection: conn,
+		connection: hubConn,
 		info:       s.info,
 		dbg:        s.dbg,
 	}

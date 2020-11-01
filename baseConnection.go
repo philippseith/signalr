@@ -5,30 +5,14 @@ import (
 	"time"
 )
 
-type cancelableConnection interface {
-	Connection
-	initCancel(ctx context.Context)
-	context() context.Context
-	cancel()
-}
-
 type baseConnection struct {
 	ctx          context.Context
-	cancelFunc   context.CancelFunc
 	connectionID string
 	timeout      time.Duration
 }
 
-func (b *baseConnection) initCancel(ctx context.Context) {
-	b.ctx, b.cancelFunc = context.WithCancel(ctx)
-}
-
-func (b *baseConnection) context() context.Context {
+func (b *baseConnection) Context() context.Context {
 	return b.ctx
-}
-
-func (b *baseConnection) cancel() {
-	b.cancelFunc()
 }
 
 func (b *baseConnection) ConnectionID() string {

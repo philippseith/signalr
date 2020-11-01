@@ -20,6 +20,10 @@ type pipeConnection struct {
 	fail    error
 }
 
+func (pc *pipeConnection) Context() context.Context {
+	return context.TODO()
+}
+
 func (pc *pipeConnection) Read(p []byte) (n int, err error) {
 	if pc.fail != nil {
 		return 0, pc.fail
@@ -119,8 +123,7 @@ var _ = Describe("ClientConnection", func() {
 			// Create both ends of the connection
 			cliConn, srvConn := newClientServerConnections()
 			// Start the server
-			svrCtx, svrCancel := context.WithCancel(context.Background())
-			go server.ServeConnection(svrCtx, srvConn)
+			go server.ServeConnection(srvConn)
 			// Create the ClientConnection
 			clientConn, err := NewClientConnection(context.TODO(), cliConn)
 			Expect(err).NotTo(HaveOccurred())
@@ -130,7 +133,7 @@ var _ = Describe("ClientConnection", func() {
 			Expect(err).NotTo(HaveOccurred())
 			err = clientConn.Close()
 			Expect(err).NotTo(HaveOccurred())
-			svrCancel()
+			server.cancel()
 			close(done)
 		}, 1.0)
 	})
@@ -138,18 +141,16 @@ var _ = Describe("ClientConnection", func() {
 		var cliConn *pipeConnection
 		var srvConn *pipeConnection
 		var clientConn ClientConnection
-		var svrCtx context.Context
-		var svrCancel context.CancelFunc
+		var server Server
 		BeforeEach(func(done Done) {
-			server, _ := NewServer(context.TODO(), SimpleHubFactory(&simpleHub{}),
+			server, _ = NewServer(context.TODO(), SimpleHubFactory(&simpleHub{}),
 				Logger(log.NewLogfmtLogger(os.Stderr), false),
 				ChanReceiveTimeout(200*time.Millisecond),
 				StreamBufferCapacity(5))
 			// Create both ends of the connection
 			cliConn, srvConn = newClientServerConnections()
 			// Start the server
-			svrCtx, svrCancel = context.WithCancel(context.Background())
-			go server.ServeConnection(svrCtx, srvConn)
+			go server.ServeConnection(srvConn)
 			// Create the ClientConnection
 			clientConn, _ = NewClientConnection(context.TODO(), cliConn)
 			// Start it
@@ -159,7 +160,7 @@ var _ = Describe("ClientConnection", func() {
 		}, 2.0)
 		AfterEach(func(done Done) {
 			_ = clientConn.Close()
-			svrCancel()
+			server.cancel()
 			close(done)
 		}, 2.0)
 
@@ -193,18 +194,16 @@ var _ = Describe("ClientConnection", func() {
 		var srvConn *pipeConnection
 		var clientConn ClientConnection
 		var receiver *simpleReceiver
-		var svrCtx context.Context
-		var svrCancel context.CancelFunc
+		var server Server
 		BeforeEach(func(done Done) {
-			server, _ := NewServer(context.TODO(), SimpleHubFactory(&simpleHub{}),
+			server, _ = NewServer(context.TODO(), SimpleHubFactory(&simpleHub{}),
 				Logger(log.NewLogfmtLogger(os.Stderr), false),
 				ChanReceiveTimeout(200*time.Millisecond),
 				StreamBufferCapacity(5))
 			// Create both ends of the connection
 			cliConn, srvConn = newClientServerConnections()
 			// Start the server
-			svrCtx, svrCancel = context.WithCancel(context.Background())
-			go server.ServeConnection(svrCtx, srvConn)
+			go server.ServeConnection(srvConn)
 			// Create the ClientConnection
 			clientConn, _ = NewClientConnection(context.TODO(), cliConn)
 			// Start it
@@ -215,7 +214,7 @@ var _ = Describe("ClientConnection", func() {
 		}, 2.0)
 		AfterEach(func(done Done) {
 			_ = clientConn.Close()
-			svrCancel()
+			server.cancel()
 			close(done)
 		}, 2.0)
 
@@ -272,18 +271,16 @@ var _ = Describe("ClientConnection", func() {
 		var cliConn *pipeConnection
 		var srvConn *pipeConnection
 		var clientConn ClientConnection
-		var svrCtx context.Context
-		var svrCancel context.CancelFunc
+		var server Server
 		BeforeEach(func(done Done) {
-			server, _ := NewServer(context.TODO(), SimpleHubFactory(&simpleHub{}),
+			server, _ = NewServer(context.TODO(), SimpleHubFactory(&simpleHub{}),
 				Logger(log.NewLogfmtLogger(os.Stderr), false),
 				ChanReceiveTimeout(200*time.Millisecond),
 				StreamBufferCapacity(5))
 			// Create both ends of the connection
 			cliConn, srvConn = newClientServerConnections()
 			// Start the server
-			svrCtx, svrCancel = context.WithCancel(context.Background())
-			go server.ServeConnection(svrCtx, srvConn)
+			go server.ServeConnection(srvConn)
 			// Create the ClientConnection
 			clientConn, _ = NewClientConnection(context.TODO(), cliConn)
 			// Start it
@@ -294,7 +291,7 @@ var _ = Describe("ClientConnection", func() {
 		}, 2.0)
 		AfterEach(func(done Done) {
 			_ = clientConn.Close()
-			svrCancel()
+			server.cancel()
 			close(done)
 		}, 2.0)
 
@@ -355,20 +352,18 @@ var _ = Describe("ClientConnection", func() {
 		var srvConn *pipeConnection
 		var clientConn ClientConnection
 		var hub *simpleHub
-		var svrCtx context.Context
-		var svrCancel context.CancelFunc
+		var server Server
 		BeforeEach(func(done Done) {
 			hub = &simpleHub{}
 			hub.receiveStreamDone = make(chan struct{}, 1)
-			server, _ := NewServer(context.TODO(), HubFactory(func() HubInterface { return hub }),
+			server, _ = NewServer(context.TODO(), HubFactory(func() HubInterface { return hub }),
 				Logger(log.NewLogfmtLogger(os.Stderr), false),
 				ChanReceiveTimeout(200*time.Millisecond),
 				StreamBufferCapacity(5))
 			// Create both ends of the connection
 			cliConn, srvConn = newClientServerConnections()
 			// Start the server
-			svrCtx, svrCancel = context.WithCancel(context.Background())
-			go server.ServeConnection(svrCtx, srvConn)
+			go server.ServeConnection(srvConn)
 			// Create the ClientConnection
 			clientConn, _ = NewClientConnection(context.TODO(), cliConn)
 			// Start it
@@ -379,7 +374,7 @@ var _ = Describe("ClientConnection", func() {
 		}, 2.0)
 		AfterEach(func(done Done) {
 			_ = clientConn.Close()
-			svrCancel()
+			server.cancel()
 			close(done)
 		}, 2.0)
 

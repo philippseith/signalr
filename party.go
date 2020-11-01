@@ -8,6 +8,7 @@ import (
 
 type party interface {
 	context() context.Context
+	cancel()
 
 	onConnected(hc hubConnection)
 	onDisconnected(hc hubConnection)
@@ -42,9 +43,11 @@ type party interface {
 	setMaximumReceiveMessageSize(size uint)
 }
 
-func newPartyBase(ctx context.Context, info log.Logger, dbg log.Logger) partyBase {
+func newPartyBase(parentContext context.Context, info log.Logger, dbg log.Logger) partyBase {
+	ctx, cancelFunc := context.WithCancel(parentContext)
 	return partyBase{
 		ctx:                        ctx,
+		cancelFunc:                 cancelFunc,
 		_timeout:                   time.Second * 30,
 		_handshakeTimeout:          time.Second * 15,
 		_keepAliveInterval:         time.Second * 5,
@@ -59,6 +62,7 @@ func newPartyBase(ctx context.Context, info log.Logger, dbg log.Logger) partyBas
 
 type partyBase struct {
 	ctx                        context.Context
+	cancelFunc                 context.CancelFunc
 	_timeout                   time.Duration
 	_handshakeTimeout          time.Duration
 	_keepAliveInterval         time.Duration
@@ -72,6 +76,10 @@ type partyBase struct {
 
 func (p *partyBase) context() context.Context {
 	return p.ctx
+}
+
+func (p *partyBase) cancel() {
+	p.cancelFunc()
 }
 
 func (p *partyBase) timeout() time.Duration {

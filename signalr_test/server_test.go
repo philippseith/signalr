@@ -62,8 +62,7 @@ func testServer(t *testing.T, connection string) {
 
 func runJest(t *testing.T, quitServer chan struct{}) {
 	defer func() { quitServer <- struct{}{} }()
-	var jest *exec.Cmd
-	jest = exec.Command(filepath.FromSlash("node_modules/.bin/jest"))
+	var jest = exec.Command(filepath.FromSlash("node_modules/.bin/jest"))
 	stdout, err := jest.StdoutPipe()
 	if err != nil {
 		t.Error(err)
