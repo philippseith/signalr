@@ -84,7 +84,7 @@ func (s *server) ServeConnection(conn Connection) {
 		info, _ := s.prefixLoggers("")
 		_ = info.Log(evt, "processHandshake", "connectionId", conn.ConnectionID(), "error", err, react, "do not connect")
 	} else {
-		newLoop(s, conn, protocol).Run()
+		newLoop(s, conn, protocol).Run(make(chan struct{}, 1))
 	}
 }
 

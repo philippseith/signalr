@@ -56,21 +56,21 @@ type client struct {
 	loopEnded bool
 }
 
-func (c *clientConnection) Start() <-chan error {
-	errCh := make(chan error, 1)
-	go func(c *clientConnection) {
-		if protocol, err := c.processHandshake(); err != nil {
-			errCh <- err
-		} else {
-			errCh <- nil
-			c.loop = newLoop(c, c.conn, protocol)
-			c.loop.Run()
-			c.loopMx.Lock()
-			c.loopEnded = true
-			c.loopMx.Unlock()
-		}
-	}(c)
-	return errCh
+func (c *client) Start() error {
+	protocol, err := c.processHandshake()
+	if err != nil {
+		return err
+	}
+	c.loop = newLoop(c, c.conn, protocol)
+	started := make(chan struct{}, 1)
+	go func(c *client, started chan struct{}) {
+		c.loop.Run(started)
+		c.loopMx.Lock()
+		c.loopEnded = true
+		c.loopMx.Unlock()
+	}(c, started)
+	<-started
+	return nil
 }
 
 func (c *client) Stop() error {
