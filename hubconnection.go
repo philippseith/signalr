@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-// hubConnection is used by HubContext, Server and ClientConnection to realize the external API.
+// hubConnection is used by HubContext, Server and Client to realize the external API.
 // hubConnection uses a transport connection (of type Connection) and a HubProtocol to send and receive SignalR messages.
 type hubConnection interface {
 	Start()

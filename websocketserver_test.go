@@ -120,22 +120,22 @@ var _ = Describe("Websocket server", func() {
 				_ = http.ListenAndServe(fmt.Sprintf("127.0.0.1:%v", port), router)
 			}()
 			waitForPort(port)
-			conn, err := NewWebsocketClientConnection(context.TODO(),
+			client, err := NewHTTPClient(context.TODO(),
 				fmt.Sprintf("http://127.0.0.1:%v/hub", port),
 				Logger(logger, true))
 			Expect(err).NotTo(HaveOccurred())
-			Expect(conn).NotTo(BeNil())
-			<-conn.Start()
-			result := <-conn.Invoke("Add2", 1)
+			Expect(client).NotTo(BeNil())
+			_ = client.Start()
+			result := <-client.Invoke("Add2", 1)
 			Expect(result.Error).NotTo(HaveOccurred())
 			Expect(result.Value).To(Equal(float64(3)))
-			conn2, err := NewWebsocketClientConnection(context.TODO(),
+			client2, err := NewHTTPClient(context.TODO(),
 				fmt.Sprintf("http://127.0.0.1:%v/hub", port),
 				Logger(logger, true))
 			Expect(err).NotTo(HaveOccurred())
-			Expect(conn2).NotTo(BeNil())
-			<-conn2.Start()
-			result = <-conn2.Invoke("Add2", 2)
+			Expect(client2).NotTo(BeNil())
+			_ = client2.Start()
+			result = <-client2.Invoke("Add2", 2)
 			Expect(result.Error).NotTo(HaveOccurred())
 			Expect(result.Value).To(Equal(float64(4)))
 			close(done)

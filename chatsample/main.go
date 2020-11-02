@@ -131,11 +131,11 @@ func runHTTPServer(address string, hub signalr.HubInterface) {
 	}
 }
 
-func runHTTPClient(address string, client interface{}) {
-	c, _ := signalr.NewWebsocketClientConnection(context.TODO(), address) // HubProtocol is determined inside
-	c.SetReceiver(client)
-	c.Start()
-}
+//func runHTTPClient(address string, client interface{}) {
+//	c, _ := signalr.NewHTTPClient(context.TODO(), address) // HubProtocol is determined inside
+//	c.SetReceiver(client)
+//	c.Start()
+//}
 
 type client struct {
 	signalr.Hub

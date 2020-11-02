@@ -110,7 +110,7 @@ func (s *simpleReceiver) OnCallback(result string) {
 	s.result = result
 }
 
-var _ = Describe("ClientConnection", func() {
+var _ = Describe("Client", func() {
 	Context("Start", func() {
 		It("should connect to the server", func(done Done) {
 			// Create a simple server
@@ -124,14 +124,14 @@ var _ = Describe("ClientConnection", func() {
 			cliConn, srvConn := newClientServerConnections()
 			// Start the server
 			go server.ServeConnection(srvConn)
-			// Create the ClientConnection
-			clientConn, err := NewClientConnection(context.TODO(), cliConn)
+			// Create the Client
+			clientConn, err := NewClient(context.TODO(), cliConn)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(clientConn).NotTo(BeNil())
 			// Start it
-			err = <-clientConn.Start()
+			err = clientConn.Start()
 			Expect(err).NotTo(HaveOccurred())
-			err = clientConn.Close()
+			err = clientConn.Stop()
 			Expect(err).NotTo(HaveOccurred())
 			server.cancel()
 			close(done)
@@ -140,7 +140,7 @@ var _ = Describe("ClientConnection", func() {
 	Context("Invoke", func() {
 		var cliConn *pipeConnection
 		var srvConn *pipeConnection
-		var clientConn ClientConnection
+		var client Client
 		var server Server
 		BeforeEach(func(done Done) {
 			server, _ = NewServer(context.TODO(), SimpleHubFactory(&simpleHub{}),
@@ -151,40 +151,40 @@ var _ = Describe("ClientConnection", func() {
 			cliConn, srvConn = newClientServerConnections()
 			// Start the server
 			go server.ServeConnection(srvConn)
-			// Create the ClientConnection
-			clientConn, _ = NewClientConnection(context.TODO(), cliConn)
+			// Create the Client
+			client, _ = NewClient(context.TODO(), cliConn)
 			// Start it
-			clientConn.SetReceiver(simpleReceiver{})
-			<-clientConn.Start()
+			client.SetReceiver(simpleReceiver{})
+			_ = client.Start()
 			close(done)
 		}, 2.0)
 		AfterEach(func(done Done) {
-			_ = clientConn.Close()
+			_ = client.Stop()
 			server.cancel()
 			close(done)
 		}, 2.0)
 
 		It("should invoke a server method and return the result", func(done Done) {
-			r := <-clientConn.Invoke("InvokeMe", "A", 1)
+			r := <-client.Invoke("InvokeMe", "A", 1)
 			Expect(r.Value).To(Equal("A1"))
 			Expect(r.Error).NotTo(HaveOccurred())
 			close(done)
 		}, 2.0)
 		It("should invoke a server method and return the error when arguments don't match", func(done Done) {
-			r := <-clientConn.Invoke("InvokeMe", "A", "B")
+			r := <-client.Invoke("InvokeMe", "A", "B")
 			Expect(r.Error).To(HaveOccurred())
 			close(done)
 		}, 2.0)
 		It("should invoke a server method and return the result after a bad invocation", func(done Done) {
-			clientConn.Invoke("InvokeMe", "A", "B")
-			r := <-clientConn.Invoke("InvokeMe", "A", 1)
+			client.Invoke("InvokeMe", "A", "B")
+			r := <-client.Invoke("InvokeMe", "A", 1)
 			Expect(r.Value).To(Equal("A1"))
 			Expect(r.Error).NotTo(HaveOccurred())
 			close(done)
 		}, 2.0)
 		XIt("should return an error when the connection fails", func(done Done) {
 			cliConn.fail = errors.New("fail")
-			r := <-clientConn.Invoke("InvokeMe", "A", 1)
+			r := <-client.Invoke("InvokeMe", "A", 1)
 			Expect(r.Error).To(HaveOccurred())
 			close(done)
 		}, 2.0)
@@ -192,7 +192,7 @@ var _ = Describe("ClientConnection", func() {
 	Context("Send", func() {
 		var cliConn *pipeConnection
 		var srvConn *pipeConnection
-		var clientConn ClientConnection
+		var client Client
 		var receiver *simpleReceiver
 		var server Server
 		BeforeEach(func(done Done) {
@@ -204,23 +204,23 @@ var _ = Describe("ClientConnection", func() {
 			cliConn, srvConn = newClientServerConnections()
 			// Start the server
 			go server.ServeConnection(srvConn)
-			// Create the ClientConnection
-			clientConn, _ = NewClientConnection(context.TODO(), cliConn)
+			// Create the Client
+			client, _ = NewClient(context.TODO(), cliConn)
 			// Start it
 			receiver = &simpleReceiver{}
-			clientConn.SetReceiver(receiver)
-			<-clientConn.Start()
+			client.SetReceiver(receiver)
+			_ = client.Start()
 			close(done)
 		}, 2.0)
 		AfterEach(func(done Done) {
-			_ = clientConn.Close()
+			_ = client.Stop()
 			server.cancel()
 			close(done)
 		}, 2.0)
 
 		It("should invoke a server method and get the result via callback", func(done Done) {
 			receiver.result = ""
-			errCh := clientConn.Send("Callback", "low")
+			errCh := client.Send("Callback", "low")
 			ch := make(chan string, 1)
 			go func() {
 				for {
@@ -240,7 +240,7 @@ var _ = Describe("ClientConnection", func() {
 		}, 2.0)
 		It("should invoke a server method and return the error when arguments don't match", func(done Done) {
 			receiver.result = ""
-			errCh := clientConn.Send("Callback", 1)
+			errCh := client.Send("Callback", 1)
 			ch := make(chan string, 1)
 			go func() {
 				for {
@@ -262,7 +262,7 @@ var _ = Describe("ClientConnection", func() {
 		}, 2.0)
 		XIt("should return an error when the connection fails", func(done Done) {
 			cliConn.fail = errors.New("fail")
-			err := <-clientConn.Send("Callback", 1)
+			err := <-client.Send("Callback", 1)
 			Expect(err).To(HaveOccurred())
 			close(done)
 		}, 2.0)
@@ -270,7 +270,7 @@ var _ = Describe("ClientConnection", func() {
 	Context("PullStream", func() {
 		var cliConn *pipeConnection
 		var srvConn *pipeConnection
-		var clientConn ClientConnection
+		var client Client
 		var server Server
 		BeforeEach(func(done Done) {
 			server, _ = NewServer(context.TODO(), SimpleHubFactory(&simpleHub{}),
@@ -281,22 +281,22 @@ var _ = Describe("ClientConnection", func() {
 			cliConn, srvConn = newClientServerConnections()
 			// Start the server
 			go server.ServeConnection(srvConn)
-			// Create the ClientConnection
-			clientConn, _ = NewClientConnection(context.TODO(), cliConn)
+			// Create the Client
+			client, _ = NewClient(context.TODO(), cliConn)
 			// Start it
 			receiver := &simpleReceiver{}
-			clientConn.SetReceiver(receiver)
-			<-clientConn.Start()
+			client.SetReceiver(receiver)
+			_ = client.Start()
 			close(done)
 		}, 2.0)
 		AfterEach(func(done Done) {
-			_ = clientConn.Close()
+			_ = client.Stop()
 			server.cancel()
 			close(done)
 		}, 2.0)
 
 		It("should pull a stream from the server", func(done Done) {
-			ch := clientConn.PullStream("ReadStream")
+			ch := client.PullStream("ReadStream")
 			values := make([]interface{}, 0)
 			for r := range ch {
 				Expect(r.Error).NotTo(HaveOccurred())
@@ -306,37 +306,37 @@ var _ = Describe("ClientConnection", func() {
 			close(done)
 		})
 		It("should return no error when the method returns no stream but a single result", func(done Done) {
-			r := <-clientConn.PullStream("InvokeMe", "A", 1)
+			r := <-client.PullStream("InvokeMe", "A", 1)
 			Expect(r.Error).NotTo(HaveOccurred())
 			Expect(r.Value).To(Equal("A1"))
 			close(done)
 		}, 2.0)
 		It("should return an error when the method returns no result", func(done Done) {
-			r := <-clientConn.PullStream("Callback", "A")
+			r := <-client.PullStream("Callback", "A")
 			Expect(r.Error).To(HaveOccurred())
 			close(done)
 		}, 2.0)
 		It("should return an error when the method does not exist on the server", func(done Done) {
-			r := <-clientConn.PullStream("ReadStream2")
+			r := <-client.PullStream("ReadStream2")
 			Expect(r.Error).To(HaveOccurred())
 			close(done)
 		}, 2.0)
 		It("should return an error when the method arguments are not matching", func(done Done) {
-			r := <-clientConn.PullStream("ReadStream", "A", 1)
+			r := <-client.PullStream("ReadStream", "A", 1)
 			Expect(r.Error).To(HaveOccurred())
 			close(done)
 		}, 2.0)
 		XIt("should return an error when the connection fails", func(done Done) {
 			cliConn.fail = errors.New("fail")
-			r := <-clientConn.PullStream("ReadStream")
+			r := <-client.PullStream("ReadStream")
 			Expect(r.Error).To(HaveOccurred())
 			close(done)
 		}, 2.0)
 	})
 	Context("GetConnectionID", func() {
 		It("should return distinct IDs", func(done Done) {
-			c, _ := NewClientConnection(context.TODO(), nil)
-			cc := c.(*clientConnection)
+			c, _ := NewClient(context.TODO(), nil)
+			cc := c.(*client)
 			ids := make(map[string]string)
 			for i := 1; i < 10000; i++ {
 				id := cc.GetNewID()
@@ -350,7 +350,7 @@ var _ = Describe("ClientConnection", func() {
 	Context("PushStreams", func() {
 		var cliConn *pipeConnection
 		var srvConn *pipeConnection
-		var clientConn ClientConnection
+		var client Client
 		var hub *simpleHub
 		var server Server
 		BeforeEach(func(done Done) {
@@ -364,23 +364,23 @@ var _ = Describe("ClientConnection", func() {
 			cliConn, srvConn = newClientServerConnections()
 			// Start the server
 			go server.ServeConnection(srvConn)
-			// Create the ClientConnection
-			clientConn, _ = NewClientConnection(context.TODO(), cliConn)
+			// Create the Client
+			client, _ = NewClient(context.TODO(), cliConn)
 			// Start it
 			receiver := &simpleReceiver{}
-			clientConn.SetReceiver(receiver)
-			<-clientConn.Start()
+			client.SetReceiver(receiver)
+			_ = client.Start()
 			close(done)
 		}, 2.0)
 		AfterEach(func(done Done) {
-			_ = clientConn.Close()
+			_ = client.Stop()
 			server.cancel()
 			close(done)
 		}, 2.0)
 
 		It("should push a stream to the server", func(done Done) {
 			ch := make(chan int, 1)
-			_ = clientConn.PushStreams("ReceiveStream", "test", ch)
+			_ = client.PushStreams("ReceiveStream", "test", ch)
 			go func(ch chan int) {
 				for i := 1; i < 5; i++ {
 					ch <- i
@@ -395,7 +395,7 @@ var _ = Describe("ClientConnection", func() {
 		XIt("should return an error when the connection fails", func(done Done) {
 			cliConn.fail = errors.New("fail")
 			ch := make(chan int, 1)
-			err := <-clientConn.PushStreams("ReceiveStream", "test", ch)
+			err := <-client.PushStreams("ReceiveStream", "test", ch)
 			Expect(err).To(HaveOccurred())
 			close(done)
 		}, 2.0)

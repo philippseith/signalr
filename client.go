@@ -12,11 +12,11 @@ import (
 	"sync"
 )
 
-// ClientConnection is the signalR connection used on the client side
-type ClientConnection interface {
+// Client is the signalR connection used on the client side
+type Client interface {
 	party
-	Start() <-chan error
-	Close() error
+	Start() error
+	Stop() error
 	// Closed() <-chan error TODO Define connection state
 	Invoke(method string, arguments ...interface{}) <-chan InvokeResult
 	Send(method string, arguments ...interface{}) <-chan error
@@ -27,11 +27,11 @@ type ClientConnection interface {
 	SetReceiver(receiver interface{})
 }
 
-// NewClientConnection build a new ClientConnection.
+// NewClient build a new Client.
 // conn is a transport connection.
-func NewClientConnection(ctx context.Context, conn Connection, options ...func(party) error) (ClientConnection, error) {
+func NewClient(ctx context.Context, conn Connection, options ...func(party) error) (Client, error) {
 	info, dbg := buildInfoDebugLogger(log.NewLogfmtLogger(os.Stderr), true)
-	c := &clientConnection{
+	c := &client{
 		conn:      conn,
 		partyBase: newPartyBase(ctx, info, dbg),
 		lastID:    -1,
@@ -46,7 +46,7 @@ func NewClientConnection(ctx context.Context, conn Connection, options ...func(p
 	return c, nil
 }
 
-type clientConnection struct {
+type client struct {
 	partyBase
 	conn      Connection
 	loop      *loop
@@ -73,13 +73,13 @@ func (c *clientConnection) Start() <-chan error {
 	return errCh
 }
 
-func (c *clientConnection) Close() error {
+func (c *client) Stop() error {
 	err := c.loop.hubConn.Close("", false)
 	c.cancel()
 	return err
 }
 
-func (c *clientConnection) Invoke(method string, arguments ...interface{}) <-chan InvokeResult {
+func (c *client) Invoke(method string, arguments ...interface{}) <-chan InvokeResult {
 	if ok, ch, _ := c.isLoopEnded(); ok {
 		return ch
 	}
@@ -95,7 +95,7 @@ func (c *clientConnection) Invoke(method string, arguments ...interface{}) <-cha
 	return ch
 }
 
-func (c *clientConnection) Send(method string, arguments ...interface{}) <-chan error {
+func (c *client) Send(method string, arguments ...interface{}) <-chan error {
 	if ok, _, ch := c.isLoopEnded(); ok {
 		return ch
 	}
@@ -109,7 +109,7 @@ func (c *clientConnection) Send(method string, arguments ...interface{}) <-chan 
 	return errChan
 }
 
-func (c *clientConnection) PullStream(method string, arguments ...interface{}) <-chan InvokeResult {
+func (c *client) PullStream(method string, arguments ...interface{}) <-chan InvokeResult {
 	if ok, ch, _ := c.isLoopEnded(); ok {
 		return ch
 	}
@@ -127,7 +127,7 @@ func (c *clientConnection) PullStream(method string, arguments ...interface{}) <
 	return ch
 }
 
-func (c *clientConnection) PushStreams(method string, arguments ...interface{}) <-chan error {
+func (c *client) PushStreams(method string, arguments ...interface{}) <-chan error {
 	if ok, _, ch := c.isLoopEnded(); ok {
 		return ch
 	}
@@ -160,17 +160,17 @@ func (c *clientConnection) PushStreams(method string, arguments ...interface{}) 
 	return errChan
 }
 
-func (c *clientConnection) SetReceiver(receiver interface{}) {
+func (c *client) SetReceiver(receiver interface{}) {
 	c.receiver = receiver
 }
 
 // GetNewID returns a new, connection-unique id for invocations and streams
-func (c *clientConnection) GetNewID() string {
+func (c *client) GetNewID() string {
 	c.lastID++
 	return fmt.Sprint(c.lastID)
 }
 
-func (c *clientConnection) isLoopEnded() (bool, <-chan InvokeResult, <-chan error) {
+func (c *client) isLoopEnded() (bool, <-chan InvokeResult, <-chan error) {
 	defer c.loopMx.Unlock()
 	c.loopMx.Lock()
 	loopEnded := c.loopEnded
@@ -191,19 +191,19 @@ func createResultChansWithError(err error) (<-chan InvokeResult, chan error) {
 	return invokeResultChan, errChan
 }
 
-func (c *clientConnection) onConnected(hubConnection) {}
+func (c *client) onConnected(hubConnection) {}
 
-func (c *clientConnection) onDisconnected(hubConnection) {}
+func (c *client) onDisconnected(hubConnection) {}
 
-func (c *clientConnection) invocationTarget(hubConnection) interface{} {
+func (c *client) invocationTarget(hubConnection) interface{} {
 	return c.receiver
 }
 
-func (c *clientConnection) allowReconnect() bool {
+func (c *client) allowReconnect() bool {
 	return false // Servers don't care?
 }
 
-func (c *clientConnection) prefixLoggers(connectionID string) (info StructuredLogger, dbg StructuredLogger) {
+func (c *client) prefixLoggers(connectionID string) (info StructuredLogger, dbg StructuredLogger) {
 	if c.receiver == nil {
 		return log.WithPrefix(c.info, "ts", log.DefaultTimestampUTC, "class", "Client", "connection", connectionID),
 			log.WithPrefix(c.dbg, "ts", log.DefaultTimestampUTC, "class", "Client", "connection", connectionID)
@@ -225,7 +225,7 @@ func (c *clientConnection) prefixLoggers(connectionID string) (info StructuredLo
 			"hub", t)
 }
 
-func (c *clientConnection) processHandshake() (HubProtocol, error) {
+func (c *client) processHandshake() (HubProtocol, error) {
 	info, dbg := c.prefixLoggers(c.conn.ConnectionID())
 	const request = "{\"Protocol\":\"json\",\"Version\":1}\u001e"
 	_, err := c.conn.Write([]byte(request))
