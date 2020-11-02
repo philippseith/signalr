@@ -90,7 +90,7 @@ func runServer(t *testing.T, serverIsUp chan struct{}, quitServer chan struct{},
 	doneQuit := make(chan struct{}, 1)
 	sRServer, _ := signalr.NewServer(context.TODO(), signalr.SimpleHubFactory(&hub{}),
 		signalr.KeepAliveInterval(2*time.Second),
-		signalr.HttpTransports(transports...),
+		signalr.HTTPTransports(transports...),
 		signalr.Logger(log.NewLogfmtLogger(os.Stderr), true))
 	router := sRServer.MapHub("/hub")
 

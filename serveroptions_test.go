@@ -341,38 +341,38 @@ var _ = Describe("Server options", func() {
 			})
 		})
 	})
-	Describe("HttpTransports option", func() {
-		Context("When HttpTransports is one of WebSockets, ServerSentEvents or both", func() {
+	Describe("HTTPTransports option", func() {
+		Context("When HTTPTransports is one of WebSockets, ServerSentEvents or both", func() {
 			It("should set these transports", func(done Done) {
-				s, err := NewServer(context.TODO(), UseHub(&singleHub{}), HttpTransports("WebSockets"))
+				s, err := NewServer(context.TODO(), UseHub(&singleHub{}), HTTPTransports("WebSockets"))
 				Expect(err).NotTo(HaveOccurred())
 				Expect(s.availableTransports()).To(ContainElement("WebSockets"))
 				close(done)
 			})
 			It("should set these transports", func(done Done) {
-				s, err := NewServer(context.TODO(), UseHub(&singleHub{}), HttpTransports("ServerSentEvents"))
+				s, err := NewServer(context.TODO(), UseHub(&singleHub{}), HTTPTransports("ServerSentEvents"))
 				Expect(err).NotTo(HaveOccurred())
 				Expect(s.availableTransports()).To(ContainElement("ServerSentEvents"))
 				close(done)
 			})
 			It("should set these transports", func(done Done) {
-				s, err := NewServer(context.TODO(), UseHub(&singleHub{}), HttpTransports("ServerSentEvents", "WebSockets"))
+				s, err := NewServer(context.TODO(), UseHub(&singleHub{}), HTTPTransports("ServerSentEvents", "WebSockets"))
 				Expect(err).NotTo(HaveOccurred())
 				Expect(s.availableTransports()).To(ContainElement("WebSockets"))
 				Expect(s.availableTransports()).To(ContainElement("ServerSentEvents"))
 				close(done)
 			})
 		})
-		Context("When HttpTransports is none of WebSockets, ServerSentEvents", func() {
+		Context("When HTTPTransports is none of WebSockets, ServerSentEvents", func() {
 			It("should return an error", func(done Done) {
-				_, err := NewServer(context.TODO(), UseHub(&singleHub{}), HttpTransports("WebTransport"))
+				_, err := NewServer(context.TODO(), UseHub(&singleHub{}), HTTPTransports("WebTransport"))
 				Expect(err).To(HaveOccurred())
 				close(done)
 			})
 		})
-		Context("When HttpTransports is used on a client", func() {
+		Context("When HTTPTransports is used on a client", func() {
 			It("should return an error", func(done Done) {
-				_, err := NewClientConnection(context.TODO(), newTestingConnection(), HttpTransports("ServerSentEvents"))
+				_, err := NewClientConnection(context.TODO(), newTestingConnection(), HTTPTransports("ServerSentEvents"))
 				Expect(err).To(HaveOccurred())
 				close(done)
 			})

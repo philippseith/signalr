@@ -73,15 +73,12 @@ describe("e2e test with aspnet/signalr client", () =>{
         expect(i).toEqual(5)
     })
     it("should upload a stream", async() =>{
-        let received: number[];
         const receive = new Promise<number[]>(resolve => {
             connection.on("onUploadComplete", (r: number[]) => {
-                received = r;
-                resolve();
+                resolve(r);
             });
         });
         await connection.send("uploadStream", from([2, 0, 7]));
-        await receive;
-        expect(received).toEqual([2, 0, 7])
+        expect(await receive).toEqual([2, 0, 7])
     })
 });

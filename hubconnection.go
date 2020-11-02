@@ -145,9 +145,8 @@ func (c *defaultHubConnection) Receive() (interface{}, error) {
 						recvResCh <- readRes
 						close(recvResCh)
 						return
-					} else {
-						n = readRes.message.(int)
 					}
+					n = readRes.message.(int)
 				case <-c.ctx.Done():
 					recvResCh <- receiveResult{err: eris.Wrap(c.ctx.Err(), "hubConnection canceled")}
 					close(recvResCh)

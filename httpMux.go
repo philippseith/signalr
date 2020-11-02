@@ -19,7 +19,7 @@ type httpMux struct {
 	wsServer      websocket.Server
 }
 
-func newHttpMux(server Server) *httpMux {
+func newHTTPMux(server Server) *httpMux {
 	return &httpMux{
 		connectionMap: make(map[string]Connection),
 		server:        server,
@@ -79,7 +79,7 @@ func (h *httpMux) handleGet(writer http.ResponseWriter, request *http.Request) {
 				config.Origin, err = websocket.Origin(config, req)
 				return err
 			},
-			Handler: func(ws *websocket.Conn) { h.handleWebsocket(ws, request.Context()) },
+			Handler: func(ws *websocket.Conn) { h.handleWebsocket(request.Context(), ws) },
 		}
 		h.wsServer.ServeHTTP(writer, request)
 	} else if strings.ToLower(request.Header.Get("Accept")) == "text/event-stream" {
@@ -124,7 +124,7 @@ func (h *httpMux) handleGet(writer http.ResponseWriter, request *http.Request) {
 	}
 }
 
-func (h *httpMux) handleWebsocket(ws *websocket.Conn, requestContext context.Context) {
+func (h *httpMux) handleWebsocket(requestContext context.Context, ws *websocket.Conn) {
 	connectionID := ws.Request().URL.Query().Get("id")
 	if connectionID == "" {
 		// Support websocket connection without negotiate

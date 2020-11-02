@@ -71,7 +71,7 @@ func NewServer(ctx context.Context, options ...func(party) error) (Server, error
 
 // MapHub maps the hub to a path and returns the http.ServerMux which handles it
 func (s *server) MapHub(path string) *http.ServeMux {
-	httpMux := newHttpMux(s)
+	httpMux := newHTTPMux(s)
 	mux := http.NewServeMux()
 	mux.HandleFunc(fmt.Sprintf("%s/negotiate", path), httpMux.negotiate)
 	mux.Handle(path, httpMux)
