@@ -51,11 +51,20 @@ func NewHTTPClient(ctx context.Context, address string, options ...func(party) e
 		}
 		conn = newWebSocketConnection(ctx, context.Background(), nr.ConnectionID, ws)
 	} else if formats := nr.getTransferFormats("ServerSentEvents"); formats != nil {
-		req, err := http.NewRequest("POST", reqUrl.String(), nil)
+		req, err := http.NewRequest("GET", reqUrl.String(), nil)
 		if err != nil {
 			return nil, err
 		}
 		req.Header.Set("Accept", "text/event-stream")
+		client := &http.Client{}
+		resp, err := client.Do(req)
+		if err != nil {
+			return nil, err
+		}
+		conn, err = newClientSSEConnection(ctx, address, nr.ConnectionID, resp.Body)
+		if err != nil {
+			return nil, err
+		}
 	}
 	if conn != nil {
 		result, err := NewClient(ctx, conn, options...)

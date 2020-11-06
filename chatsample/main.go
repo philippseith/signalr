@@ -122,7 +122,7 @@ func runHTTPServer(address string, hub signalr.HubInterface) {
 	server, _ := signalr.NewServer(context.TODO(), signalr.SimpleHubFactory(hub),
 		signalr.KeepAliveInterval(2*time.Second),
 		signalr.Logger(kitlog.NewLogfmtLogger(os.Stderr), true))
-	router := server.MapHub("/chat")
+	router := server.ServeHTTP("/chat")
 	router.Handle("/", http.FileServer(http.Dir("./public")))
 
 	fmt.Printf("Listening for websocket connections on %s\n", address)

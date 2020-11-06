@@ -13,7 +13,7 @@ import (
 	"time"
 )
 
-type serverSentEventConnection struct {
+type serverSSEConnection struct {
 	baseConnection
 	mx          sync.Mutex
 	postWriting bool
@@ -23,14 +23,14 @@ type serverSentEventConnection struct {
 	sseFlusher  http.Flusher
 }
 
-func newServerSentEventConnection(parentContext context.Context, requestContext context.Context,
-	connectionID string, writer http.ResponseWriter) (*serverSentEventConnection, error) {
+func newServerSSEConnection(parentContext context.Context, requestContext context.Context,
+	connectionID string, writer http.ResponseWriter) (*serverSSEConnection, error) {
 	sseFlusher, ok := writer.(http.Flusher)
 	if !ok {
 		return nil, errors.New("connection over Server Sent Events not supported with http.ResponseWriter: http.Flusher not implemented")
 	}
 	ctx, _ := onecontext.Merge(parentContext, requestContext)
-	s := serverSentEventConnection{
+	s := serverSSEConnection{
 		baseConnection: baseConnection{
 			ctx:          ctx,
 			connectionID: connectionID,
@@ -42,7 +42,7 @@ func newServerSentEventConnection(parentContext context.Context, requestContext 
 	return &s, nil
 }
 
-func (s *serverSentEventConnection) consumeRequest(request *http.Request) int {
+func (s *serverSSEConnection) consumeRequest(request *http.Request) int {
 	if err := s.Context().Err(); err != nil {
 		return 410 // Gone
 	}
@@ -69,16 +69,16 @@ func (s *serverSentEventConnection) consumeRequest(request *http.Request) int {
 	return 200
 }
 
-func (s *serverSentEventConnection) Read(p []byte) (n int, err error) {
+func (s *serverSSEConnection) Read(p []byte) (n int, err error) {
 	if err := s.Context().Err(); err != nil {
-		return 0, eris.Wrap(err, "serverSentEventConnection canceled")
+		return 0, eris.Wrap(err, "serverSSEConnection canceled")
 	}
 	return s.postReader.Read(p)
 }
 
-func (s *serverSentEventConnection) Write(p []byte) (n int, err error) {
+func (s *serverSSEConnection) Write(p []byte) (n int, err error) {
 	if err := s.Context().Err(); err != nil {
-		return 0, eris.Wrap(err, "serverSentEventConnection canceled")
+		return 0, eris.Wrap(err, "serverSSEConnection canceled")
 	}
 	payload := ""
 	for _, line := range strings.Split(strings.TrimRight(string(p), "\n"), "\n") {

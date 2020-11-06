@@ -49,7 +49,7 @@ func (h *httpMux) handlePost(writer http.ResponseWriter, request *http.Request) 
 	if ok {
 		// Connection is initiated
 		switch conn := c.(type) {
-		case *serverSentEventConnection:
+		case *serverSSEConnection:
 			writer.WriteHeader(conn.consumeRequest(request))
 		// TODO case longPolling
 		default:
@@ -104,14 +104,13 @@ func (h *httpMux) handleGet(writer http.ResponseWriter, request *http.Request) {
 					// End this Server Sent Event (yes, your response now is one and the client will wait for this initial event to end)
 					_, _ = fmt.Fprint(writer, ":\r\n\r\n")
 					writer.(http.Flusher).Flush()
-					if sseConn, err := newServerSentEventConnection(h.server.context(), request.Context(), connectionID, writer); err != nil {
+					if sseConn, err := newServerSSEConnection(h.server.context(), request.Context(), connectionID, writer); err != nil {
 						writer.WriteHeader(500) // Internal server error
 					} else {
 						h.serveConnection(sseConn)
 					}
-				} else {
-					//  TODO Long polling
 				}
+				//  TODO Long polling
 			} else {
 				// connectionID in use
 				writer.WriteHeader(409) // Conflict
