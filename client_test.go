@@ -182,7 +182,7 @@ var _ = Describe("Client", func() {
 			Expect(r.Error).NotTo(HaveOccurred())
 			close(done)
 		}, 2.0)
-		XIt("should return an error when the connection fails", func(done Done) {
+		It("should return an error when the connection fails", func(done Done) {
 			cliConn.fail = errors.New("fail")
 			r := <-client.Invoke("InvokeMe", "A", 1)
 			Expect(r.Error).To(HaveOccurred())
@@ -260,7 +260,7 @@ var _ = Describe("Client", func() {
 			receiver.result = "Stop"
 			close(done)
 		}, 2.0)
-		XIt("should return an error when the connection fails", func(done Done) {
+		It("should return an error when the connection fails", func(done Done) {
 			cliConn.fail = errors.New("fail")
 			err := <-client.Send("Callback", 1)
 			Expect(err).To(HaveOccurred())
@@ -326,7 +326,7 @@ var _ = Describe("Client", func() {
 			Expect(r.Error).To(HaveOccurred())
 			close(done)
 		}, 2.0)
-		XIt("should return an error when the connection fails", func(done Done) {
+		It("should return an error when the connection fails", func(done Done) {
 			cliConn.fail = errors.New("fail")
 			r := <-client.PullStream("ReadStream")
 			Expect(r.Error).To(HaveOccurred())
@@ -392,7 +392,7 @@ var _ = Describe("Client", func() {
 			close(done)
 		})
 
-		XIt("should return an error when the connection fails", func(done Done) {
+		It("should return an error when the connection fails", func(done Done) {
 			cliConn.fail = errors.New("fail")
 			ch := make(chan int, 1)
 			err := <-client.PushStreams("ReceiveStream", "test", ch)

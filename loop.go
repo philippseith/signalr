@@ -21,7 +21,7 @@ type loop struct {
 	streamClient *streamClient
 }
 
-func newLoop(p party, conn Connection, protocol HubProtocol) *loop {
+func newLoop(p Party, conn Connection, protocol HubProtocol) *loop {
 	protocol = reflect.New(reflect.ValueOf(protocol).Elem().Type()).Interface().(HubProtocol)
 	_, dbg := p.loggers()
 	protocol.setDebugLogger(dbg)
@@ -47,7 +47,6 @@ type loopEvent struct {
 // Run runs the loop. After the startup sequence is done, this is signaled over the started channel.
 // Callers should pass a channel with buffer size 1 to allow the loop to run without waiting for the caller.
 func (l *loop) Run(started chan struct{}) {
-	l.hubConn.Start()
 	l.party.onConnected(l.hubConn)
 	started <- struct{}{}
 	close(started)

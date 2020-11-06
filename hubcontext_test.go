@@ -329,11 +329,9 @@ var _ = Describe("HubContext", func() {
 			// Wait for execution
 			Expect(<-hubContextInvocationQueue).To(Equal("Abort()"))
 			// We get the completion and the close message, the order depends on server timing
-			msg0 := <-conn0.received
-			msg1 := <-conn0.received
-			_, isClose0 := msg0.(closeMessage)
-			_, isClose1 := msg1.(closeMessage)
-			Expect(isClose0 || isClose1).To(Equal(true))
+			msg := <-conn0.received
+			_, isClose := msg.(closeMessage)
+			Expect(isClose).To(Equal(true))
 			// This connection should not work anymore
 			conn0.ClientSend(`{"type":1,"invocationId": "ab123","target":"additem","arguments":["first",2]}`)
 			select {
@@ -351,7 +349,7 @@ var _ = Describe("HubContext", func() {
 			conn1.ClientSend(`{"type":1,"invocationId": "ab123","target":"getitem","arguments":["first"]}`)
 			// Wait for execution
 			Expect(<-hubContextInvocationQueue).To(Equal("GetItem()"))
-			msg := <-conn1.received
+			msg = <-conn1.received
 			Expect(msg).To(BeAssignableToTypeOf(completionMessage{}))
 			Expect(msg.(completionMessage).Result).To(Equal(float64(2)))
 			close(done)

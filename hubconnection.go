@@ -11,8 +11,6 @@ import (
 // hubConnection is used by HubContext, Server and Client to realize the external API.
 // hubConnection uses a transport connection (of type Connection) and a HubProtocol to send and receive SignalR messages.
 type hubConnection interface {
-	Start()
-	IsConnected() bool
 	ConnectionID() string
 	Receive() (interface{}, error)
 	SendInvocation(id string, target string, args []interface{}) error
@@ -37,24 +35,8 @@ func newHubConnection(connection Connection, protocol HubProtocol, maximumReceiv
 		connection:                connection,
 		maximumReceiveMessageSize: maximumReceiveMessageSize,
 		items:                     &sync.Map{},
-		abortChans:                make([]chan error, 0),
 		info:                      info,
 	}
-	// Listen on abort
-	go func() {
-		<-c.ctx.Done()
-		c.mx.Lock()
-		if c.connected {
-			for _, ch := range c.abortChans {
-				go func(ch chan error, err error) {
-					ch <- err
-				}(ch, eris.Wrap(c.connection.Context().Err(), "connection canceled"))
-			}
-			c.abortChans = []chan error{}
-			c.connected = false
-		}
-		c.mx.Unlock()
-	}()
 	return c
 }
 
@@ -63,8 +45,6 @@ type defaultHubConnection struct {
 	cancelFunc                context.CancelFunc
 	protocol                  HubProtocol
 	mx                        sync.Mutex
-	connected                 bool
-	abortChans                []chan error
 	connection                Connection
 	maximumReceiveMessageSize uint
 	items                     *sync.Map
@@ -74,18 +54,6 @@ type defaultHubConnection struct {
 
 func (c *defaultHubConnection) Items() *sync.Map {
 	return c.items
-}
-
-func (c *defaultHubConnection) Start() {
-	defer c.mx.Unlock()
-	c.mx.Lock()
-	c.connected = true
-}
-
-func (c *defaultHubConnection) IsConnected() bool {
-	defer c.mx.Unlock()
-	c.mx.Lock()
-	return c.connected
 }
 
 func (c *defaultHubConnection) Close(errorText string, allowReconnect bool) error {
@@ -223,15 +191,13 @@ func (c *defaultHubConnection) writeMessage(message interface{}) error {
 	c.lastWriteStamp = time.Now()
 	c.mx.Unlock()
 	err := func() error {
-		if !c.IsConnected() {
+		if c.ctx.Err() != nil {
 			return eris.Wrap(c.ctx.Err(), "hubConnection canceled")
 		}
 		e := make(chan error, 1)
 		go func() { e <- c.protocol.WriteMessage(message, c.connection) }()
 		select {
 		case <-c.ctx.Done():
-			// Wait for WriteMessage to return
-			<-e
 			return eris.Wrap(c.ctx.Err(), "hubConnection canceled")
 		case err := <-e:
 			if err != nil {
