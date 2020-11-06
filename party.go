@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-type party interface {
+type Party interface {
 	context() context.Context
 	cancel()
 

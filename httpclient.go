@@ -11,7 +11,7 @@ import (
 )
 
 // NewHTTPClient creates a signalR Client using the websocket transport
-func NewHTTPClient(ctx context.Context, address string, options ...func(party) error) (Client, error) {
+func NewHTTPClient(ctx context.Context, address string, options ...func(Party) error) (Client, error) {
 	req, err := http.NewRequest("POST", fmt.Sprintf("%v/negotiate", address), nil)
 	if err != nil {
 		return nil, err

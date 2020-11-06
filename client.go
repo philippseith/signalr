@@ -14,7 +14,7 @@ import (
 
 // Client is the signalR connection used on the client side
 type Client interface {
-	party
+	Party
 	Start() error
 	Stop() error
 	// Closed() <-chan error TODO Define connection state
@@ -29,7 +29,7 @@ type Client interface {
 
 // NewClient build a new Client.
 // conn is a transport connection.
-func NewClient(ctx context.Context, conn Connection, options ...func(party) error) (Client, error) {
+func NewClient(ctx context.Context, conn Connection, options ...func(Party) error) (Client, error) {
 	info, dbg := buildInfoDebugLogger(log.NewLogfmtLogger(os.Stderr), true)
 	c := &client{
 		conn:      conn,

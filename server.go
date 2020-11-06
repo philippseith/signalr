@@ -20,8 +20,8 @@ import (
 
 // Server is a SignalR server for one type of hub
 type Server interface {
-	party
-	MapHub(path string) *http.ServeMux
+	Party
+	ServeHTTP(path string) *http.ServeMux
 	ServeConnection(conn Connection)
 	availableTransports() []string
 }
@@ -38,7 +38,7 @@ type server struct {
 
 // NewServer creates a new server for one type of hub. The hub type is set by one of the
 // options UseHub, HubFactory or SimpleHubFactory
-func NewServer(ctx context.Context, options ...func(party) error) (Server, error) {
+func NewServer(ctx context.Context, options ...func(Party) error) (Server, error) {
 	info, dbg := buildInfoDebugLogger(log.NewLogfmtLogger(os.Stderr), false)
 	lifetimeManager := newLifeTimeManager(info)
 	server := &server{
@@ -70,7 +70,7 @@ func NewServer(ctx context.Context, options ...func(party) error) (Server, error
 }
 
 // MapHub maps the hub to a path and returns the http.ServerMux which handles it
-func (s *server) MapHub(path string) *http.ServeMux {
+func (s *server) ServeHTTP(path string) *http.ServeMux {
 	httpMux := newHTTPMux(s)
 	mux := http.NewServeMux()
 	mux.HandleFunc(fmt.Sprintf("%s/negotiate", path), httpMux.negotiate)

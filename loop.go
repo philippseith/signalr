@@ -11,7 +11,7 @@ import (
 )
 
 type loop struct {
-	party        party
+	party        Party
 	info         StructuredLogger
 	dbg          StructuredLogger
 	protocol     HubProtocol
