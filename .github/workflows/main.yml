@@ -29,7 +29,8 @@ jobs:
       - uses: actions/setup-node@v1
         with:
           node-version: '14'
-        run: cd signalr_test & npm install
+      - run: cd signalr_test
+      - run: npm install
 
   test:
     name: Test
