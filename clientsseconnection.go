@@ -12,7 +12,7 @@ import (
 
 type clientSSEConnection struct {
 	baseConnection
-	reqUrl    string
+	reqURL    string
 	sseReader io.Reader
 	sseWriter io.Writer
 }
@@ -31,7 +31,7 @@ func newClientSSEConnection(parentContext context.Context, address string, conne
 			ctx:          parentContext,
 			connectionID: connectionID,
 		},
-		reqUrl: reqUrl.String(),
+		reqURL: reqUrl.String(),
 	}
 	c.sseReader, c.sseWriter = io.Pipe()
 	go func() {
@@ -61,7 +61,7 @@ func (c *clientSSEConnection) Read(p []byte) (n int, err error) {
 }
 
 func (c *clientSSEConnection) Write(p []byte) (n int, err error) {
-	req, err := http.NewRequest("POST", c.reqUrl, bytes.NewReader(p))
+	req, err := http.NewRequest("POST", c.reqURL, bytes.NewReader(p))
 	if err != nil {
 		return 0, err
 	}
@@ -71,7 +71,7 @@ func (c *clientSSEConnection) Write(p []byte) (n int, err error) {
 		return 0, err
 	}
 	if resp.StatusCode != 200 {
-		err = fmt.Errorf("POST %v -> %v", c.reqUrl, resp.Status)
+		err = fmt.Errorf("POST %v -> %v", c.reqURL, resp.Status)
 	}
 	_ = resp.Body.Close()
 	return len(p), err
