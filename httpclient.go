@@ -31,27 +31,27 @@ func NewHTTPClient(ctx context.Context, address string, options ...func(Party) e
 	if err != nil {
 		return nil, err
 	}
-	reqUrl, err := url.Parse(address)
+	reqURL, err := url.Parse(address)
 	if err != nil {
 		return nil, err
 	}
-	q := reqUrl.Query()
+	q := reqURL.Query()
 	q.Set("id", nr.ConnectionID)
-	reqUrl.RawQuery = q.Encode()
+	reqURL.RawQuery = q.Encode()
 	// Select the best connection
 	var conn Connection
 	if formats := nr.getTransferFormats("WebTransports"); formats != nil {
 		// TODO
 	} else if formats := nr.getTransferFormats("WebSockets"); formats != nil {
-		wsUrl := reqUrl
-		wsUrl.Scheme = "ws"
-		ws, err := websocket.Dial(wsUrl.String(), "", "http://localhost")
+		wsURL := reqURL
+		wsURL.Scheme = "ws"
+		ws, err := websocket.Dial(wsURL.String(), "", "http://localhost")
 		if err != nil {
 			return nil, err
 		}
 		conn = newWebSocketConnection(ctx, context.Background(), nr.ConnectionID, ws)
 	} else if formats := nr.getTransferFormats("ServerSentEvents"); formats != nil {
-		req, err := http.NewRequest("GET", reqUrl.String(), nil)
+		req, err := http.NewRequest("GET", reqURL.String(), nil)
 		if err != nil {
 			return nil, err
 		}
