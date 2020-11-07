@@ -1,6 +1,7 @@
 package signalr
 
 import (
+	"context"
 	"github.com/go-kit/kit/log"
 	"time"
 )
@@ -8,6 +9,9 @@ import (
 // Party is the common base of Server and Client. The Party methods are only used internally,
 // but the interface is public to allow using Options on Party as parameters for external functions
 type Party interface {
+	context() context.Context
+	cancel()
+
 	onConnected(hc hubConnection)
 	onDisconnected(hc hubConnection)
 
@@ -35,14 +39,17 @@ type Party interface {
 	loggers() (info StructuredLogger, dbg StructuredLogger)
 	setLoggers(info StructuredLogger, dbg StructuredLogger)
 
-	prefixLoggers() (info StructuredLogger, dbg StructuredLogger)
+	prefixLoggers(connectionID string) (info StructuredLogger, dbg StructuredLogger)
 
 	maximumReceiveMessageSize() uint
 	setMaximumReceiveMessageSize(size uint)
 }
 
-func newPartyBase(info log.Logger, dbg log.Logger) partyBase {
+func newPartyBase(parentContext context.Context, info log.Logger, dbg log.Logger) partyBase {
+	ctx, cancelFunc := context.WithCancel(parentContext)
 	return partyBase{
+		ctx:                        ctx,
+		cancelFunc:                 cancelFunc,
 		_timeout:                   time.Second * 30,
 		_handshakeTimeout:          time.Second * 15,
 		_keepAliveInterval:         time.Second * 5,
@@ -56,6 +63,8 @@ func newPartyBase(info log.Logger, dbg log.Logger) partyBase {
 }
 
 type partyBase struct {
+	ctx                        context.Context
+	cancelFunc                 context.CancelFunc
 	_timeout                   time.Duration
 	_handshakeTimeout          time.Duration
 	_keepAliveInterval         time.Duration
@@ -65,6 +74,14 @@ type partyBase struct {
 	_enableDetailedErrors      bool
 	info                       StructuredLogger
 	dbg                        StructuredLogger
+}
+
+func (p *partyBase) context() context.Context {
+	return p.ctx
+}
+
+func (p *partyBase) cancel() {
+	p.cancelFunc()
 }
 
 func (p *partyBase) timeout() time.Duration {

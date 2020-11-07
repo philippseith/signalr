@@ -3,10 +3,11 @@ package main
 import (
 	"context"
 	"fmt"
+	kitlog "github.com/go-kit/kit/log"
 	"github.com/philippseith/signalr"
 	"log"
-	"net"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 )
@@ -41,7 +42,7 @@ func (c *chat) RequestAsync(message string) <-chan map[string]string {
 	r := make(chan map[string]string)
 	go func() {
 		defer close(r)
-		time.Sleep(5 * time.Second)
+		time.Sleep(4 * time.Second)
 		m := make(map[string]string)
 		m["ToUpper"] = strings.ToUpper(message)
 		m["ToLower"] = strings.ToLower(message)
@@ -93,35 +94,36 @@ func (c *chat) UploadStream(upload1 <-chan int, factor float64, upload2 <-chan f
 	}
 }
 
-func runTCPServer(address string, hub signalr.HubInterface) {
-	listener, err := net.Listen("tcp", address)
-
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-
-	fmt.Printf("Listening for TCP connection on %s\n", listener.Addr())
-
-	server, _ := signalr.NewServer(signalr.UseHub(hub))
-
-	for {
-		conn, err := listener.Accept()
-
-		if err != nil {
-			fmt.Println(err)
-			break
-		}
-
-		go server.Run(context.TODO(), newNetConnection(conn))
-	}
-}
+//func runTCPServer(address string, hub signalr.HubInterface) {
+//	listener, err := net.Listen("tcp", address)
+//
+//	if err != nil {
+//		fmt.Println(err)
+//		return
+//	}
+//
+//	fmt.Printf("Listening for TCP connection on %s\n", listener.Addr())
+//
+//	server, _ := signalr.NewServer(context.TODO(), signalr.UseHub(hub))
+//
+//	for {
+//		conn, err := listener.Accept()
+//
+//		if err != nil {
+//			fmt.Println(err)
+//			break
+//		}
+//
+//		go server.ServeConnection(context.TODO(), newNetConnection(conn))
+//	}
+//}
 
 func runHTTPServer(address string, hub signalr.HubInterface) {
-	router := http.NewServeMux()
+	server, _ := signalr.NewServer(context.TODO(), signalr.SimpleHubFactory(hub),
+		signalr.KeepAliveInterval(2*time.Second),
+		signalr.Logger(kitlog.NewLogfmtLogger(os.Stderr), true))
+	router := server.ServeHTTP("/chat")
 	router.Handle("/", http.FileServer(http.Dir("./public")))
-
-	signalr.MapHub(router, "/chat", signalr.SimpleHubFactory(hub))
 
 	fmt.Printf("Listening for websocket connections on %s\n", address)
 	if err := http.ListenAndServe(address, router); err != nil {
@@ -129,11 +131,11 @@ func runHTTPServer(address string, hub signalr.HubInterface) {
 	}
 }
 
-func runHTTPClient(address string, client interface{}) <-chan error {
-	c := signalr.NewWebsocketClientConnection(address) // HubProtocol is determined inside
-	c.SetReceiver(client)
-	return c.Start()
-}
+//func runHTTPClient(address string, client interface{}) {
+//	c, _ := signalr.NewHTTPClient(context.TODO(), address) // HubProtocol is determined inside
+//	c.SetReceiver(client)
+//	c.Start()
+//}
 
 type client struct {
 	signalr.Hub
@@ -148,8 +150,8 @@ func main() {
 
 	//go runTCPServer("127.0.0.1:8007", hub)
 	go runHTTPServer("localhost:8086", hub)
-	<-time.After(time.Millisecond * 2)
-	go runHTTPClient("http://localhost:8086/chat", &client{})
+	//<-time.After(time.Millisecond * 2)
+	//go runHTTPClient("http://localhost:8086/chat", &client{})
 	ch := make(chan struct{})
 	<-ch
 }

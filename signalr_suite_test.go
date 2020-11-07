@@ -17,7 +17,7 @@ func TestSignalR(t *testing.T) {
 }
 
 func connect(hubProto HubInterface) *testingConnection {
-	server, err := NewServer(SimpleHubFactory(hubProto),
+	server, err := NewServer(context.TODO(), SimpleHubFactory(hubProto),
 		Logger(log.NewLogfmtLogger(os.Stderr), false),
 		ChanReceiveTimeout(200*time.Millisecond),
 		StreamBufferCapacity(5))
@@ -26,6 +26,6 @@ func connect(hubProto HubInterface) *testingConnection {
 		return nil
 	}
 	conn := newTestingConnectionForServer()
-	go server.Run(context.TODO(), conn)
+	go server.ServeConnection(conn)
 	return conn
 }

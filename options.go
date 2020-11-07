@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-// TimeoutInterval is the interval one party will consider the other party disconnected
+// TimeoutInterval is the interval one Party will consider the other Party disconnected
 // if it hasn't received a message (including keep-alive) in it.
 // The recommended value is double the KeepAliveInterval value.
 // Default is 30 seconds.
@@ -18,7 +18,7 @@ func TimeoutInterval(timeout time.Duration) func(Party) error {
 	}
 }
 
-// HandshakeTimeout is the interval if the other party doesn't send an initial handshake message within,
+// HandshakeTimeout is the interval if the other Party doesn't send an initial handshake message within,
 // the connection is closed. This is an advanced setting that should only be modified
 // if handshake timeout errors are occurring due to severe network latency.
 // For more detail on the handshake process,
@@ -30,9 +30,9 @@ func HandshakeTimeout(timeout time.Duration) func(Party) error {
 	}
 }
 
-// KeepAliveInterval is the interval if the party hasn't sent a message within,
+// KeepAliveInterval is the interval if the Party hasn't sent a message within,
 // a ping message is sent automatically to keep the connection open.
-// When changing KeepAliveInterval, change the Timeout setting on the other party.
+// When changing KeepAliveInterval, change the Timeout setting on the other Party.
 // The recommended Timeout value is double the KeepAliveInterval value.
 // Default is 15 seconds.
 func KeepAliveInterval(interval time.Duration) func(Party) error {
@@ -78,7 +78,7 @@ func ChanReceiveTimeout(timeout time.Duration) func(Party) error {
 	}
 }
 
-// EnableDetailedErrors - if true, detailed exception messages are returned to the other party when an exception is thrown in a Hub method.
+// EnableDetailedErrors - if true, detailed exception messages are returned to the other Party when an exception is thrown in a Hub method.
 // The default is false, as these exception messages can contain sensitive information.
 func EnableDetailedErrors(enable bool) func(Party) error {
 	return func(p Party) error {
@@ -93,7 +93,7 @@ type StructuredLogger interface {
 	Log(keyVals ...interface{}) error
 }
 
-// Logger stets the logger used by the party to log info events.
+// Logger stets the logger used by the Party to log info events.
 // If debug is true, debug log event are generated, too
 func Logger(logger StructuredLogger, debug bool) func(Party) error {
 	return func(p Party) error {

@@ -1,6 +1,9 @@
 package signalr
 
-import "sync"
+import (
+	"context"
+	"sync"
+)
 
 // HubContext is a context abstraction for a hub
 // Clients() gets a HubClients that can be used to invoke methods on clients connected to the hub
@@ -19,6 +22,7 @@ type HubContext interface {
 }
 
 type connectionHubContext struct {
+	abort      context.CancelFunc
 	connection hubConnection
 	clients    HubClients
 	groups     GroupManager
@@ -43,7 +47,7 @@ func (c *connectionHubContext) ConnectionID() string {
 }
 
 func (c *connectionHubContext) Abort() {
-	c.connection.Abort()
+	c.abort()
 }
 
 func (c *connectionHubContext) Logger() (info StructuredLogger, dbg StructuredLogger) {

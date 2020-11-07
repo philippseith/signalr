@@ -12,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/go-kit/kit/log"
+	"net/http"
 	"os"
 	"reflect"
 	"runtime/debug"
@@ -20,7 +21,9 @@ import (
 // Server is a SignalR server for one type of hub
 type Server interface {
 	Party
-	Run(parentContext context.Context, conn Connection)
+	ServeHTTP(path string) *http.ServeMux
+	ServeConnection(conn Connection)
+	availableTransports() []string
 }
 
 type server struct {
@@ -30,11 +33,12 @@ type server struct {
 	defaultHubClients *defaultHubClients
 	groupManager      GroupManager
 	reconnectAllowed  bool
+	transports        []string
 }
 
 // NewServer creates a new server for one type of hub. The hub type is set by one of the
 // options UseHub, HubFactory or SimpleHubFactory
-func NewServer(options ...func(Party) error) (Server, error) {
+func NewServer(ctx context.Context, options ...func(Party) error) (Server, error) {
 	info, dbg := buildInfoDebugLogger(log.NewLogfmtLogger(os.Stderr), false)
 	lifetimeManager := newLifeTimeManager(info)
 	server := &server{
@@ -46,7 +50,7 @@ func NewServer(options ...func(Party) error) (Server, error) {
 		groupManager: &defaultGroupManager{
 			lifetimeManager: &lifetimeManager,
 		},
-		partyBase:        newPartyBase(info, dbg),
+		partyBase:        newPartyBase(ctx, info, dbg),
 		reconnectAllowed: true,
 	}
 	for _, option := range options {
@@ -56,33 +60,49 @@ func NewServer(options ...func(Party) error) (Server, error) {
 			}
 		}
 	}
+	if server.transports == nil {
+		server.transports = []string{"WebSockets", "ServerSentEvents"}
+	}
 	if server.newHub == nil {
 		return server, errors.New("cannot determine hub type. Neither UseHub, HubFactory or SimpleHubFactory given as option")
 	}
 	return server, nil
 }
 
-// run runs the server on one connection. The same server might be run on different connections in parallel
-func (s *server) Run(parentContext context.Context, conn Connection) {
+// MapHub maps the hub to a path and returns the http.ServerMux which handles it
+func (s *server) ServeHTTP(path string) *http.ServeMux {
+	httpMux := newHTTPMux(s)
+	mux := http.NewServeMux()
+	mux.HandleFunc(fmt.Sprintf("%s/negotiate", path), httpMux.negotiate)
+	mux.Handle(path, httpMux)
+	return mux
+}
+
+// ServeConnection serves one connection. The same server might serve different connections in parallel
+func (s *server) ServeConnection(conn Connection) {
 	if protocol, err := s.processHandshake(conn); err != nil {
-		info, _ := s.prefixLoggers()
+		info, _ := s.prefixLoggers("")
 		_ = info.Log(evt, "processHandshake", "connectionId", conn.ConnectionID(), "error", err, react, "do not connect")
 	} else {
-		newLoop(parentContext, s, conn, protocol).Run()
+		newLoop(s, conn, protocol).Run(make(chan struct{}, 1))
 	}
+}
+
+func (s *server) availableTransports() []string {
+	return s.transports
 }
 
 func (s *server) onConnected(hc hubConnection) {
 	s.lifetimeManager.OnConnected(hc)
 	go func() {
-		defer s.recoverHubLifeCyclePanic(hc)
+		defer s.recoverHubLifeCyclePanic()
 		s.invocationTarget(hc).(HubInterface).OnConnected(hc.ConnectionID())
 	}()
 }
 
 func (s *server) onDisconnected(hc hubConnection) {
 	go func() {
-		defer s.recoverHubLifeCyclePanic(hc)
+		defer s.recoverHubLifeCyclePanic()
 		s.invocationTarget(hc).(HubInterface).OnDisconnected(hc.ConnectionID())
 	}()
 	s.lifetimeManager.OnDisconnected(hc)
@@ -99,32 +119,36 @@ func (s *server) allowReconnect() bool {
 	return s.reconnectAllowed
 }
 
-func (s *server) recoverHubLifeCyclePanic(hc hubConnection) {
+func (s *server) recoverHubLifeCyclePanic() {
 	if err := recover(); err != nil {
 		s.reconnectAllowed = false
-		info, dbg := s.prefixLoggers()
+		info, dbg := s.prefixLoggers("")
 		_ = info.Log(evt, "panic in hub lifecycle", "error", err, react, "close connection, allow no reconnect")
 		_ = dbg.Log(evt, "panic in hub lifecycle", "error", err, react, "close connection, allow no reconnect", "stack", string(debug.Stack()))
-		hc.Abort()
+		s.cancel()
 	}
 }
 
-func (s *server) prefixLoggers() (info StructuredLogger, debug StructuredLogger) {
+func (s *server) prefixLoggers(connectionID string) (info StructuredLogger, dbg StructuredLogger) {
 	return log.WithPrefix(s.info, "ts", log.DefaultTimestampUTC,
 			"class", "Server",
-			"hub", reflect.ValueOf(s.newHub()).Elem().Type()), log.WithPrefix(s.dbg, "ts", log.DefaultTimestampUTC,
+			"connection", connectionID,
+			"hub", reflect.ValueOf(s.newHub()).Elem().Type()),
+		log.WithPrefix(s.dbg, "ts", log.DefaultTimestampUTC,
 			"class", "Server",
+			"connection", connectionID,
 			"hub", reflect.ValueOf(s.newHub()).Elem().Type())
 }
 
-func (s *server) newConnectionHubContext(conn hubConnection) HubContext {
+func (s *server) newConnectionHubContext(hubConn hubConnection) HubContext {
 	return &connectionHubContext{
+		abort: hubConn.Abort,
 		clients: &callerHubClients{
 			defaultHubClients: s.defaultHubClients,
-			connectionID:      conn.ConnectionID(),
+			connectionID:      hubConn.ConnectionID(),
 		},
 		groups:     s.groupManager,
-		connection: conn,
+		connection: hubConn,
 		info:       s.info,
 		dbg:        s.dbg,
 	}
@@ -136,7 +160,7 @@ func (s *server) processHandshake(conn Connection) (HubProtocol, error) {
 	var ok bool
 	const handshakeResponse = "{}\u001e"
 	const errorHandshakeResponse = "{\"error\":\"%s\"}\u001e"
-	info, dbg := s.prefixLoggers()
+	info, dbg := s.prefixLoggers(conn.ConnectionID())
 
 	defer conn.SetTimeout(0)
 	conn.SetTimeout(s._handshakeTimeout)

@@ -10,6 +10,8 @@ require (
 	github.com/kr/pretty v0.1.0 // indirect
 	github.com/onsi/ginkgo v1.11.0
 	github.com/onsi/gomega v1.8.1
+	github.com/rotisserie/eris v0.4.1
+	github.com/teivah/onecontext v0.0.0-20200513185103-40f981bfd775
 	golang.org/x/net v0.0.0-20191209160850-c0dbc17a3553
 	golang.org/x/sync v0.0.0-20190423024810-112230192c58 // indirect
 	golang.org/x/sys v0.0.0-20200116001909-b77594299b42 // indirect

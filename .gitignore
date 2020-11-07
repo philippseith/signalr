@@ -106,3 +106,5 @@ dist
 # Jetbrains IDE files
 .idea/
 /.vscode
+/cover.out
+/coverage.txt

@@ -2,6 +2,7 @@ package signalr
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -26,6 +27,10 @@ type testingConnection struct {
 	failRead     string
 	failWrite    string
 	failMx       sync.Mutex
+}
+
+func (t *testingConnection) Context() context.Context {
+	return context.TODO()
 }
 
 var connNum = 0

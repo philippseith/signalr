@@ -3,165 +3,149 @@ package signalr
 import (
 	"bytes"
 	"context"
-	"errors"
+	"github.com/rotisserie/eris"
 	"sync"
+	"time"
 )
 
+// hubConnection is used by HubContext, Server and Client to realize the external API.
+// hubConnection uses a transport connection (of type Connection) and a HubProtocol to send and receive SignalR messages.
 type hubConnection interface {
-	Start()
-	IsConnected() bool
 	ConnectionID() string
 	Receive() (interface{}, error)
-	SendInvocation(id string, target string, args []interface{}) (invocationMessage, error)
-	SendStreamInvocation(id string, target string, args []interface{}, streamIds []string) (invocationMessage, error)
-	StreamItem(id string, item interface{}) (streamItemMessage, error)
-	Completion(id string, result interface{}, error string) (completionMessage, error)
-	Close(error string, allowReconnect bool) (closeMessage, error)
-	Ping() (hubMessage, error)
+	SendInvocation(id string, target string, args []interface{}) error
+	SendStreamInvocation(id string, target string, args []interface{}, streamIds []string) error
+	StreamItem(id string, item interface{}) error
+	Completion(id string, result interface{}, error string) error
+	Close(error string, allowReconnect bool) error
+	Ping() error
+	LastWriteStamp() time.Time
 	Items() *sync.Map
+	Context() context.Context
 	Abort()
-	Aborted() <-chan error
 }
 
-func newHubConnection(parentContext context.Context, connection Connection, protocol HubProtocol, maximumReceiveMessageSize uint) hubConnection {
-	return &defaultHubConnection{
+func newHubConnection(connection Connection, protocol HubProtocol, maximumReceiveMessageSize uint, info StructuredLogger) hubConnection {
+	ctx, cancelFunc := context.WithCancel(connection.Context())
+	c := &defaultHubConnection{
+		ctx:                       ctx,
+		cancelFunc:                cancelFunc,
 		protocol:                  protocol,
 		mx:                        sync.Mutex{},
 		connection:                connection,
 		maximumReceiveMessageSize: maximumReceiveMessageSize,
 		items:                     &sync.Map{},
-		context:                   parentContext,
-		abortChans:                make([]chan error, 0),
+		info:                      info,
 	}
+	return c
 }
 
 type defaultHubConnection struct {
+	ctx                       context.Context
+	cancelFunc                context.CancelFunc
 	protocol                  HubProtocol
 	mx                        sync.Mutex
-	connected                 bool
-	abortChans                []chan error
 	connection                Connection
 	maximumReceiveMessageSize uint
 	items                     *sync.Map
-	context                   context.Context
+	lastWriteStamp            time.Time
+	info                      StructuredLogger
 }
 
 func (c *defaultHubConnection) Items() *sync.Map {
 	return c.items
 }
 
-func (c *defaultHubConnection) Start() {
-	defer c.mx.Unlock()
-	c.mx.Lock()
-	c.connected = true
-}
-
-func (c *defaultHubConnection) IsConnected() bool {
-	defer c.mx.Unlock()
-	c.mx.Lock()
-	return c.connected
-}
-
-func (c *defaultHubConnection) Close(error string, allowReconnect bool) (closeMessage, error) {
+func (c *defaultHubConnection) Close(errorText string, allowReconnect bool) error {
 	var closeMessage = closeMessage{
 		Type:           7,
-		Error:          error,
+		Error:          errorText,
 		AllowReconnect: allowReconnect,
 	}
-	return closeMessage, c.writeMessage(closeMessage)
+	return c.protocol.WriteMessage(closeMessage, c.connection)
 }
 
 func (c *defaultHubConnection) ConnectionID() string {
 	return c.connection.ConnectionID()
 }
 
-func (c *defaultHubConnection) Abort() {
-	c.mx.Lock()
-	if c.connected {
-		err := errors.New("connection aborted from hub")
-		for _, ch := range c.abortChans {
-			go func(ch chan error) {
-				ch <- err
-			}(ch)
-		}
-		c.connected = false
-	}
-	c.mx.Unlock()
+func (c *defaultHubConnection) Context() context.Context {
+	return c.ctx
 }
 
-func (c *defaultHubConnection) Aborted() <-chan error {
-	defer c.mx.Unlock()
-	c.mx.Lock()
-	ch := make(chan error, 1)
-	c.abortChans = append(c.abortChans, ch)
-	return ch
+func (c *defaultHubConnection) Abort() {
+	c.cancelFunc()
+}
+
+type receiveResult struct {
+	message interface{}
+	err     error
 }
 
 func (c *defaultHubConnection) Receive() (interface{}, error) {
-	if !c.IsConnected() {
-		return nil, c.context.Err()
+	if c.ctx.Err() != nil {
+		return nil, eris.Wrap(c.ctx.Err(), "hubConnection canceled")
 	}
-	m := make(chan interface{}, 1)
-	e := make(chan error, 1)
-	go func() {
+	recvResCh := make(chan receiveResult, 1)
+	go func(chan receiveResult) {
 		var buf bytes.Buffer
 		var data = make([]byte, c.maximumReceiveMessageSize)
 		var n int
 		for {
-			if message, complete, err := c.protocol.ReadMessage(&buf); !complete {
+			if message, complete, parseErr := c.protocol.ReadMessage(&buf); !complete {
 				// Partial message, need more data
 				// ReadMessage read data out of the buf, so its gone there: refill
 				buf.Write(data[:n])
-				nc := make(chan int)
-				e2 := make(chan error)
-				go func() {
-					if n, err = c.connection.Read(data); err == nil {
+				readResCh := make(chan receiveResult, 1)
+				go func(chan receiveResult) {
+					var readErr error
+					n, readErr = c.connection.Read(data)
+					if readErr == nil {
 						buf.Write(data[:n])
-						nc <- n
-					} else {
-						e2 <- err
 					}
-				}()
+					readResCh <- receiveResult{n, readErr}
+					close(readResCh)
+				}(readResCh)
 				select {
-				case n = <-nc:
-				case err = <-e2:
-					c.Abort()
-					e <- err
-					m <- nil
-					return
-				case <-c.context.Done():
-					e <- c.context.Err()
-					m <- nil
+				case readRes := <-readResCh:
+					if readRes.err != nil {
+						c.Abort()
+						recvResCh <- readRes
+						close(recvResCh)
+						return
+					}
+					n = readRes.message.(int)
+				case <-c.ctx.Done():
+					recvResCh <- receiveResult{err: eris.Wrap(c.ctx.Err(), "hubConnection canceled")}
+					close(recvResCh)
 					return
 				}
 			} else {
-				m <- message
-				e <- err
+				recvResCh <- receiveResult{message, parseErr}
+				close(recvResCh)
 				return
 			}
 		}
-	}()
+	}(recvResCh)
 	select {
-	case <-c.context.Done():
-		return nil, c.context.Err()
-	case err := <-e:
-		return <-m, err
-	case message := <-m:
-		return message, <-e
+	case recvRes := <-recvResCh:
+		return recvRes.message, recvRes.err
+	case <-c.ctx.Done():
+		return nil, eris.Wrap(c.ctx.Err(), "hubConnection canceled")
 	}
 }
 
-func (c *defaultHubConnection) SendInvocation(id string, target string, args []interface{}) (invocationMessage, error) {
+func (c *defaultHubConnection) SendInvocation(id string, target string, args []interface{}) error {
 	var invocationMessage = invocationMessage{
 		Type:         1,
 		InvocationID: id,
 		Target:       target,
 		Arguments:    args,
 	}
-	return invocationMessage, c.writeMessage(invocationMessage)
+	return c.writeMessage(invocationMessage)
 }
 
-func (c *defaultHubConnection) SendStreamInvocation(id string, target string, args []interface{}, streamIds []string) (invocationMessage, error) {
+func (c *defaultHubConnection) SendStreamInvocation(id string, target string, args []interface{}, streamIds []string) error {
 	var invocationMessage = invocationMessage{
 		Type:         4,
 		InvocationID: id,
@@ -169,54 +153,61 @@ func (c *defaultHubConnection) SendStreamInvocation(id string, target string, ar
 		Arguments:    args,
 		StreamIds:    streamIds,
 	}
-	return invocationMessage, c.writeMessage(invocationMessage)
+	return c.writeMessage(invocationMessage)
 }
 
-func (c *defaultHubConnection) StreamItem(id string, item interface{}) (streamItemMessage, error) {
+func (c *defaultHubConnection) StreamItem(id string, item interface{}) error {
 	var streamItemMessage = streamItemMessage{
 		Type:         2,
 		InvocationID: id,
 		Item:         item,
 	}
-	return streamItemMessage, c.writeMessage(streamItemMessage)
+	return c.writeMessage(streamItemMessage)
 }
 
-func (c *defaultHubConnection) Completion(id string, result interface{}, error string) (completionMessage, error) {
+func (c *defaultHubConnection) Completion(id string, result interface{}, error string) error {
 	var completionMessage = completionMessage{
 		Type:         3,
 		InvocationID: id,
 		Result:       result,
 		Error:        error,
 	}
-	return completionMessage, c.writeMessage(completionMessage)
+	return c.writeMessage(completionMessage)
 }
 
-func (c *defaultHubConnection) Ping() (hubMessage, error) {
+func (c *defaultHubConnection) Ping() error {
 	var pingMessage = hubMessage{
 		Type: 6,
 	}
-	return pingMessage, c.writeMessage(pingMessage)
+	return c.writeMessage(pingMessage)
+}
+
+func (c *defaultHubConnection) LastWriteStamp() time.Time {
+	return c.lastWriteStamp
 }
 
 func (c *defaultHubConnection) writeMessage(message interface{}) error {
-	_, isCloseMsg := message.(closeMessage)
-	if !c.IsConnected() &&
-		// Allow sending closeMessage when not connected
-		!isCloseMsg {
-		return c.context.Err()
-	}
-	e := make(chan error, 1)
-	go func() { e <- c.protocol.WriteMessage(message, c.connection) }()
-	select {
-	case <-c.context.Done():
-		// Wait for WriteMessage to return
-		<-e
-		c.Abort()
-		return c.context.Err()
-	case err := <-e:
-		if err != nil {
-			c.Abort()
+	c.mx.Lock()
+	c.lastWriteStamp = time.Now()
+	c.mx.Unlock()
+	err := func() error {
+		if c.ctx.Err() != nil {
+			return eris.Wrap(c.ctx.Err(), "hubConnection canceled")
 		}
-		return err
+		e := make(chan error, 1)
+		go func() { e <- c.protocol.WriteMessage(message, c.connection) }()
+		select {
+		case <-c.ctx.Done():
+			return eris.Wrap(c.ctx.Err(), "hubConnection canceled")
+		case err := <-e:
+			if err != nil {
+				c.Abort()
+			}
+			return err
+		}
+	}()
+	if err != nil {
+		_ = c.info.Log(evt, msgSend, "message", fmtMsg(message), "error", err)
 	}
+	return err
 }
