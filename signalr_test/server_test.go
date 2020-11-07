@@ -3,8 +3,6 @@ package signalr_test
 import (
 	"context"
 	"fmt"
-	"github.com/go-kit/kit/log"
-	"github.com/philippseith/signalr"
 	"io/ioutil"
 	"net/http"
 	"os"
@@ -13,6 +11,9 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/go-kit/kit/log"
+	"github.com/philippseith/signalr"
 )
 
 func TestMain(m *testing.M) {
@@ -95,7 +96,7 @@ func runServer(t *testing.T, serverIsUp chan struct{}, quitServer chan struct{},
 	router := sRServer.ServeHTTP("/hub")
 
 	server := &http.Server{
-		Addr:         "127.0.0.1:5000",
+		Addr:         "127.0.0.1:5001",
 		Handler:      router,
 		ReadTimeout:  2 * time.Second,
 		WriteTimeout: 5 * time.Second,

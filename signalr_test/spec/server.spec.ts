@@ -14,7 +14,7 @@ describe("smoke test", () => {
     it("should connect on a clients request for connection and answer a simple request",
         async () => {
             const connection: signalR.HubConnection = builder
-                .withUrl("http://127.0.0.1:5000/hub")
+                .withUrl("http://127.0.0.1:5001/hub")
                 .build();
             await connection.start();
             const pong = await connection.invoke("ping");
@@ -32,7 +32,7 @@ describe("e2e test with aspnet/signalr client", () =>{
     let connection: signalR.HubConnection;
     beforeEach(async() => {
         connection = builder
-            .withUrl("http://127.0.0.1:5000/hub")
+            .withUrl("http://127.0.0.1:5001/hub")
             .build();
         await connection.start();
     })
