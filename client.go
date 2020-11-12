@@ -227,7 +227,7 @@ func (c *client) prefixLoggers(connectionID string) (info StructuredLogger, dbg 
 
 func (c *client) processHandshake() (HubProtocol, error) {
 	info, dbg := c.prefixLoggers(c.conn.ConnectionID())
-	const request = "{\"Protocol\":\"json\",\"Version\":1}\u001e"
+	const request = "{\"protocol\":\"json\",\"version\":1}\u001e"
 	_, err := c.conn.Write([]byte(request))
 	if err != nil {
 		_ = info.Log(evt, "handshake sent", "msg", request, "error", err)

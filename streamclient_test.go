@@ -127,17 +127,17 @@ var _ = Describe("ClientStreaming", func() {
 				go func() {
 					go func() {
 						for i := 0; i < 10; i++ {
-							conn.ClientSend(fmt.Sprintf(`{"type":2,"invocationid":"123","item":%v}`, i))
+							conn.ClientSend(fmt.Sprintf(`{"type":2,"invocationId":"123","item":%v}`, i))
 							time.Sleep(100 * time.Millisecond)
 						}
-						conn.ClientSend(`{"type":3,"invocationid":"123"}`)
+						conn.ClientSend(`{"type":3,"invocationId":"123"}`)
 					}()
 					go func() {
 						for i := 5; i < 10; i++ {
-							conn.ClientSend(fmt.Sprintf(`{"type":2,"invocationid":"456","item":%v}`, float64(i)*7.1))
+							conn.ClientSend(fmt.Sprintf(`{"type":2,"invocationId":"456","item":%v}`, float64(i)*7.1))
 							time.Sleep(200 * time.Millisecond)
 						}
-						conn.ClientSend(`{"type":3,"invocationid":"456"}`)
+						conn.ClientSend(`{"type":3,"invocationId":"456"}`)
 					}()
 				}()
 				u1 := 0
@@ -175,7 +175,7 @@ var _ = Describe("ClientStreaming", func() {
 				conn := connect(&clientStreamHub{})
 				conn.ClientSend(`{"type":1,"invocationId":"upstream","target":"uploadint","streamids":["abc"]}`)
 				Expect(<-clientStreamingInvocationQueue).To(Equal("UploadInt()"))
-				conn.ClientSend(`{"type":2,"invocationid":"abc","item":"ShouldBeInt"}`)
+				conn.ClientSend(`{"type":2,"invocationId":"abc","item":"ShouldBeInt"}`)
 				select {
 				case message := <-conn.received:
 					Expect(message).To(BeAssignableToTypeOf(closeMessage{}))
@@ -196,7 +196,7 @@ var _ = Describe("ClientStreaming", func() {
 				Expect(<-clientStreamingInvocationQueue).To(Equal("UploadHang()"))
 				// connect() sets StreamBufferCapacity to 5, so 6 messages should be send to make it hang
 				for i := 0; i < 6; i++ {
-					conn.ClientSend(fmt.Sprintf(`{"type":2,"invocationid":"hang","item":%v}`, i))
+					conn.ClientSend(fmt.Sprintf(`{"type":2,"invocationId":"hang","item":%v}`, i))
 				}
 				sent := time.Now()
 				select {
@@ -222,11 +222,11 @@ var _ = Describe("ClientStreaming", func() {
 					`{"type":1,"invocationId":"upstream","target":"uploadstreamsmoke","arguments":[%v],"streamids":["123","456"]}`, 5))
 				Expect(<-clientStreamingInvocationQueue).To(Equal(fmt.Sprintf("f: %v", 5)))
 				// close the first stream
-				conn.ClientSend(`{"type":3,"invocationid":"123"}`)
+				conn.ClientSend(`{"type":3,"invocationId":"123"}`)
 				// Send one with correct streamid
-				conn.ClientSend(fmt.Sprintf(`{"type":2,"invocationid":"456","item":%v}`, 7.1))
+				conn.ClientSend(fmt.Sprintf(`{"type":2,"invocationId":"456","item":%v}`, 7.1))
 				// close the second stream
-				conn.ClientSend(`{"type":3,"invocationid":"456"}`)
+				conn.ClientSend(`{"type":3,"invocationId":"456"}`)
 			loop:
 				for {
 					select {
@@ -316,18 +316,18 @@ var _ = Describe("ClientStreaming", func() {
 			It("should receive values on all of these types", func(done Done) {
 				conn := connect(&clientStreamHub{})
 				conn.ClientSend(`{"type":1,"invocationId":"UPT","target":"uploadparamtypes","streamids":["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11"]}`)
-				conn.ClientSend(`{"type":2,"invocationid":"1","item":1}`)
-				conn.ClientSend(`{"type":2,"invocationid":"2","item":1}`)
-				conn.ClientSend(`{"type":2,"invocationid":"3","item":1}`)
-				conn.ClientSend(`{"type":2,"invocationid":"4","item":1}`)
-				conn.ClientSend(`{"type":2,"invocationid":"5","item":1}`)
-				conn.ClientSend(`{"type":2,"invocationid":"6","item":1}`)
-				conn.ClientSend(`{"type":2,"invocationid":"7","item":1}`)
-				conn.ClientSend(`{"type":2,"invocationid":"8","item":1}`)
-				conn.ClientSend(`{"type":2,"invocationid":"9","item":1}`)
-				conn.ClientSend(`{"type":2,"invocationid":"10","item":1.1}`)
-				conn.ClientSend(`{"type":2,"invocationid":"11","item":2.1}`)
-				conn.ClientSend(`{"type":2,"invocationid":"11","item":"Some String"}`)
+				conn.ClientSend(`{"type":2,"invocationId":"1","item":1}`)
+				conn.ClientSend(`{"type":2,"invocationId":"2","item":1}`)
+				conn.ClientSend(`{"type":2,"invocationId":"3","item":1}`)
+				conn.ClientSend(`{"type":2,"invocationId":"4","item":1}`)
+				conn.ClientSend(`{"type":2,"invocationId":"5","item":1}`)
+				conn.ClientSend(`{"type":2,"invocationId":"6","item":1}`)
+				conn.ClientSend(`{"type":2,"invocationId":"7","item":1}`)
+				conn.ClientSend(`{"type":2,"invocationId":"8","item":1}`)
+				conn.ClientSend(`{"type":2,"invocationId":"9","item":1}`)
+				conn.ClientSend(`{"type":2,"invocationId":"10","item":1.1}`)
+				conn.ClientSend(`{"type":2,"invocationId":"11","item":2.1}`)
+				conn.ClientSend(`{"type":2,"invocationId":"11","item":"Some String"}`)
 				select {
 				case r := <-clientStreamingInvocationQueue:
 					Expect(r).To(Equal("UPT finished"))
@@ -394,7 +394,7 @@ var _ = Describe("ClientStreaming", func() {
 				conn.ClientSend(`{"type":4,"invocationId": "nnn","target":"uploadstreamsmoke","arguments":[5.0],"streamids":["ff1","ggg"]}`)
 				<-clientStreamingInvocationQueue
 				// Send invalid stream item message
-				conn.ClientSend(`{"type":2,"invocationid":"ff1","item":[42]}`)
+				conn.ClientSend(`{"type":2,"invocationId":"ff1","item":[42]}`)
 				select {
 				case message := <-conn.received:
 					Expect(message).To(BeAssignableToTypeOf(closeMessage{}))

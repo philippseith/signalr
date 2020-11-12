@@ -56,7 +56,7 @@ func (j *JSONHubProtocol) ReadMessage(buf *bytes.Buffer) (m interface{}, complet
 	}
 
 	message := hubMessage{}
-	err = json.Unmarshal(data, &message)
+	err = message.UnmarshalJSON(data)
 	_ = j.dbg.Log(evt, "read", msg, string(data))
 	if err != nil {
 		return nil, true, &jsonError{string(data), err}
@@ -82,25 +82,25 @@ func (j *JSONHubProtocol) ReadMessage(buf *bytes.Buffer) (m interface{}, complet
 		return invocation, true, err
 	case 2:
 		streamItem := streamItemMessage{}
-		if err = json.Unmarshal(data, &streamItem); err != nil {
+		if err = streamItem.UnmarshalJSON(data); err != nil {
 			err = &jsonError{string(data), err}
 		}
 		return streamItem, true, err
 	case 3:
 		completion := completionMessage{}
-		if err = json.Unmarshal(data, &completion); err != nil {
+		if err = completion.UnmarshalJSON(data); err != nil {
 			err = &jsonError{string(data), err}
 		}
 		return completion, true, err
 	case 5:
 		invocation := cancelInvocationMessage{}
-		if err = json.Unmarshal(data, &invocation); err != nil {
+		if err = invocation.UnmarshalJSON(data); err != nil {
 			err = &jsonError{string(data), err}
 		}
 		return invocation, true, err
 	case 7:
 		cm := closeMessage{}
-		if err = json.Unmarshal(data, &cm); err != nil {
+		if err = cm.UnmarshalJSON(data); err != nil {
 			err = &jsonError{string(data), err}
 		}
 		return cm, true, err
@@ -123,7 +123,13 @@ func parseTextMessageFormat(buf *bytes.Buffer) ([]byte, error) {
 // WriteMessage writes a message as JSON to the specified writer
 func (j *JSONHubProtocol) WriteMessage(message interface{}, writer io.Writer) error {
 	buf := bytes.Buffer{}
-	if err := json.NewEncoder(&buf).Encode(message); err != nil {
+	if marshaler, ok := message.(json.Marshaler); ok {
+		b, err := marshaler.MarshalJSON()
+		if err != nil {
+			return err
+		}
+		_, _ = buf.Write(b) // err is always nil
+	} else if err := json.NewEncoder(&buf).Encode(message); err != nil {
 		// Don't know when this will happen, presumably never
 		return err
 	}

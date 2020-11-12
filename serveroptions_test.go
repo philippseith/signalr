@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	"strings"
 	"time"
 )
 
@@ -312,7 +313,7 @@ var _ = Describe("Server options", func() {
 					}()
 					select {
 					case m := <-hmc:
-						Expect(m).To(Equal("{\"type\":6}\n"))
+						Expect(strings.TrimRight(m.(string), "\n")).To(Equal("{\"type\":6}"))
 					case <-time.After(300 * time.Millisecond):
 						Fail("timed out")
 					}
