@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
+	"github.com/mailru/easyjson/jwriter"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"golang.org/x/net/websocket"
@@ -14,6 +15,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 )
 
@@ -23,6 +25,10 @@ type addHub struct {
 
 func (w *addHub) Add2(i int) int {
 	return i + 2
+}
+
+func (w *addHub) Echo(s string) string {
+	return s
 }
 
 var _ = Describe("HTTP server", func() {
@@ -101,6 +107,7 @@ var _ = Describe("HTTP server", func() {
 				result := <-client.Invoke("Add2", 1)
 				Expect(result.Error).NotTo(HaveOccurred())
 				Expect(result.Value).To(Equal(float64(3)))
+				// Try second connection
 				client2, err := NewHTTPClient(context.TODO(),
 					fmt.Sprintf("http://127.0.0.1:%v/hub", port),
 					Logger(logger, true))
@@ -110,6 +117,13 @@ var _ = Describe("HTTP server", func() {
 				result = <-client2.Invoke("Add2", 2)
 				Expect(result.Error).NotTo(HaveOccurred())
 				Expect(result.Value).To(Equal(float64(4)))
+				// Huge message
+				hugo := strings.Repeat("#", 2500)
+				result = <-client.Invoke("Echo", hugo)
+				Expect(result.Error).NotTo(HaveOccurred())
+				s := result.Value.(string)
+				Expect(s).To(Equal(hugo))
+
 				close(done)
 			}, 100)
 		})
@@ -179,7 +193,7 @@ func negotiateWebSocketTestServer(port int) map[string]interface{} {
 func handShakeAndCallWebSocketTestServer(port int, connectionID string) {
 	waitForPort(port)
 	logger := log.NewLogfmtLogger(os.Stderr)
-	protocol := JSONHubProtocol{}
+	protocol := JSONHubProtocol{easyWriter: jwriter.Writer{}}
 	protocol.setDebugLogger(level.Debug(logger))
 	var urlParam string
 	if connectionID != "" {

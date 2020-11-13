@@ -90,22 +90,23 @@ func (c *defaultHubConnection) Receive() (interface{}, error) {
 	go func(chan receiveResult) {
 		var buf bytes.Buffer
 		var data = make([]byte, c.maximumReceiveMessageSize)
-		var n int
+		var nn int
 		for {
 			if message, complete, parseErr := c.protocol.ReadMessage(&buf); !complete {
 				// Partial message, need more data
 				// ReadMessage read data out of the buf, so its gone there: refill
-				buf.Write(data[:n])
+				buf.Write(data[:nn])
 				readResCh := make(chan receiveResult, 1)
-				go func(chan receiveResult) {
+				go func(nn int, readResCh chan receiveResult) {
 					var readErr error
-					n, readErr = c.connection.Read(data)
+					n, readErr := c.connection.Read(data[nn:])
 					if readErr == nil {
-						buf.Write(data[:n])
+						buf.Write(data[nn : nn+n])
+						nn = nn + n
 					}
-					readResCh <- receiveResult{n, readErr}
+					readResCh <- receiveResult{nn, readErr}
 					close(readResCh)
-				}(readResCh)
+				}(nn, readResCh)
 				select {
 				case readRes := <-readResCh:
 					if readRes.err != nil {
@@ -114,7 +115,7 @@ func (c *defaultHubConnection) Receive() (interface{}, error) {
 						close(recvResCh)
 						return
 					}
-					n = readRes.message.(int)
+					nn = readRes.message.(int)
 				case <-c.ctx.Done():
 					recvResCh <- receiveResult{err: eris.Wrap(c.ctx.Err(), "hubConnection canceled")}
 					close(recvResCh)
