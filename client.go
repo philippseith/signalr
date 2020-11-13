@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/go-kit/kit/log"
+	"github.com/mailru/easyjson/jwriter"
 	"os"
 	"reflect"
 	"sync"
@@ -260,7 +261,7 @@ loop:
 						return nil, errors.New(response.Error)
 					}
 					_ = dbg.Log(evt, "handshake received", "msg", fmtMsg(response))
-					protocol := &JSONHubProtocol{}
+					protocol := &JSONHubProtocol{easyWriter: jwriter.Writer{}}
 					_, pDbg := c.loggers()
 					protocol.setDebugLogger(pDbg)
 					return protocol, nil

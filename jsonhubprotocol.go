@@ -6,13 +6,16 @@ import (
 	"errors"
 	"fmt"
 	"github.com/go-kit/kit/log"
+	"github.com/mailru/easyjson"
+	"github.com/mailru/easyjson/jwriter"
 	"io"
 	"reflect"
 )
 
 // JSONHubProtocol is the JSON based SignalR protocol
 type JSONHubProtocol struct {
-	dbg log.Logger
+	dbg        log.Logger
+	easyWriter jwriter.Writer
 }
 
 // Protocol specific message for correct unmarshaling of Arguments
@@ -122,6 +125,14 @@ func parseTextMessageFormat(buf *bytes.Buffer) ([]byte, error) {
 
 // WriteMessage writes a message as JSON to the specified writer
 func (j *JSONHubProtocol) WriteMessage(message interface{}, writer io.Writer) error {
+	if em, ok := message.(easyjson.Marshaler); ok {
+		em.MarshalEasyJSON(&j.easyWriter)
+		j.easyWriter.RawByte(30)
+		b := j.easyWriter.Buffer.BuildBytes()
+		_ = j.dbg.Log(evt, "write", msg, string(b))
+		_, err := writer.Write(b)
+		return err
+	}
 	buf := bytes.Buffer{}
 	if marshaler, ok := message.(json.Marshaler); ok {
 		b, err := marshaler.MarshalJSON()
@@ -133,8 +144,8 @@ func (j *JSONHubProtocol) WriteMessage(message interface{}, writer io.Writer) er
 		// Don't know when this will happen, presumably never
 		return err
 	}
-	_ = j.dbg.Log(evt, "write", msg, buf.String())
 	_ = buf.WriteByte(30) // bytes.Buffer.WriteByte() returns always nil
+	_ = j.dbg.Log(evt, "write", msg, buf.String())
 	_, err := writer.Write(buf.Bytes())
 	return err
 }
