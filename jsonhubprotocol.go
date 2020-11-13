@@ -68,7 +68,7 @@ func (j *JSONHubProtocol) ReadMessage(buf *bytes.Buffer) (m interface{}, complet
 	switch message.Type {
 	case 1, 4:
 		jsonInvocation := jsonInvocationMessage{}
-		if err = json.Unmarshal(data, &jsonInvocation); err != nil {
+		if err = jsonInvocation.UnmarshalJSON(data); err != nil {
 			err = &jsonError{string(data), err}
 		}
 		arguments := make([]interface{}, len(jsonInvocation.Arguments))
@@ -133,21 +133,7 @@ func (j *JSONHubProtocol) WriteMessage(message interface{}, writer io.Writer) er
 		_, err := writer.Write(b)
 		return err
 	}
-	buf := bytes.Buffer{}
-	if marshaler, ok := message.(json.Marshaler); ok {
-		b, err := marshaler.MarshalJSON()
-		if err != nil {
-			return err
-		}
-		_, _ = buf.Write(b) // err is always nil
-	} else if err := json.NewEncoder(&buf).Encode(message); err != nil {
-		// Don't know when this will happen, presumably never
-		return err
-	}
-	_ = buf.WriteByte(30) // bytes.Buffer.WriteByte() returns always nil
-	_ = j.dbg.Log(evt, "write", msg, buf.String())
-	_, err := writer.Write(buf.Bytes())
-	return err
+	return fmt.Errorf("%#v does not implement easyjson.Marshaler", message)
 }
 
 func (j *JSONHubProtocol) setDebugLogger(dbg StructuredLogger) {
