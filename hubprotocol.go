@@ -19,46 +19,46 @@ type HubProtocol interface {
 
 // Protocol
 type hubMessage struct {
-	Type int `json:"type" msg:"type"`
+	Type int `json:"type"`
 }
 
 type invocationMessage struct {
-	Type         int           `json:"type" msg:"type"`
-	Target       string        `json:"target" msg:"target"`
-	InvocationID string        `json:"invocationId,omitempty" msg:"invocationId,omitempty"`
-	Arguments    []interface{} `json:"arguments" msg:"arguments"`
-	StreamIds    []string      `json:"streamIds,omitempty" msg:"streamIds,omitempty"`
+	Type         int           `json:"type"`
+	Target       string        `json:"target"`
+	InvocationID string        `json:"invocationId,omitempty"`
+	Arguments    []interface{} `json:"arguments"`
+	StreamIds    []string      `json:"streamIds,omitempty"`
 }
 
 type completionMessage struct {
-	Type         int         `json:"type" msg:"type"`
-	InvocationID string      `json:"invocationId" msg:"invocationId"`
-	Result       interface{} `json:"result,omitempty" msg:"result,omitempty"`
-	Error        string      `json:"error,omitempty" msg:"error,omitempty"`
+	Type         int         `json:"type"`
+	InvocationID string      `json:"invocationId"`
+	Result       interface{} `json:"result,omitempty"`
+	Error        string      `json:"error,omitempty"`
 }
 
 type streamItemMessage struct {
-	Type         int         `json:"type" msg:"type"`
-	InvocationID string      `json:"invocationId" msg:"invocationId"`
-	Item         interface{} `json:"item" msg:"item"`
+	Type         int         `json:"type"`
+	InvocationID string      `json:"invocationId"`
+	Item         interface{} `json:"item"`
 }
 
 type cancelInvocationMessage struct {
-	Type         int    `json:"type" msg:"type"`
-	InvocationID string `json:"invocationId" msg:"invocationId"`
+	Type         int    `json:"type"`
+	InvocationID string `json:"invocationId"`
 }
 
 type closeMessage struct {
-	Type           int    `json:"type" msg:"type"`
-	Error          string `json:"error" msg:"error"`
-	AllowReconnect bool   `json:"allowReconnect" msg:"allowReconnect"`
+	Type           int    `json:"type"`
+	Error          string `json:"error"`
+	AllowReconnect bool   `json:"allowReconnect"`
 }
 
 type handshakeRequest struct {
-	Protocol string `json:"protocol" msg:"protocol"`
-	Version  int    `json:"version" msg:"version"`
+	Protocol string `json:"protocol"`
+	Version  int    `json:"version"`
 }
 
 type handshakeResponse struct {
-	Error string `json:"error,omitempty" msg:"error,omitempty"`
+	Error string `json:"error,omitempty"`
 }
