@@ -167,12 +167,13 @@ func (t *testingConnection) ClientSend(message string) {
 func (t *testingConnection) ClientReceive() (string, error) {
 	var buf bytes.Buffer
 	var data = make([]byte, 1<<15) // 32K
-	var n int
+	var nn int
 	for {
 		if message, err := buf.ReadString(30); err != nil {
-			buf.Write(data[:n])
-			if n, err = t.cliReader.Read(data); err == nil {
-				buf.Write(data[:n])
+			buf.Write(data[:nn])
+			if n, err := t.cliReader.Read(data[nn:]); err == nil {
+				buf.Write(data[nn : nn+n])
+				nn = nn + n
 			} else {
 				return "", err
 			}

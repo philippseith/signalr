@@ -12,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/go-kit/kit/log"
+	"github.com/mailru/easyjson/jwriter"
 	"net/http"
 	"os"
 	"reflect"
@@ -207,7 +208,7 @@ func (s *server) processHandshake(conn Connection) (HubProtocol, error) {
 }
 
 var protocolMap = map[string]HubProtocol{
-	"json": &JSONHubProtocol{},
+	"json": &JSONHubProtocol{easyWriter: jwriter.Writer{}},
 }
 
 // const for logging

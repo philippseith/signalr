@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/go-kit/kit/log"
+	"github.com/mailru/easyjson/jwriter"
 	"os"
 	"reflect"
 	"sync"
@@ -227,7 +228,7 @@ func (c *client) prefixLoggers(connectionID string) (info StructuredLogger, dbg 
 
 func (c *client) processHandshake() (HubProtocol, error) {
 	info, dbg := c.prefixLoggers(c.conn.ConnectionID())
-	const request = "{\"Protocol\":\"json\",\"Version\":1}\u001e"
+	const request = "{\"protocol\":\"json\",\"version\":1}\u001e"
 	_, err := c.conn.Write([]byte(request))
 	if err != nil {
 		_ = info.Log(evt, "handshake sent", "msg", request, "error", err)
@@ -260,7 +261,7 @@ loop:
 						return nil, errors.New(response.Error)
 					}
 					_ = dbg.Log(evt, "handshake received", "msg", fmtMsg(response))
-					protocol := &JSONHubProtocol{}
+					protocol := &JSONHubProtocol{easyWriter: jwriter.Writer{}}
 					_, pDbg := c.loggers()
 					protocol.setDebugLogger(pDbg)
 					return protocol, nil

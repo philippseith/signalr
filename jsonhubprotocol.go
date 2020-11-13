@@ -6,13 +6,16 @@ import (
 	"errors"
 	"fmt"
 	"github.com/go-kit/kit/log"
+	"github.com/mailru/easyjson"
+	"github.com/mailru/easyjson/jwriter"
 	"io"
 	"reflect"
 )
 
 // JSONHubProtocol is the JSON based SignalR protocol
 type JSONHubProtocol struct {
-	dbg log.Logger
+	dbg        log.Logger
+	easyWriter jwriter.Writer
 }
 
 // Protocol specific message for correct unmarshaling of Arguments
@@ -56,7 +59,7 @@ func (j *JSONHubProtocol) ReadMessage(buf *bytes.Buffer) (m interface{}, complet
 	}
 
 	message := hubMessage{}
-	err = json.Unmarshal(data, &message)
+	err = message.UnmarshalJSON(data)
 	_ = j.dbg.Log(evt, "read", msg, string(data))
 	if err != nil {
 		return nil, true, &jsonError{string(data), err}
@@ -65,7 +68,7 @@ func (j *JSONHubProtocol) ReadMessage(buf *bytes.Buffer) (m interface{}, complet
 	switch message.Type {
 	case 1, 4:
 		jsonInvocation := jsonInvocationMessage{}
-		if err = json.Unmarshal(data, &jsonInvocation); err != nil {
+		if err = jsonInvocation.UnmarshalJSON(data); err != nil {
 			err = &jsonError{string(data), err}
 		}
 		arguments := make([]interface{}, len(jsonInvocation.Arguments))
@@ -82,25 +85,25 @@ func (j *JSONHubProtocol) ReadMessage(buf *bytes.Buffer) (m interface{}, complet
 		return invocation, true, err
 	case 2:
 		streamItem := streamItemMessage{}
-		if err = json.Unmarshal(data, &streamItem); err != nil {
+		if err = streamItem.UnmarshalJSON(data); err != nil {
 			err = &jsonError{string(data), err}
 		}
 		return streamItem, true, err
 	case 3:
 		completion := completionMessage{}
-		if err = json.Unmarshal(data, &completion); err != nil {
+		if err = completion.UnmarshalJSON(data); err != nil {
 			err = &jsonError{string(data), err}
 		}
 		return completion, true, err
 	case 5:
 		invocation := cancelInvocationMessage{}
-		if err = json.Unmarshal(data, &invocation); err != nil {
+		if err = invocation.UnmarshalJSON(data); err != nil {
 			err = &jsonError{string(data), err}
 		}
 		return invocation, true, err
 	case 7:
 		cm := closeMessage{}
-		if err = json.Unmarshal(data, &cm); err != nil {
+		if err = cm.UnmarshalJSON(data); err != nil {
 			err = &jsonError{string(data), err}
 		}
 		return cm, true, err
@@ -122,15 +125,15 @@ func parseTextMessageFormat(buf *bytes.Buffer) ([]byte, error) {
 
 // WriteMessage writes a message as JSON to the specified writer
 func (j *JSONHubProtocol) WriteMessage(message interface{}, writer io.Writer) error {
-	buf := bytes.Buffer{}
-	if err := json.NewEncoder(&buf).Encode(message); err != nil {
-		// Don't know when this will happen, presumably never
+	if em, ok := message.(easyjson.Marshaler); ok {
+		em.MarshalEasyJSON(&j.easyWriter)
+		j.easyWriter.RawByte(30)
+		b := j.easyWriter.Buffer.BuildBytes()
+		_ = j.dbg.Log(evt, "write", msg, string(b))
+		_, err := writer.Write(b)
 		return err
 	}
-	_ = j.dbg.Log(evt, "write", msg, buf.String())
-	_ = buf.WriteByte(30) // bytes.Buffer.WriteByte() returns always nil
-	_, err := writer.Write(buf.Bytes())
-	return err
+	return fmt.Errorf("%#v does not implement easyjson.Marshaler", message)
 }
 
 func (j *JSONHubProtocol) setDebugLogger(dbg StructuredLogger) {

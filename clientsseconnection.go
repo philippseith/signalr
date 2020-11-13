@@ -44,7 +44,11 @@ func newClientSSEConnection(parentContext context.Context, address string, conne
 			}
 			lines := strings.Split(string(p[:n]), "\n")
 			for _, line := range lines {
-				json := strings.Replace(line, "data:", "", 1)
+				json := strings.Replace(strings.Trim(line, "\r"), "data:", "", 1)
+				// Spec says: If it starts with Space, remove it
+				if len(json) > 0 && json[0] == ' ' {
+					json = json[1:]
+				}
 				_, err = c.sseWriter.Write([]byte(json))
 				if err != nil {
 					break loop
