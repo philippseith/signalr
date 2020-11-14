@@ -34,6 +34,7 @@ func NewClient(ctx context.Context, conn Connection, options ...func(Party) erro
 	info, dbg := buildInfoDebugLogger(log.NewLogfmtLogger(os.Stderr), true)
 	c := &client{
 		conn:      conn,
+		format:    "json",
 		partyBase: newPartyBase(ctx, info, dbg),
 		lastID:    -1,
 	}
@@ -50,6 +51,7 @@ func NewClient(ctx context.Context, conn Connection, options ...func(Party) erro
 type client struct {
 	partyBase
 	conn      Connection
+	format    string
 	loop      *loop
 	receiver  interface{}
 	lastID    int64
@@ -228,7 +230,7 @@ func (c *client) prefixLoggers(connectionID string) (info StructuredLogger, dbg 
 
 func (c *client) processHandshake() (HubProtocol, error) {
 	info, dbg := c.prefixLoggers(c.conn.ConnectionID())
-	const request = "{\"protocol\":\"json\",\"version\":1}\u001e"
+	request := fmt.Sprintf("{\"protocol\":\"%v\",\"version\":1}\u001e", c.format)
 	_, err := c.conn.Write([]byte(request))
 	if err != nil {
 		_ = info.Log(evt, "handshake sent", "msg", request, "error", err)
@@ -255,7 +257,6 @@ loop:
 					// Malformed handshake
 					_ = info.Log(evt, "handshake received", "msg", string(rawHandshake), "error", err)
 				} else {
-
 					if response.Error != "" {
 						_ = info.Log(evt, "handshake received", "error", response.Error)
 						return nil, errors.New(response.Error)

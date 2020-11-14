@@ -53,7 +53,6 @@ func HTTPTransports(transports ...string) func(Party) error {
 					return fmt.Errorf("unsupported transport: %v", transport)
 				}
 			}
-
 			return nil
 		}
 		return errors.New("option Transports is server only")
