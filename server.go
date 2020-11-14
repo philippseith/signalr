@@ -208,7 +208,8 @@ func (s *server) processHandshake(conn Connection) (HubProtocol, error) {
 }
 
 var protocolMap = map[string]HubProtocol{
-	"json": &JSONHubProtocol{easyWriter: jwriter.Writer{}},
+	"json":        &JSONHubProtocol{easyWriter: jwriter.Writer{}},
+	"messagepack": &MessagePackHubProtocol{},
 }
 
 // const for logging
