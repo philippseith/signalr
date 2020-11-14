@@ -49,8 +49,8 @@ func (v *JSONHubProtocol) UnmarshalArgument(argument interface{}, value interfac
 
 // ReadMessage reads a JSON message from buf and returns the message if the buf contained one completely.
 // If buf does not contain the whole message, it returns a nil message and complete false
-func (v *JSONHubProtocol) ParseMessage(buf io.Reader) (m interface{}, err error) {
-	data, err := parseTextMessageFormat(buf)
+func (v *JSONHubProtocol) ParseMessage(reader io.Reader) (m interface{}, err error) {
+	data, err := parseTextMessageFormat(reader)
 	switch {
 	case errors.Is(err, io.EOF):
 		return nil, err
