@@ -210,12 +210,10 @@ func handShakeAndCallWebSocketTestServer(port int, connectionID string) {
 	_, _ = wsConn.Write(append([]byte(`{"type":1,"invocationId":"666","target":"add2","arguments":[1]}`), 30))
 	result := make(chan interface{})
 	go func() {
-		for {
-			if message, err := cliConn.Receive(); err == nil {
-				if completionMessage, ok := message.(completionMessage); ok {
-					result <- completionMessage.Result
-					return
-				}
+		for recvResult := range cliConn.Receive() {
+			if completionMessage, ok := recvResult.message.(completionMessage); ok {
+				result <- completionMessage.Result
+				return
 			}
 		}
 	}()

@@ -1,7 +1,6 @@
 package signalr
 
 import (
-	"bytes"
 	"io"
 )
 
@@ -11,7 +10,7 @@ import (
 // WriteMessage writes a message to the specified writer
 // UnmarshalArgument() unmarshals a raw message depending of the specified value type into value
 type HubProtocol interface {
-	ReadMessage(buf *bytes.Buffer) (interface{}, bool, error)
+	ParseMessage(buf io.Reader) (interface{}, error)
 	WriteMessage(message interface{}, writer io.Writer) error
 	UnmarshalArgument(argument interface{}, value interface{}) error
 	setDebugLogger(dbg StructuredLogger)

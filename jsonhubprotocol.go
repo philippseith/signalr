@@ -37,11 +37,11 @@ func (j *jsonError) Error() string {
 }
 
 // UnmarshalArgument unmarshals a json.RawMessage depending of the specified value type into value
-func (j *JSONHubProtocol) UnmarshalArgument(argument interface{}, value interface{}) error {
+func (v *JSONHubProtocol) UnmarshalArgument(argument interface{}, value interface{}) error {
 	if err := json.Unmarshal(argument.(json.RawMessage), value); err != nil {
 		return &jsonError{string(argument.(json.RawMessage)), err}
 	}
-	_ = j.dbg.Log(evt, "UnmarshalArgument",
+	_ = v.dbg.Log(evt, "UnmarshalArgument",
 		"argument", string(argument.(json.RawMessage)),
 		"value", fmt.Sprintf("%v", reflect.ValueOf(value).Elem()))
 	return nil
@@ -49,20 +49,20 @@ func (j *JSONHubProtocol) UnmarshalArgument(argument interface{}, value interfac
 
 // ReadMessage reads a JSON message from buf and returns the message if the buf contained one completely.
 // If buf does not contain the whole message, it returns a nil message and complete false
-func (j *JSONHubProtocol) ReadMessage(buf *bytes.Buffer) (m interface{}, complete bool, err error) {
+func (v *JSONHubProtocol) ParseMessage(buf io.Reader) (m interface{}, err error) {
 	data, err := parseTextMessageFormat(buf)
 	switch {
 	case errors.Is(err, io.EOF):
-		return nil, false, err
+		return nil, err
 		// Other errors never happen, because parseTextMessageFormat will only return err
 		// from bytes.Buffer.ReadBytes() which is always io.EOF or nil
 	}
 
 	message := hubMessage{}
 	err = message.UnmarshalJSON(data)
-	_ = j.dbg.Log(evt, "read", msg, string(data))
+	_ = v.dbg.Log(evt, "read", msg, string(data))
 	if err != nil {
-		return nil, true, &jsonError{string(data), err}
+		return nil, &jsonError{string(data), err}
 	}
 
 	switch message.Type {
@@ -82,60 +82,65 @@ func (j *JSONHubProtocol) ReadMessage(buf *bytes.Buffer) (m interface{}, complet
 			Arguments:    arguments,
 			StreamIds:    jsonInvocation.StreamIds,
 		}
-		return invocation, true, err
+		return invocation, err
 	case 2:
 		streamItem := streamItemMessage{}
 		if err = streamItem.UnmarshalJSON(data); err != nil {
 			err = &jsonError{string(data), err}
 		}
-		return streamItem, true, err
+		return streamItem, err
 	case 3:
 		completion := completionMessage{}
 		if err = completion.UnmarshalJSON(data); err != nil {
 			err = &jsonError{string(data), err}
 		}
-		return completion, true, err
+		return completion, err
 	case 5:
 		invocation := cancelInvocationMessage{}
 		if err = invocation.UnmarshalJSON(data); err != nil {
 			err = &jsonError{string(data), err}
 		}
-		return invocation, true, err
+		return invocation, err
 	case 7:
 		cm := closeMessage{}
 		if err = cm.UnmarshalJSON(data); err != nil {
 			err = &jsonError{string(data), err}
 		}
-		return cm, true, err
+		return cm, err
 	default:
-		return message, true, nil
+		return message, nil
 	}
 }
 
-func parseTextMessageFormat(buf *bytes.Buffer) ([]byte, error) {
-	// 30 = ASCII record separator
-	data, err := buf.ReadBytes(30)
-
-	if err != nil {
-		return data, err
+func parseTextMessageFormat(reader io.Reader) ([]byte, error) {
+	data := make([]byte, 0)
+	p := make([]byte, 1024)
+	for {
+		n, err := reader.Read(p)
+		if err != nil {
+			return nil, err
+		}
+		if i := bytes.IndexByte(p, 30); i != -1 {
+			data = append(data, p[:i]...)
+			return data, nil
+		}
+		data = append(data, p[:n]...)
 	}
-	// Remove the delimiter
-	return data[0 : len(data)-1], err
 }
 
 // WriteMessage writes a message as JSON to the specified writer
-func (j *JSONHubProtocol) WriteMessage(message interface{}, writer io.Writer) error {
+func (v *JSONHubProtocol) WriteMessage(message interface{}, writer io.Writer) error {
 	if em, ok := message.(easyjson.Marshaler); ok {
-		em.MarshalEasyJSON(&j.easyWriter)
-		j.easyWriter.RawByte(30)
-		b := j.easyWriter.Buffer.BuildBytes()
-		_ = j.dbg.Log(evt, "write", msg, string(b))
+		em.MarshalEasyJSON(&v.easyWriter)
+		v.easyWriter.RawByte(30)
+		b := v.easyWriter.Buffer.BuildBytes()
+		_ = v.dbg.Log(evt, "write", msg, string(b))
 		_, err := writer.Write(b)
 		return err
 	}
 	return fmt.Errorf("%#v does not implement easyjson.Marshaler", message)
 }
 
-func (j *JSONHubProtocol) setDebugLogger(dbg StructuredLogger) {
-	j.dbg = log.WithPrefix(dbg, "ts", log.DefaultTimestampUTC, "protocol", "JSON")
+func (v *JSONHubProtocol) setDebugLogger(dbg StructuredLogger) {
+	v.dbg = log.WithPrefix(dbg, "ts", log.DefaultTimestampUTC, "protocol", "JSON")
 }

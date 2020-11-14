@@ -39,11 +39,6 @@ func newLoop(p Party, conn Connection, protocol HubProtocol) *loop {
 	}
 }
 
-type loopEvent struct {
-	message interface{}
-	err     error
-}
-
 // Run runs the loop. After the startup sequence is done, this is signaled over the started channel.
 // Callers should pass a channel with buffer size 1 to allow the loop to run without waiting for the caller.
 func (l *loop) Run(started chan struct{}) {
@@ -52,17 +47,16 @@ func (l *loop) Run(started chan struct{}) {
 	close(started)
 	// Process messages
 	var err error
+	ch := make(chan receiveResult, 1)
+	go func() {
+		for result := range l.hubConn.Receive() {
+			ch <- result
+			// The loop ends when the chan returned by hubConn.Receive() is closed.
+			// This happens when hubConn.Abort is called at the end to Run()
+		}
+	}()
 msgLoop:
 	for {
-		ch := make(chan loopEvent, 1)
-		go func() {
-			message, err := l.receive()
-			ch <- loopEvent{
-				message: message,
-				err:     err,
-			}
-			close(ch)
-		}()
 	pingLoop:
 		for {
 			select {
@@ -88,6 +82,8 @@ msgLoop:
 						err = l.handleOtherMessage(message)
 						// No default case necessary, because the protocol would return either a hubMessage or an error
 					}
+				} else {
+					_ = l.info.Log(evt, msgRecv, "error", err, msg, fmtMsg(evt.message), react, "close connection")
 				}
 				break pingLoop
 			case <-time.After(l.party.keepAliveInterval()):
@@ -112,13 +108,7 @@ msgLoop:
 	_ = l.hubConn.Close(fmt.Sprintf("%v", err), l.party.allowReconnect())
 	_ = l.dbg.Log(evt, "message loop ended")
 	l.invokeClient.cancelAllInvokes()
-}
-
-func (l *loop) receive() (message interface{}, err error) {
-	if message, err = l.hubConn.Receive(); err != nil {
-		_ = l.info.Log(evt, msgRecv, "error", err, msg, fmtMsg(message), react, "close connection")
-	}
-	return message, err
+	l.hubConn.Abort()
 }
 
 func (l *loop) handleInvocationMessage(invocation invocationMessage) {
