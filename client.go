@@ -262,7 +262,13 @@ loop:
 						return nil, errors.New(response.Error)
 					}
 					_ = dbg.Log(evt, "handshake received", "msg", fmtMsg(response))
-					protocol := &JSONHubProtocol{easyWriter: jwriter.Writer{}}
+					var protocol HubProtocol
+					switch c.format {
+					case "json":
+						protocol = &JSONHubProtocol{easyWriter: jwriter.Writer{}}
+					case "messagepack":
+						protocol = &MessagePackHubProtocol{}
+					}
 					_, pDbg := c.loggers()
 					protocol.setDebugLogger(pDbg)
 					return protocol, nil

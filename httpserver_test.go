@@ -34,7 +34,7 @@ func (w *addHub) Echo(s string) string {
 var _ = Describe("HTTP server", func() {
 	for _, transport := range []string{
 		"WebSockets",
-		"ServerSentEvents",
+		//"ServerSentEvents",
 	} {
 		Context("A correct negotiation request is sent", func() {
 			It(fmt.Sprintf("should send a correct negotiation response with support for %v with text protocol", transport), func(done Done) {
@@ -106,7 +106,7 @@ var _ = Describe("HTTP server", func() {
 				Expect(err).NotTo(HaveOccurred())
 				result := <-client.Invoke("Add2", 1)
 				Expect(result.Error).NotTo(HaveOccurred())
-				Expect(result.Value).To(Equal(float64(3)))
+				Expect(result.Value).To(BeEquivalentTo(3))
 				// Try second connection
 				client2, err := NewHTTPClient(context.TODO(),
 					fmt.Sprintf("http://127.0.0.1:%v/hub", port),
@@ -116,7 +116,7 @@ var _ = Describe("HTTP server", func() {
 				_ = client2.Start()
 				result = <-client2.Invoke("Add2", 2)
 				Expect(result.Error).NotTo(HaveOccurred())
-				Expect(result.Value).To(Equal(float64(4)))
+				Expect(result.Value).To(BeEquivalentTo(4))
 				// Huge message
 				hugo := strings.Repeat("#", 2500)
 				result = <-client.Invoke("Echo", hugo)

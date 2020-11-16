@@ -6,6 +6,7 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/vmihailenco/msgpack/v4"
 	"io"
+	"reflect"
 )
 
 type MessagePackHubProtocol struct {
@@ -22,10 +23,11 @@ func (m *MessagePackHubProtocol) ParseMessage(reader io.Reader) (interface{}, er
 	if len(msg) == 0 {
 		return nil, errors.New("invalid message length 0")
 	}
-	msgType, ok := msg[0].(int)
+	msgType8, ok := msg[0].(int8)
 	if !ok {
 		return nil, fmt.Errorf("invalid message. Can not read message type %v", msg[0])
 	}
+	msgType := int(msgType8)
 	switch msgType {
 	case 1, 4:
 		if len(msg) != 6 {
@@ -68,14 +70,14 @@ func (m *MessagePackHubProtocol) ParseMessage(reader io.Reader) (interface{}, er
 		}
 		return streamItemMessage, nil
 	case 3:
-		if len(msg) != 4 {
+		if len(msg) < 5 {
 			return nil, fmt.Errorf("invalid completionMessage length %v", len(msg))
 		}
 		completionMessage := completionMessage{Type: 3}
 		if completionMessage.InvocationID, ok = msg[2].(string); !ok {
 			return nil, fmt.Errorf("invalid InvocationId %#v", msg[2])
 		}
-		resultKind, ok := msg[3].(int)
+		resultKind, ok := msg[3].(int8)
 		if !ok {
 			return nil, fmt.Errorf("invalid resultKind %#v", msg[3])
 		}
@@ -234,17 +236,26 @@ func encodeMsgHeader(e *msgpack.Encoder, msgLen int, msgType int) (err error) {
 	if err = e.EncodeArrayLen(msgLen); err != nil {
 		return err
 	}
-	if err = e.EncodeMapLen(0); err != nil {
+	if err = e.EncodeInt8(int8(msgType)); err != nil {
 		return err
 	}
-	if err = e.EncodeInt8(int8(msgType)); err != nil {
+	if err = e.EncodeMapLen(0); err != nil {
 		return err
 	}
 	return nil
 }
 
 func (m *MessagePackHubProtocol) UnmarshalArgument(argument interface{}, value interface{}) error {
-	value = argument // ???
+	v := reflect.Indirect(reflect.ValueOf(value))
+	switch v.Kind() {
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		v.SetInt(reflect.ValueOf(argument).Int())
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		v.SetUint(reflect.ValueOf(argument).Uint())
+	case reflect.String:
+		v.Set(reflect.ValueOf(argument))
+	case reflect.Array, reflect.Slice:
+	}
 	return nil
 }
 

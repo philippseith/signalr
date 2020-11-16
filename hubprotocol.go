@@ -16,7 +16,15 @@ type HubProtocol interface {
 	setDebugLogger(dbg StructuredLogger)
 }
 
-// Protocol
+type HubAdapter interface {
+	// target is the method name, arguments is a protocol specific slice
+	// This func branches between protocol specific sub funcs
+	// The sub funcs have switch which branches between methods
+	Invoke(target string, arguments interface{}, streamIds []string, protocol HubProtocol) (result interface{})
+	IntoChan(target string, chanIndex int, inChan interface{}, item []byte, protocol HubProtocol)
+	FromChan(target string, outChan interface{})
+}
+
 //easyjson:json
 type hubMessage struct {
 	Type int `json:"type"`
