@@ -17,10 +17,12 @@ type HubProtocol interface {
 }
 
 // Protocol
+//easyjson:json
 type hubMessage struct {
 	Type int `json:"type"`
 }
 
+// easyjson:json
 type invocationMessage struct {
 	Type         int           `json:"type"`
 	Target       string        `json:"target"`
@@ -29,6 +31,7 @@ type invocationMessage struct {
 	StreamIds    []string      `json:"streamIds,omitempty"`
 }
 
+//easyjson:json
 type completionMessage struct {
 	Type         int         `json:"type"`
 	InvocationID string      `json:"invocationId"`
@@ -36,28 +39,33 @@ type completionMessage struct {
 	Error        string      `json:"error,omitempty"`
 }
 
+//easyjson:json
 type streamItemMessage struct {
 	Type         int         `json:"type"`
 	InvocationID string      `json:"invocationId"`
 	Item         interface{} `json:"item"`
 }
 
+//easyjson:json
 type cancelInvocationMessage struct {
 	Type         int    `json:"type"`
 	InvocationID string `json:"invocationId"`
 }
 
+//easyjson:json
 type closeMessage struct {
 	Type           int    `json:"type"`
 	Error          string `json:"error"`
 	AllowReconnect bool   `json:"allowReconnect"`
 }
 
+//easyjson:json
 type handshakeRequest struct {
 	Protocol string `json:"protocol"`
 	Version  int    `json:"version"`
 }
 
+//easyjson:json
 type handshakeResponse struct {
 	Error string `json:"error,omitempty"`
 }

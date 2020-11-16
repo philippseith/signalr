@@ -18,7 +18,9 @@ type JSONHubProtocol struct {
 	easyWriter jwriter.Writer
 }
 
-// Protocol specific message for correct unmarshaling of Arguments
+// Protocol specific message for correct unmarshaling of Arguments.
+// jsonInvocationMessage is only used in ParseMessage, not in WriteMessage
+//easyjson:json
 type jsonInvocationMessage struct {
 	Type         int               `json:"type"`
 	Target       string            `json:"target"`
@@ -37,11 +39,11 @@ func (j *jsonError) Error() string {
 }
 
 // UnmarshalArgument unmarshals a json.RawMessage depending of the specified value type into value
-func (v *JSONHubProtocol) UnmarshalArgument(argument interface{}, value interface{}) error {
+func (j *JSONHubProtocol) UnmarshalArgument(argument interface{}, value interface{}) error {
 	if err := json.Unmarshal(argument.(json.RawMessage), value); err != nil {
 		return &jsonError{string(argument.(json.RawMessage)), err}
 	}
-	_ = v.dbg.Log(evt, "UnmarshalArgument",
+	_ = j.dbg.Log(evt, "UnmarshalArgument",
 		"argument", string(argument.(json.RawMessage)),
 		"value", fmt.Sprintf("%v", reflect.ValueOf(value).Elem()))
 	return nil
@@ -49,7 +51,7 @@ func (v *JSONHubProtocol) UnmarshalArgument(argument interface{}, value interfac
 
 // ReadMessage reads a JSON message from buf and returns the message if the buf contained one completely.
 // If buf does not contain the whole message, it returns a nil message and complete false
-func (v *JSONHubProtocol) ParseMessage(reader io.Reader) (m interface{}, err error) {
+func (j *JSONHubProtocol) ParseMessage(reader io.Reader) (m interface{}, err error) {
 	data, err := parseTextMessageFormat(reader)
 	switch {
 	case errors.Is(err, io.EOF):
@@ -60,7 +62,7 @@ func (v *JSONHubProtocol) ParseMessage(reader io.Reader) (m interface{}, err err
 
 	message := hubMessage{}
 	err = message.UnmarshalJSON(data)
-	_ = v.dbg.Log(evt, "read", msg, string(data))
+	_ = j.dbg.Log(evt, "read", msg, string(data))
 	if err != nil {
 		return nil, &jsonError{string(data), err}
 	}
@@ -68,7 +70,7 @@ func (v *JSONHubProtocol) ParseMessage(reader io.Reader) (m interface{}, err err
 	switch message.Type {
 	case 1, 4:
 		jsonInvocation := jsonInvocationMessage{}
-		if err = jsonInvocation.UnmarshalJSON(data); err != nil {
+		if err = json.Unmarshal(data, &jsonInvocation); err != nil {
 			err = &jsonError{string(data), err}
 		}
 		arguments := make([]interface{}, len(jsonInvocation.Arguments))
@@ -129,18 +131,18 @@ func parseTextMessageFormat(reader io.Reader) ([]byte, error) {
 }
 
 // WriteMessage writes a message as JSON to the specified writer
-func (v *JSONHubProtocol) WriteMessage(message interface{}, writer io.Writer) error {
+func (j *JSONHubProtocol) WriteMessage(message interface{}, writer io.Writer) error {
 	if em, ok := message.(easyjson.Marshaler); ok {
-		em.MarshalEasyJSON(&v.easyWriter)
-		v.easyWriter.RawByte(30)
-		b := v.easyWriter.Buffer.BuildBytes()
-		_ = v.dbg.Log(evt, "write", msg, string(b))
+		em.MarshalEasyJSON(&j.easyWriter)
+		j.easyWriter.RawByte(30)
+		b := j.easyWriter.Buffer.BuildBytes()
+		_ = j.dbg.Log(evt, "write", msg, string(b))
 		_, err := writer.Write(b)
 		return err
 	}
 	return fmt.Errorf("%#v does not implement easyjson.Marshaler", message)
 }
 
-func (v *JSONHubProtocol) setDebugLogger(dbg StructuredLogger) {
-	v.dbg = log.WithPrefix(dbg, "ts", log.DefaultTimestampUTC, "protocol", "JSON")
+func (j *JSONHubProtocol) setDebugLogger(dbg StructuredLogger) {
+	j.dbg = log.WithPrefix(dbg, "ts", log.DefaultTimestampUTC, "protocol", "JSON")
 }
