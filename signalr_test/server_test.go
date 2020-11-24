@@ -57,7 +57,7 @@ func testServer(t *testing.T, connection string) {
 		serverIsDown <- struct{}{}
 	}()
 	<-serverIsUp
-	runJest(t, quitServer)
+	//runJest(t, quitServer)
 	<-serverIsDown
 }
 
@@ -129,6 +129,10 @@ type hub struct {
 
 func (h *hub) Ping() string {
 	return "Pong"
+}
+
+func (h *hub) Touch() {
+	h.Clients().Caller().Send("touched")
 }
 
 func (h *hub) TriumphantTriple(club string) []string {
