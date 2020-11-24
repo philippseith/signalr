@@ -19,11 +19,17 @@ import (
 	"runtime/debug"
 )
 
-// Server is a SignalR server for one type of hub
+// Server is a SignalR server for one type of hub.
+//
+// 	MapHTTP(mux *http.ServeMux, path string)
+// maps the servers hub to an path on an http.ServeMux.
+//
+// 	MapConnection(conn Connection)]
+// maps its hub on one connection. The same server might serve different connections in parallel.
 type Server interface {
 	Party
-	ServeHTTP(path string) *http.ServeMux
-	ServeConnection(conn Connection)
+	MapHTTP(mux *http.ServeMux, path string)
+	MapConnection(conn Connection)
 	availableTransports() []string
 }
 
@@ -70,17 +76,15 @@ func NewServer(ctx context.Context, options ...func(Party) error) (Server, error
 	return server, nil
 }
 
-// MapHub maps the hub to a path and returns the http.ServerMux which handles it
-func (s *server) ServeHTTP(path string) *http.ServeMux {
+// MapHTTP maps the servers hub to an path on an http.ServeMux
+func (s *server) MapHTTP(mux *http.ServeMux, path string) {
 	httpMux := newHTTPMux(s)
-	mux := http.NewServeMux()
 	mux.HandleFunc(fmt.Sprintf("%s/negotiate", path), httpMux.negotiate)
 	mux.Handle(path, httpMux)
-	return mux
 }
 
-// ServeConnection serves one connection. The same server might serve different connections in parallel
-func (s *server) ServeConnection(conn Connection) {
+// MapConnection maps its hub on one connection. The same server might serve different connections in parallel
+func (s *server) MapConnection(conn Connection) {
 	if protocol, err := s.processHandshake(conn); err != nil {
 		info, _ := s.prefixLoggers("")
 		_ = info.Log(evt, "processHandshake", "connectionId", conn.ConnectionID(), "error", err, react, "do not connect")

@@ -16,7 +16,7 @@ require (
 	github.com/stretchr/testify v1.6.1 // indirect
 	github.com/teivah/onecontext v0.0.0-20200513185103-40f981bfd775
 	github.com/tinylib/msgp v1.1.4
-	golang.org/x/net v0.0.0-20201021035429-f5854403a974
+	golang.org/x/net v0.0.0-20201110031124-69a78807bb2b
 	gopkg.in/check.v1 v1.0.0-20180628173108-788fd7840127 // indirect
 	gopkg.in/yaml.v2 v2.3.0 // indirect
 	gopkg.in/yaml.v3 v3.0.0-20200615113413-eeeca48fe776 // indirect

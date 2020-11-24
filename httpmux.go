@@ -189,7 +189,7 @@ func (h *httpMux) serveConnection(c Connection) {
 	h.mx.Lock()
 	h.connectionMap[c.ConnectionID()] = c
 	h.mx.Unlock()
-	h.server.ServeConnection(c)
+	h.server.MapConnection(c)
 }
 
 func newConnectionID() string {
