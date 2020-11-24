@@ -123,7 +123,7 @@ var _ = Describe("Client", func() {
 			// Create both ends of the connection
 			cliConn, srvConn := newClientServerConnections()
 			// Start the server
-			go server.ServeConnection(srvConn)
+			go server.MapConnection(srvConn)
 			// Create the Client
 			clientConn, err := NewClient(context.TODO(), cliConn)
 			Expect(err).NotTo(HaveOccurred())
@@ -150,7 +150,7 @@ var _ = Describe("Client", func() {
 			// Create both ends of the connection
 			cliConn, srvConn = newClientServerConnections()
 			// Start the server
-			go server.ServeConnection(srvConn)
+			go server.MapConnection(srvConn)
 			// Create the Client
 			client, _ = NewClient(context.TODO(), cliConn)
 			// Start it
@@ -203,7 +203,7 @@ var _ = Describe("Client", func() {
 			// Create both ends of the connection
 			cliConn, srvConn = newClientServerConnections()
 			// Start the server
-			go server.ServeConnection(srvConn)
+			go server.MapConnection(srvConn)
 			// Create the Client
 			client, _ = NewClient(context.TODO(), cliConn)
 			// Start it
@@ -280,7 +280,7 @@ var _ = Describe("Client", func() {
 			// Create both ends of the connection
 			cliConn, srvConn = newClientServerConnections()
 			// Start the server
-			go server.ServeConnection(srvConn)
+			go server.MapConnection(srvConn)
 			// Create the Client
 			client, _ = NewClient(context.TODO(), cliConn)
 			// Start it
@@ -363,7 +363,7 @@ var _ = Describe("Client", func() {
 			// Create both ends of the connection
 			cliConn, srvConn = newClientServerConnections()
 			// Start the server
-			go server.ServeConnection(srvConn)
+			go server.MapConnection(srvConn)
 			// Create the Client
 			client, _ = NewClient(context.TODO(), cliConn)
 			// Start it

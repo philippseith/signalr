@@ -114,7 +114,7 @@ func (c *chat) UploadStream(upload1 <-chan int, factor float64, upload2 <-chan f
 //			break
 //		}
 //
-//		go server.ServeConnection(context.TODO(), newNetConnection(conn))
+//		go server.MapConnection(context.TODO(), newNetConnection(conn))
 //	}
 //}
 
@@ -122,7 +122,8 @@ func runHTTPServer(address string, hub signalr.HubInterface) {
 	server, _ := signalr.NewServer(context.TODO(), signalr.SimpleHubFactory(hub),
 		signalr.KeepAliveInterval(2*time.Second),
 		signalr.Logger(kitlog.NewLogfmtLogger(os.Stderr), true))
-	router := server.ServeHTTP("/chat")
+	router := http.NewServeMux()
+	server.MapHTTP(router, "/chat")
 	router.Handle("/", http.FileServer(http.Dir("./public")))
 
 	fmt.Printf("Listening for websocket connections on %s\n", address)

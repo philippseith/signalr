@@ -46,11 +46,11 @@ var _ = Describe("Server options", func() {
 				Expect(err).To(BeNil())
 				conn1 := newTestingConnectionForServer()
 				Expect(conn1).NotTo(BeNil())
-				go server.ServeConnection(conn1)
+				go server.MapConnection(conn1)
 				<-singleHubMsg
 				conn2 := newTestingConnectionForServer()
 				Expect(conn2).NotTo(BeNil())
-				go server.ServeConnection(conn2)
+				go server.MapConnection(conn2)
 				<-singleHubMsg
 				// Call GetId twice. If different instances used the results are different
 				var uuid string
@@ -102,7 +102,7 @@ var _ = Describe("Server options", func() {
 				Expect(err).To(BeNil())
 				conn := newTestingConnectionForServer()
 				Expect(conn).NotTo(BeNil())
-				go server.ServeConnection(conn)
+				go server.MapConnection(conn)
 				uuids := make(map[string]interface{})
 				uuid := <-singleHubMsg
 				if _, ok := uuids[uuid]; ok {
@@ -153,7 +153,7 @@ var _ = Describe("Server options", func() {
 				Expect(err).To(BeNil())
 				conn := newTestingConnectionForServer()
 				Expect(conn).NotTo(BeNil())
-				go server.ServeConnection(conn)
+				go server.MapConnection(conn)
 				conn.ClientSend(`{"type":1,"invocationId": "123","target":"simple"}`)
 				<-invocationQueue
 				select {
@@ -173,7 +173,7 @@ var _ = Describe("Server options", func() {
 				Expect(err).To(BeNil())
 				conn := newTestingConnectionForServer()
 				Expect(conn).NotTo(BeNil())
-				go server.ServeConnection(conn)
+				go server.MapConnection(conn)
 				conn.ClientSend(`{"type":1,"invocationId": "123","target":"simple"}`)
 				<-invocationQueue
 				select {
@@ -193,7 +193,7 @@ var _ = Describe("Server options", func() {
 				Expect(err).To(BeNil())
 				conn := newTestingConnectionForServer()
 				Expect(conn).NotTo(BeNil())
-				go server.ServeConnection(conn)
+				go server.MapConnection(conn)
 				conn.ClientSend(`{"type":1,"invocationId": "123","target":"sumple is simple with typo"}`)
 				select {
 				case <-cw.Chan():
@@ -228,7 +228,7 @@ var _ = Describe("Server options", func() {
 				Expect(err).To(BeNil())
 				conn := newTestingConnectionForServer()
 				Expect(conn).NotTo(BeNil())
-				go server.ServeConnection(conn)
+				go server.MapConnection(conn)
 				conn.ClientSend(`{"type":1,"invocationId": "ppp","target":"Panic"}`)
 				<-invocationQueue
 				select {
@@ -249,7 +249,7 @@ var _ = Describe("Server options", func() {
 				Expect(err).To(BeNil())
 				conn := newTestingConnectionForServer()
 				Expect(conn).NotTo(BeNil())
-				go server.ServeConnection(conn)
+				go server.MapConnection(conn)
 				conn.ClientSend(`{"type":1,"invocationId": "ppp","target":"Panic"}`)
 				<-invocationQueue
 				select {
@@ -273,7 +273,7 @@ var _ = Describe("Server options", func() {
 				Expect(err).To(BeNil())
 				conn := newTestingConnectionForServer()
 				Expect(conn).NotTo(BeNil())
-				go server.ServeConnection(conn)
+				go server.MapConnection(conn)
 				time.Sleep(200 * time.Millisecond)
 				conn.ClientSend(`{"type":1,"invocationId": "timeout100","target":"Simple"}`)
 				select {
@@ -298,7 +298,7 @@ var _ = Describe("Server options", func() {
 				Expect(server).NotTo(BeNil())
 				Expect(err).To(BeNil())
 				conn := newTestingConnection()
-				go server.ServeConnection(conn)
+				go server.MapConnection(conn)
 				// Send initial Handshake
 				conn.ClientSend(`{"protocol": "json","version": 1}`)
 				// Handshake response
