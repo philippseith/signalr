@@ -126,8 +126,8 @@ func devParse() error {
 }
 
 type generator struct {
-	packageName string
-	hubs        map[string]*hubInfo
+	//packageName string
+	hubs map[string]*hubInfo
 }
 
 type hubInfo struct {
