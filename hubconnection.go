@@ -4,15 +4,16 @@ import (
 	"bytes"
 	"context"
 	"github.com/rotisserie/eris"
+	"io"
 	"sync"
 	"time"
 )
 
 // hubConnection is used by HubContext, Server and Client to realize the external API.
-// hubConnection uses a transport connection (of type Connection) and a HubProtocol to send and receive SignalR messages.
+// hubConnection uses a transport connection (of type Connection) and a hubProtocol to send and receive SignalR messages.
 type hubConnection interface {
 	ConnectionID() string
-	Receive() (interface{}, error)
+	Receive() <-chan receiveResult
 	SendInvocation(id string, target string, args []interface{}) error
 	SendStreamInvocation(id string, target string, args []interface{}, streamIds []string) error
 	StreamItem(id string, item interface{}) error
@@ -25,7 +26,12 @@ type hubConnection interface {
 	Abort()
 }
 
-func newHubConnection(connection Connection, protocol HubProtocol, maximumReceiveMessageSize uint, info StructuredLogger) hubConnection {
+type receiveResult struct {
+	message interface{}
+	err     error
+}
+
+func newHubConnection(connection Connection, protocol hubProtocol, maximumReceiveMessageSize uint, info StructuredLogger) hubConnection {
 	ctx, cancelFunc := context.WithCancel(connection.Context())
 	c := &defaultHubConnection{
 		ctx:                       ctx,
@@ -43,7 +49,7 @@ func newHubConnection(connection Connection, protocol HubProtocol, maximumReceiv
 type defaultHubConnection struct {
 	ctx                       context.Context
 	cancelFunc                context.CancelFunc
-	protocol                  HubProtocol
+	protocol                  hubProtocol
 	mx                        sync.Mutex
 	connection                Connection
 	maximumReceiveMessageSize uint
@@ -77,66 +83,59 @@ func (c *defaultHubConnection) Abort() {
 	c.cancelFunc()
 }
 
-type receiveResult struct {
-	message interface{}
-	err     error
-}
-
-func (c *defaultHubConnection) Receive() (interface{}, error) {
-	if c.ctx.Err() != nil {
-		return nil, eris.Wrap(c.ctx.Err(), "hubConnection canceled")
-	}
-	recvResCh := make(chan receiveResult, 1)
-	go func(chan receiveResult) {
-		var buf bytes.Buffer
-		var data = make([]byte, c.maximumReceiveMessageSize)
-		var nn int
+func (c *defaultHubConnection) Receive() <-chan receiveResult {
+	recvChan := make(chan receiveResult, 20)
+	// the pipe connects the goroutine which reads from the connection and the goroutine which parses the read data
+	reader, writer := io.Pipe()
+	p := make([]byte, c.maximumReceiveMessageSize)
+	go func(ctx context.Context, connection io.Reader, writer io.Writer, recvChan chan receiveResult) {
 		for {
-			if message, complete, parseErr := c.protocol.ReadMessage(&buf); !complete {
-				// Partial message, need more data
-				// ReadMessage read data out of the buf, so its gone there: refill
-				buf.Write(data[:nn])
-				readResCh := make(chan receiveResult, 1)
-				go func(nn int, readResCh chan receiveResult) {
-					var readErr error
-					n, readErr := c.connection.Read(data[nn:])
-					if readErr == nil {
-						buf.Write(data[nn : nn+n])
-						nn = nn + n
-					}
-					readResCh <- receiveResult{nn, readErr}
-					close(readResCh)
-				}(nn, readResCh)
-				select {
-				case readRes := <-readResCh:
-					if readRes.err != nil {
-						c.Abort()
-						recvResCh <- readRes
-						close(recvResCh)
-						return
-					}
-					nn = readRes.message.(int)
-				case <-c.ctx.Done():
-					recvResCh <- receiveResult{err: eris.Wrap(c.ctx.Err(), "hubConnection canceled")}
-					close(recvResCh)
-					return
+			if ctx.Err() != nil {
+				break
+			}
+			n, err := connection.Read(p)
+			if err != nil &&
+				ctx.Err() == nil { // if ctx.Err != nil, recvChan is closed and we shouldn't push to it
+				recvChan <- receiveResult{err: err}
+			}
+			if ctx.Err() != nil {
+				break
+			}
+			if n > 0 {
+				_, err = writer.Write(p[:n])
+				if err != nil &&
+					ctx.Err() == nil { // if ctx.Err != nil, recvChan is closed and we shouldn't push to it
+					recvChan <- receiveResult{err: err}
 				}
-			} else {
-				recvResCh <- receiveResult{message, parseErr}
-				close(recvResCh)
-				return
 			}
 		}
-	}(recvResCh)
-	select {
-	case recvRes := <-recvResCh:
-		return recvRes.message, recvRes.err
-	case <-c.ctx.Done():
-		return nil, eris.Wrap(c.ctx.Err(), "hubConnection canceled")
-	}
+	}(c.ctx, c.connection, writer, recvChan)
+	// parse
+	go func(ctx context.Context, reader io.Reader, recvChan chan receiveResult) {
+		remainBuf := bytes.Buffer{}
+		for {
+			if ctx.Err() != nil {
+				close(recvChan)
+				break
+			}
+			messages, err := c.protocol.ParseMessages(reader, &remainBuf)
+			if err != nil && ctx.Err() == nil { // if ctx.Err != nil, recvChan is closed and we shouldn't push to it
+				recvChan <- receiveResult{err: err}
+			}
+			for _, message := range messages {
+				if ctx.Err() == nil { // if ctx.Err != nil, recvChan is closed and we shouldn't push to it
+					recvChan <- receiveResult{message: message}
+				}
+			}
+		}
+	}(c.ctx, reader, recvChan)
+	return recvChan
 }
 
 func (c *defaultHubConnection) SendInvocation(id string, target string, args []interface{}) error {
+	if args == nil {
+		args = make([]interface{}, 0)
+	}
 	var invocationMessage = invocationMessage{
 		Type:         1,
 		InvocationID: id,

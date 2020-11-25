@@ -172,8 +172,7 @@ func (h *httpMux) negotiate(w http.ResponseWriter, req *http.Request) {
 				availableTransports = append(availableTransports,
 					availableTransport{
 						Transport:       "WebSockets",
-						TransferFormats: []string{"Text"},
-						// TODO TransferFormats: []string{"Text", "Binary"},
+						TransferFormats: []string{"Text", "Binary"},
 					})
 			}
 		}

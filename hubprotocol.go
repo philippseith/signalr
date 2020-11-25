@@ -5,60 +5,67 @@ import (
 	"io"
 )
 
-// HubProtocol interface
-// ReadMessage() reads a message from buf and returns the message if the buf contained one completely.
+// hubProtocol interface
+// ParseMessages() parses messages from an io.Reader and stores unparsed bytes in remainBuf.
 // If buf does not contain the whole message, it returns a nil message and complete false
 // WriteMessage writes a message to the specified writer
 // UnmarshalArgument() unmarshals a raw message depending of the specified value type into value
-type HubProtocol interface {
-	ReadMessage(buf *bytes.Buffer) (interface{}, bool, error)
+type hubProtocol interface {
+	ParseMessages(reader io.Reader, remainBuf *bytes.Buffer) ([]interface{}, error)
 	WriteMessage(message interface{}, writer io.Writer) error
 	UnmarshalArgument(argument interface{}, value interface{}) error
 	setDebugLogger(dbg StructuredLogger)
 }
 
-// Protocol
+//easyjson:json
 type hubMessage struct {
-	Type int `json:"type" msg:"type"`
+	Type int `json:"type"`
 }
 
+// easyjson:json
 type invocationMessage struct {
-	Type         int           `json:"type" msg:"type"`
-	Target       string        `json:"target" msg:"target"`
-	InvocationID string        `json:"invocationId,omitempty" msg:"invocationId,omitempty"`
-	Arguments    []interface{} `json:"arguments" msg:"arguments"`
-	StreamIds    []string      `json:"streamIds,omitempty" msg:"streamIds,omitempty"`
+	Type         int           `json:"type"`
+	Target       string        `json:"target"`
+	InvocationID string        `json:"invocationId,omitempty"`
+	Arguments    []interface{} `json:"arguments"`
+	StreamIds    []string      `json:"streamIds,omitempty"`
 }
 
+//easyjson:json
 type completionMessage struct {
-	Type         int         `json:"type" msg:"type"`
-	InvocationID string      `json:"invocationId" msg:"invocationId"`
-	Result       interface{} `json:"result,omitempty" msg:"result,omitempty"`
-	Error        string      `json:"error,omitempty" msg:"error,omitempty"`
+	Type         int         `json:"type"`
+	InvocationID string      `json:"invocationId"`
+	Result       interface{} `json:"result,omitempty"`
+	Error        string      `json:"error,omitempty"`
 }
 
+//easyjson:json
 type streamItemMessage struct {
-	Type         int         `json:"type" msg:"type"`
-	InvocationID string      `json:"invocationId" msg:"invocationId"`
-	Item         interface{} `json:"item" msg:"item"`
+	Type         int         `json:"type"`
+	InvocationID string      `json:"invocationId"`
+	Item         interface{} `json:"item"`
 }
 
+//easyjson:json
 type cancelInvocationMessage struct {
-	Type         int    `json:"type" msg:"type"`
-	InvocationID string `json:"invocationId" msg:"invocationId"`
+	Type         int    `json:"type"`
+	InvocationID string `json:"invocationId"`
 }
 
+//easyjson:json
 type closeMessage struct {
-	Type           int    `json:"type" msg:"type"`
-	Error          string `json:"error" msg:"error"`
-	AllowReconnect bool   `json:"allowReconnect" msg:"allowReconnect"`
+	Type           int    `json:"type"`
+	Error          string `json:"error"`
+	AllowReconnect bool   `json:"allowReconnect"`
 }
 
+//easyjson:json
 type handshakeRequest struct {
-	Protocol string `json:"protocol" msg:"protocol"`
-	Version  int    `json:"version" msg:"version"`
+	Protocol string `json:"protocol"`
+	Version  int    `json:"version"`
 }
 
+//easyjson:json
 type handshakeResponse struct {
-	Error string `json:"error,omitempty" msg:"error,omitempty"`
+	Error string `json:"error,omitempty"`
 }

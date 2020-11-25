@@ -56,7 +56,7 @@ func (s *streamHub) SimpleInt() int {
 	return -1
 }
 
-var _ = Describe("Streaminvocation", func() {
+var _ = Describe("StreamInvocation", func() {
 
 	Describe("Simple stream invocation", func() {
 		Context("When invoked by the client", func() {
@@ -140,11 +140,11 @@ var _ = Describe("Streaminvocation", func() {
 		Context("When invoked by the client and receiving an invalid CancelInvocation", func() {
 			It("should close the connection with an error", func(done Done) {
 				conn := connect(&streamHub{})
-				conn.ClientSend(`{"type":4,"invocationId": "xxx","target":"endlessstream"}`)
+				conn.ClientSend(`{"type":4,"invocationId": "xyz","target":"endlessstream"}`)
 				Expect(<-streamInvocationQueue).To(Equal("EndlessStream()"))
 				recv := (<-conn.received).(streamItemMessage)
 				Expect(recv).NotTo(BeNil())
-				Expect(recv.InvocationID).To(Equal("xxx"))
+				Expect(recv.InvocationID).To(Equal("xyz"))
 				Expect(recv.Item).To(Equal(float64(1)))
 				// try to stop it, but do not get it right
 				conn.ClientSend(`{"type":5,"invocationId":1}`)

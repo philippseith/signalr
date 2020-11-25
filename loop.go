@@ -14,15 +14,15 @@ type loop struct {
 	party        Party
 	info         StructuredLogger
 	dbg          StructuredLogger
-	protocol     HubProtocol
+	protocol     hubProtocol
 	hubConn      hubConnection
 	invokeClient *invokeClient
 	streamer     *streamer
 	streamClient *streamClient
 }
 
-func newLoop(p Party, conn Connection, protocol HubProtocol) *loop {
-	protocol = reflect.New(reflect.ValueOf(protocol).Elem().Type()).Interface().(HubProtocol)
+func newLoop(p Party, conn Connection, protocol hubProtocol) *loop {
+	protocol = reflect.New(reflect.ValueOf(protocol).Elem().Type()).Interface().(hubProtocol)
 	_, dbg := p.loggers()
 	protocol.setDebugLogger(dbg)
 	pInfo, pDbg := p.prefixLoggers(conn.ConnectionID())
@@ -32,17 +32,14 @@ func newLoop(p Party, conn Connection, protocol HubProtocol) *loop {
 		protocol:     protocol,
 		hubConn:      hubConn,
 		invokeClient: newInvokeClient(p.chanReceiveTimeout()),
-		streamer:     newStreamer(hubConn, pInfo),
+		streamer:     &streamer{conn: hubConn},
 		streamClient: newStreamClient(p.chanReceiveTimeout(), p.streamBufferCapacity()),
 		info:         pInfo,
 		dbg:          pDbg,
 	}
 }
 
-type loopEvent struct {
-	message interface{}
-	err     error
-}
+var closeMessageError = errors.New("CloseMessage received")
 
 // Run runs the loop. After the startup sequence is done, this is signaled over the started channel.
 // Callers should pass a channel with buffer size 1 to allow the loop to run without waiting for the caller.
@@ -52,17 +49,16 @@ func (l *loop) Run(started chan struct{}) {
 	close(started)
 	// Process messages
 	var err error
+	ch := make(chan receiveResult, 1)
+	go func() {
+		for result := range l.hubConn.Receive() {
+			ch <- result
+			// The loop ends when the chan returned by hubConn.Receive() is closed.
+			// This happens when hubConn.Abort is called at the end to Run()
+		}
+	}()
 msgLoop:
 	for {
-		ch := make(chan loopEvent, 1)
-		go func() {
-			message, err := l.receive()
-			ch <- loopEvent{
-				message: message,
-				err:     err,
-			}
-			close(ch)
-		}()
 	pingLoop:
 		for {
 			select {
@@ -82,12 +78,14 @@ msgLoop:
 					case closeMessage:
 						_ = l.dbg.Log(evt, msgRecv, msg, fmtMsg(message))
 						// Bogus error to break the msgLoop
-						err = errors.New("")
+						err = closeMessageError
 					case hubMessage:
 						// Mostly ping
 						err = l.handleOtherMessage(message)
 						// No default case necessary, because the protocol would return either a hubMessage or an error
 					}
+				} else {
+					_ = l.info.Log(evt, msgRecv, "error", err, msg, fmtMsg(evt.message), react, "close connection")
 				}
 				break pingLoop
 			case <-time.After(l.party.keepAliveInterval()):
@@ -109,16 +107,13 @@ msgLoop:
 		}
 	}
 	l.party.onDisconnected(l.hubConn)
-	_ = l.hubConn.Close(fmt.Sprintf("%v", err), l.party.allowReconnect())
+	// Don't send CloseMessage if we received a CloseMessage
+	if err != closeMessageError {
+		_ = l.hubConn.Close(fmt.Sprintf("%v", err), l.party.allowReconnect())
+	}
 	_ = l.dbg.Log(evt, "message loop ended")
 	l.invokeClient.cancelAllInvokes()
-}
-
-func (l *loop) receive() (message interface{}, err error) {
-	if message, err = l.hubConn.Receive(); err != nil {
-		_ = l.info.Log(evt, msgRecv, "error", err, msg, fmtMsg(message), react, "close connection")
-	}
-	return message, err
+	l.hubConn.Abort()
 }
 
 func (l *loop) handleInvocationMessage(invocation invocationMessage) {
@@ -275,7 +270,7 @@ func (l *loop) recoverInvocationPanic(invocation invocationMessage) {
 }
 
 func buildMethodArguments(method reflect.Value, invocation invocationMessage,
-	streamClient *streamClient, protocol HubProtocol) (arguments []reflect.Value, clientStreaming bool, err error) {
+	streamClient *streamClient, protocol hubProtocol) (arguments []reflect.Value, clientStreaming bool, err error) {
 	if len(invocation.StreamIds)+len(invocation.Arguments) != method.Type().NumIn() {
 		return nil, false, fmt.Errorf("parameter mismatch calling method %v", invocation.Target)
 	}

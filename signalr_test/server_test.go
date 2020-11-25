@@ -132,6 +132,10 @@ func (h *hub) Ping() string {
 	return "Pong"
 }
 
+func (h *hub) Touch() {
+	h.Clients().Caller().Send("touched")
+}
+
 func (h *hub) TriumphantTriple(club string) []string {
 	if strings.Contains(club, "FC Bayern") {
 		return []string{"German Championship", "DFB Cup", "Champions League"}

@@ -16,8 +16,8 @@ func NewHTTPClient(ctx context.Context, address string, options ...func(Party) e
 	if err != nil {
 		return nil, err
 	}
-	client := &http.Client{}
-	resp, err := client.Do(req)
+	httpClient := &http.Client{}
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -40,9 +40,10 @@ func NewHTTPClient(ctx context.Context, address string, options ...func(Party) e
 	reqURL.RawQuery = q.Encode()
 	// Select the best connection
 	var conn Connection
-	if formats := nr.getTransferFormats("WebTransports"); formats != nil {
+	var formats []string
+	if formats = nr.getTransferFormats("WebTransports"); formats != nil {
 		// TODO
-	} else if formats := nr.getTransferFormats("WebSockets"); formats != nil {
+	} else if formats = nr.getTransferFormats("WebSockets"); formats != nil {
 		wsURL := reqURL
 		wsURL.Scheme = "ws"
 		ws, err := websocket.Dial(wsURL.String(), "", "http://localhost")
@@ -50,7 +51,7 @@ func NewHTTPClient(ctx context.Context, address string, options ...func(Party) e
 			return nil, err
 		}
 		conn = newWebSocketConnection(ctx, context.Background(), nr.ConnectionID, ws)
-	} else if formats := nr.getTransferFormats("ServerSentEvents"); formats != nil {
+	} else if formats = nr.getTransferFormats("ServerSentEvents"); formats != nil {
 		req, err := http.NewRequest("GET", reqURL.String(), nil)
 		if err != nil {
 			return nil, err
@@ -67,7 +68,21 @@ func NewHTTPClient(ctx context.Context, address string, options ...func(Party) e
 		}
 	}
 	if conn != nil {
-		result, err := NewClient(ctx, conn, options...)
+		// If only Text is supported, remove possible option for Binary
+		var filteredOptions []func(Party) error
+		if len(formats) == 1 && formats[0] == "Text" {
+			for _, option := range options {
+				c := client{}
+				_ = option(&c)
+				if c.format == "messagepack" {
+					continue
+				}
+				filteredOptions = append(filteredOptions, option)
+			}
+		} else {
+			filteredOptions = options
+		}
+		result, err := NewClient(ctx, conn, filteredOptions...)
 		if err != nil {
 			return nil, err
 		}

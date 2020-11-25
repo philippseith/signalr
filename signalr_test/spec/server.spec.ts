@@ -28,7 +28,7 @@ class AlcoholicContent {
     strength: number
 }
 
-describe("e2e test with aspnet/signalr client", () =>{
+describe("e2e test with microsoft/signalr client", () =>{
     let connection: signalR.HubConnection;
     beforeEach(async() => {
         connection = builder
@@ -80,5 +80,21 @@ describe("e2e test with aspnet/signalr client", () =>{
         });
         await connection.send("uploadStream", from([2, 0, 7]));
         expect(await receive).toEqual([2, 0, 7])
+    })
+    it("should receive subsequent sends without await]", async() => {
+        let or: (value?: unknown) => void;
+        const p = new Promise((r, rj) => {
+            or = r;
+        });
+        let tc = 0
+        connection.on("touched", () => {
+            tc++;
+            if (tc == 2) {
+                or();
+            }
+        })
+        connection.send("touch");
+        connection.send("touch");
+        await p;
     })
 });
