@@ -133,7 +133,7 @@ func runHTTPServer(address string, hub signalr.HubInterface) {
 }
 
 //func runHTTPClient(address string, client interface{}) {
-//	c, _ := signalr.NewHTTPClient(context.TODO(), address) // HubProtocol is determined inside
+//	c, _ := signalr.NewHTTPClient(context.TODO(), address) // hubProtocol is determined inside
 //	c.SetReceiver(client)
 //	c.Start()
 //}

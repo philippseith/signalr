@@ -111,6 +111,7 @@ func (s *simpleReceiver) OnCallback(result string) {
 }
 
 var _ = Describe("Client", func() {
+	formatOption := TransferFormat("Text")
 	Context("Start", func() {
 		It("should connect to the server", func(done Done) {
 			// Create a simple server
@@ -125,7 +126,7 @@ var _ = Describe("Client", func() {
 			// Start the server
 			go server.MapConnection(srvConn)
 			// Create the Client
-			clientConn, err := NewClient(context.TODO(), cliConn)
+			clientConn, err := NewClient(context.TODO(), cliConn, formatOption)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(clientConn).NotTo(BeNil())
 			// Start it
@@ -152,7 +153,7 @@ var _ = Describe("Client", func() {
 			// Start the server
 			go server.MapConnection(srvConn)
 			// Create the Client
-			client, _ = NewClient(context.TODO(), cliConn)
+			client, _ = NewClient(context.TODO(), cliConn, formatOption)
 			// Start it
 			client.SetReceiver(simpleReceiver{})
 			_ = client.Start()
@@ -205,7 +206,7 @@ var _ = Describe("Client", func() {
 			// Start the server
 			go server.MapConnection(srvConn)
 			// Create the Client
-			client, _ = NewClient(context.TODO(), cliConn)
+			client, _ = NewClient(context.TODO(), cliConn, formatOption)
 			// Start it
 			receiver = &simpleReceiver{}
 			client.SetReceiver(receiver)
@@ -274,7 +275,7 @@ var _ = Describe("Client", func() {
 		var server Server
 		BeforeEach(func(done Done) {
 			server, _ = NewServer(context.TODO(), SimpleHubFactory(&simpleHub{}),
-				Logger(log.NewLogfmtLogger(os.Stderr), false),
+				Logger(log.NewLogfmtLogger(os.Stderr), true),
 				ChanReceiveTimeout(200*time.Millisecond),
 				StreamBufferCapacity(5))
 			// Create both ends of the connection
@@ -282,7 +283,7 @@ var _ = Describe("Client", func() {
 			// Start the server
 			go server.MapConnection(srvConn)
 			// Create the Client
-			client, _ = NewClient(context.TODO(), cliConn)
+			client, _ = NewClient(context.TODO(), cliConn, formatOption)
 			// Start it
 			receiver := &simpleReceiver{}
 			client.SetReceiver(receiver)
@@ -365,7 +366,7 @@ var _ = Describe("Client", func() {
 			// Start the server
 			go server.MapConnection(srvConn)
 			// Create the Client
-			client, _ = NewClient(context.TODO(), cliConn)
+			client, _ = NewClient(context.TODO(), cliConn, formatOption)
 			// Start it
 			receiver := &simpleReceiver{}
 			client.SetReceiver(receiver)

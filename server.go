@@ -12,7 +12,6 @@ import (
 	"errors"
 	"fmt"
 	"github.com/go-kit/kit/log"
-	"github.com/mailru/easyjson/jwriter"
 	"net/http"
 	"os"
 	"reflect"
@@ -159,9 +158,9 @@ func (s *server) newConnectionHubContext(hubConn hubConnection) HubContext {
 	}
 }
 
-func (s *server) processHandshake(conn Connection) (HubProtocol, error) {
+func (s *server) processHandshake(conn Connection) (hubProtocol, error) {
 	var err error
-	var protocol HubProtocol
+	var protocol hubProtocol
 	var ok bool
 	const handshakeResponse = "{}\u001e"
 	const errorHandshakeResponse = "{\"error\":\"%s\"}\u001e"
@@ -169,51 +168,38 @@ func (s *server) processHandshake(conn Connection) (HubProtocol, error) {
 
 	defer conn.SetTimeout(0)
 	conn.SetTimeout(s._handshakeTimeout)
-
-	var buf bytes.Buffer
-	data := make([]byte, 1<<12)
-	for {
-		var n int
-		if n, err = conn.Read(data); err != nil {
-			break
+	var remainBuf bytes.Buffer
+	rawHandshake, err := parseTextMessageFormat(conn, &remainBuf)
+	if err != nil {
+		return nil, err
+	}
+	_ = dbg.Log(evt, "handshake received", "msg", string(rawHandshake[0]))
+	request := handshakeRequest{}
+	if err = json.Unmarshal(rawHandshake[0], &request); err != nil {
+		// Malformed handshake
+		return nil, err
+	}
+	if protocol, ok = protocolMap[request.Protocol]; ok {
+		// Send the handshake response
+		if _, err = conn.Write([]byte(handshakeResponse)); err != nil {
+			_ = dbg.Log(evt, "handshake sent", "error", err)
 		} else {
-			buf.Write(data[:n])
-			var rawHandshake []byte
-			if rawHandshake, err = parseTextMessageFormat(&buf); err != nil {
-				// Partial message, read more data
-				buf.Write(data[:n])
-			} else {
-				_ = dbg.Log(evt, "handshake received", "msg", string(rawHandshake))
-				request := handshakeRequest{}
-				if err = json.Unmarshal(rawHandshake, &request); err != nil {
-					// Malformed handshake
-					break
-				}
-				if protocol, ok = protocolMap[request.Protocol]; ok {
-					// Send the handshake response
-					if _, err = conn.Write([]byte(handshakeResponse)); err != nil {
-						_ = dbg.Log(evt, "handshake sent", "error", err)
-					} else {
-						_ = dbg.Log(evt, "handshake sent", "msg", handshakeResponse)
-					}
-				} else {
-					err = fmt.Errorf("protocol %v not supported", request.Protocol)
-					_ = info.Log(evt, "protocol requested", "error", err)
-					if _, respErr := conn.Write([]byte(fmt.Sprintf(errorHandshakeResponse, err))); respErr != nil {
-						_ = dbg.Log(evt, "handshake sent", "error", respErr)
-						err = respErr
-					}
-				}
-				break
-			}
+			_ = dbg.Log(evt, "handshake sent", "msg", handshakeResponse)
+		}
+	} else {
+		err = fmt.Errorf("protocol %v not supported", request.Protocol)
+		_ = info.Log(evt, "protocol requested", "error", err)
+		if _, respErr := conn.Write([]byte(fmt.Sprintf(errorHandshakeResponse, err))); respErr != nil {
+			_ = dbg.Log(evt, "handshake sent", "error", respErr)
+			err = respErr
 		}
 	}
 	return protocol, err
 }
 
-var protocolMap = map[string]HubProtocol{
-	"json":        &JSONHubProtocol{easyWriter: jwriter.Writer{}},
-	"messagepack": &MessagePackHubProtocol{},
+var protocolMap = map[string]hubProtocol{
+	"json":        &jsonHubProtocol{},
+	"messagepack": &messagePackHubProtocol{},
 }
 
 // const for logging

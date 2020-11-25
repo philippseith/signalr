@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"github.com/go-kit/kit/log"
-	"github.com/mailru/easyjson/jwriter"
 	"os"
 	"reflect"
 	"sync"
@@ -228,7 +227,7 @@ func (c *client) prefixLoggers(connectionID string) (info StructuredLogger, dbg 
 			"hub", t)
 }
 
-func (c *client) processHandshake() (HubProtocol, error) {
+func (c *client) processHandshake() (hubProtocol, error) {
 	info, dbg := c.prefixLoggers(c.conn.ConnectionID())
 	request := fmt.Sprintf("{\"protocol\":\"%v\",\"version\":1}\u001e", c.format)
 	_, err := c.conn.Write([]byte(request))
@@ -237,44 +236,33 @@ func (c *client) processHandshake() (HubProtocol, error) {
 		return nil, err
 	}
 	_ = dbg.Log(evt, "handshake sent", "msg", request)
-	var buf bytes.Buffer
-	data := make([]byte, 1<<12)
-loop:
-	for {
-		var n int
-		if n, err = c.conn.Read(data); err != nil {
-			_ = info.Log(evt, "handshake received", "msg", request, "error", err)
-			break loop
-		} else {
-			buf.Write(data[:n])
-			var rawHandshake []byte
-			if rawHandshake, err = parseTextMessageFormat(&buf); err != nil {
-				// Partial message, read more data
-				buf.Write(data[:n])
-			} else {
-				response := handshakeResponse{}
-				if err = json.Unmarshal(rawHandshake, &response); err != nil {
-					// Malformed handshake
-					_ = info.Log(evt, "handshake received", "msg", string(rawHandshake), "error", err)
-				} else {
-					if response.Error != "" {
-						_ = info.Log(evt, "handshake received", "error", response.Error)
-						return nil, errors.New(response.Error)
-					}
-					_ = dbg.Log(evt, "handshake received", "msg", fmtMsg(response))
-					var protocol HubProtocol
-					switch c.format {
-					case "json":
-						protocol = &JSONHubProtocol{easyWriter: jwriter.Writer{}}
-					case "messagepack":
-						protocol = &MessagePackHubProtocol{}
-					}
-					_, pDbg := c.loggers()
-					protocol.setDebugLogger(pDbg)
-					return protocol, nil
-				}
-			}
+	var remainBuf bytes.Buffer
+	rawHandshake, err := parseTextMessageFormat(c.conn, &remainBuf)
+	if err != nil {
+		return nil, err
+	}
+	response := handshakeResponse{}
+	if err = json.Unmarshal(rawHandshake[0], &response); err != nil {
+		// Malformed handshake
+		_ = info.Log(evt, "handshake received", "msg", string(rawHandshake[0]), "error", err)
+	} else {
+		if response.Error != "" {
+			_ = info.Log(evt, "handshake received", "error", response.Error)
+			return nil, errors.New(response.Error)
 		}
+		_ = dbg.Log(evt, "handshake received", "msg", fmtMsg(response))
+		var protocol hubProtocol
+		switch c.format {
+		case "json":
+			protocol = &jsonHubProtocol{}
+		case "messagepack":
+			protocol = &messagePackHubProtocol{}
+		}
+		if protocol != nil {
+			_, pDbg := c.loggers()
+			protocol.setDebugLogger(pDbg)
+		}
+		return protocol, nil
 	}
 	return nil, err
 }

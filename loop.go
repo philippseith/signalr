@@ -14,15 +14,15 @@ type loop struct {
 	party        Party
 	info         StructuredLogger
 	dbg          StructuredLogger
-	protocol     HubProtocol
+	protocol     hubProtocol
 	hubConn      hubConnection
 	invokeClient *invokeClient
 	streamer     *streamer
 	streamClient *streamClient
 }
 
-func newLoop(p Party, conn Connection, protocol HubProtocol) *loop {
-	protocol = reflect.New(reflect.ValueOf(protocol).Elem().Type()).Interface().(HubProtocol)
+func newLoop(p Party, conn Connection, protocol hubProtocol) *loop {
+	protocol = reflect.New(reflect.ValueOf(protocol).Elem().Type()).Interface().(hubProtocol)
 	_, dbg := p.loggers()
 	protocol.setDebugLogger(dbg)
 	pInfo, pDbg := p.prefixLoggers(conn.ConnectionID())
@@ -265,7 +265,7 @@ func (l *loop) recoverInvocationPanic(invocation invocationMessage) {
 }
 
 func buildMethodArguments(method reflect.Value, invocation invocationMessage,
-	streamClient *streamClient, protocol HubProtocol) (arguments []reflect.Value, clientStreaming bool, err error) {
+	streamClient *streamClient, protocol hubProtocol) (arguments []reflect.Value, clientStreaming bool, err error) {
 	if len(invocation.StreamIds)+len(invocation.Arguments) != method.Type().NumIn() {
 		return nil, false, fmt.Errorf("parameter mismatch calling method %v", invocation.Target)
 	}

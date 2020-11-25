@@ -1,6 +1,7 @@
 package signalr
 
 import (
+	"bytes"
 	"context"
 	"github.com/rotisserie/eris"
 	"io"
@@ -9,7 +10,7 @@ import (
 )
 
 // hubConnection is used by HubContext, Server and Client to realize the external API.
-// hubConnection uses a transport connection (of type Connection) and a HubProtocol to send and receive SignalR messages.
+// hubConnection uses a transport connection (of type Connection) and a hubProtocol to send and receive SignalR messages.
 type hubConnection interface {
 	ConnectionID() string
 	Receive() <-chan receiveResult
@@ -30,7 +31,7 @@ type receiveResult struct {
 	err     error
 }
 
-func newHubConnection(connection Connection, protocol HubProtocol, maximumReceiveMessageSize uint, info StructuredLogger) hubConnection {
+func newHubConnection(connection Connection, protocol hubProtocol, maximumReceiveMessageSize uint, info StructuredLogger) hubConnection {
 	ctx, cancelFunc := context.WithCancel(connection.Context())
 	c := &defaultHubConnection{
 		ctx:                       ctx,
@@ -48,7 +49,7 @@ func newHubConnection(connection Connection, protocol HubProtocol, maximumReceiv
 type defaultHubConnection struct {
 	ctx                       context.Context
 	cancelFunc                context.CancelFunc
-	protocol                  HubProtocol
+	protocol                  hubProtocol
 	mx                        sync.Mutex
 	connection                Connection
 	maximumReceiveMessageSize uint
@@ -83,34 +84,48 @@ func (c *defaultHubConnection) Abort() {
 }
 
 func (c *defaultHubConnection) Receive() <-chan receiveResult {
-	recvChan := make(chan receiveResult, 1)
-	// the connects the goroutine which reads from the connection and the goroutine which parses the read data
+	recvChan := make(chan receiveResult, 20)
+	// the pipe connects the goroutine which reads from the connection and the goroutine which parses the read data
 	reader, writer := io.Pipe()
-	go func(ctx context.Context, writer io.Writer, recvChan chan receiveResult) {
-		data := make([]byte, c.maximumReceiveMessageSize)
+	p := make([]byte, c.maximumReceiveMessageSize)
+	go func(ctx context.Context, connection io.Reader, writer io.Writer, recvChan chan receiveResult) {
 		for {
 			if ctx.Err() != nil {
 				break
 			}
-			n, err := c.connection.Read(data)
+			n, err := connection.Read(p)
 			if err != nil &&
-				ctx.Err() == nil { // if err != nil, recvChan is closed and we shouldn't push to it
+				ctx.Err() == nil { // if ctx.Err != nil, recvChan is closed and we shouldn't push to it
 				recvChan <- receiveResult{err: err}
 			}
-			_, _ = writer.Write(data[:n])
+			if ctx.Err() != nil {
+				break
+			}
+			if n > 0 {
+				_, err = writer.Write(p[:n])
+				if err != nil &&
+					ctx.Err() == nil { // if ctx.Err != nil, recvChan is closed and we shouldn't push to it
+					recvChan <- receiveResult{err: err}
+				}
+			}
 		}
-	}(c.ctx, writer, recvChan)
+	}(c.ctx, c.connection, writer, recvChan)
 	// parse
 	go func(ctx context.Context, reader io.Reader, recvChan chan receiveResult) {
+		remainBuf := bytes.Buffer{}
 		for {
 			if ctx.Err() != nil {
 				close(recvChan)
 				break
 			}
-			message, err := c.protocol.ParseMessage(reader)
-			recvChan <- receiveResult{
-				message: message,
-				err:     err,
+			messages, err := c.protocol.ParseMessages(reader, &remainBuf)
+			if err != nil && ctx.Err() == nil { // if ctx.Err != nil, recvChan is closed and we shouldn't push to it
+				recvChan <- receiveResult{err: err}
+			}
+			for _, message := range messages {
+				if ctx.Err() == nil { // if ctx.Err != nil, recvChan is closed and we shouldn't push to it
+					recvChan <- receiveResult{message: message}
+				}
 			}
 		}
 	}(c.ctx, reader, recvChan)
@@ -118,6 +133,9 @@ func (c *defaultHubConnection) Receive() <-chan receiveResult {
 }
 
 func (c *defaultHubConnection) SendInvocation(id string, target string, args []interface{}) error {
+	if args == nil {
+		args = make([]interface{}, 0)
+	}
 	var invocationMessage = invocationMessage{
 		Type:         1,
 		InvocationID: id,

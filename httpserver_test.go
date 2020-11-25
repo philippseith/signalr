@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
-	"github.com/mailru/easyjson/jwriter"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"golang.org/x/net/websocket"
@@ -32,14 +31,15 @@ func (w *addHub) Echo(s string) string {
 }
 
 var _ = Describe("HTTP server", func() {
-	for _, transport := range []string{
-		"WebSockets",
-		//"ServerSentEvents",
+	for _, transport := range [][]string{
+		{"WebSockets", "Text"},
+		//{ "WebSockets", "Binary" },
+		//{ "ServerSentEvents", "Text" },
 	} {
 		Context("A correct negotiation request is sent", func() {
 			It(fmt.Sprintf("should send a correct negotiation response with support for %v with text protocol", transport), func(done Done) {
 				// Start server
-				server, err := NewServer(context.TODO(), SimpleHubFactory(&addHub{}), HTTPTransports(transport))
+				server, err := NewServer(context.TODO(), SimpleHubFactory(&addHub{}), HTTPTransports(transport[0]))
 				Expect(err).NotTo(HaveOccurred())
 				router := http.NewServeMux()
 				server.MapHTTP(router, "/hub")
@@ -55,11 +55,11 @@ var _ = Describe("HTTP server", func() {
 				Expect(len(avt)).To(BeNumerically(">", 0))
 				Expect(avt[0]).To(BeAssignableToTypeOf(map[string]interface{}{}))
 				avtVal := avt[0].(map[string]interface{})
-				Expect(avtVal["transport"]).To(Equal(transport))
+				Expect(avtVal["transport"]).To(Equal(transport[0]))
 				Expect(avtVal["transferFormats"]).To(BeAssignableToTypeOf([]interface{}{}))
 				tf := avtVal["transferFormats"].([]interface{})
 				Expect(tf).To(ContainElement("Text"))
-				// TODO Expect(tf).To(ContainElement("Binary"))
+				Expect(tf).To(ContainElement("Binary"))
 				close(done)
 			})
 		})
@@ -67,7 +67,7 @@ var _ = Describe("HTTP server", func() {
 		Context("A invalid negotiation request is sent", func() {
 			It(fmt.Sprintf("should send a correct negotiation response with support for %v with text protocol", transport), func(done Done) {
 				// Start server
-				server, err := NewServer(context.TODO(), SimpleHubFactory(&addHub{}), HTTPTransports(transport))
+				server, err := NewServer(context.TODO(), SimpleHubFactory(&addHub{}), HTTPTransports(transport[0]))
 				Expect(err).NotTo(HaveOccurred())
 				router := http.NewServeMux()
 				server.MapHTTP(router, "/hub")
@@ -90,7 +90,7 @@ var _ = Describe("HTTP server", func() {
 				logger := &nonProtocolLogger{log.NewLogfmtLogger(os.Stderr)}
 				// Start server
 				server, err := NewServer(context.TODO(),
-					SimpleHubFactory(&addHub{}), HTTPTransports(transport),
+					SimpleHubFactory(&addHub{}), HTTPTransports(transport[0]),
 					Logger(logger, true))
 				Expect(err).NotTo(HaveOccurred())
 				router := http.NewServeMux()
@@ -102,7 +102,8 @@ var _ = Describe("HTTP server", func() {
 				waitForPort(port)
 				client, err := NewHTTPClient(context.TODO(),
 					fmt.Sprintf("http://127.0.0.1:%v/hub", port),
-					Logger(logger, true))
+					Logger(logger, true),
+					TransferFormat(transport[1]))
 				Expect(err).NotTo(HaveOccurred())
 				Expect(client).NotTo(BeNil())
 				err = client.Start()
@@ -113,7 +114,8 @@ var _ = Describe("HTTP server", func() {
 				// Try second connection
 				client2, err := NewHTTPClient(context.TODO(),
 					fmt.Sprintf("http://127.0.0.1:%v/hub", port),
-					Logger(logger, true))
+					Logger(logger, true),
+					TransferFormat(transport[1]))
 				Expect(err).NotTo(HaveOccurred())
 				Expect(client2).NotTo(BeNil())
 				_ = client2.Start()
@@ -128,7 +130,7 @@ var _ = Describe("HTTP server", func() {
 				Expect(s).To(Equal(hugo))
 
 				close(done)
-			}, 100)
+			}, 10)
 		})
 	}
 	Context("When no negotiation is send", func() {
@@ -197,7 +199,7 @@ func negotiateWebSocketTestServer(port int) map[string]interface{} {
 func handShakeAndCallWebSocketTestServer(port int, connectionID string) {
 	waitForPort(port)
 	logger := log.NewLogfmtLogger(os.Stderr)
-	protocol := JSONHubProtocol{easyWriter: jwriter.Writer{}}
+	protocol := jsonHubProtocol{}
 	protocol.setDebugLogger(level.Debug(logger))
 	var urlParam string
 	if connectionID != "" {

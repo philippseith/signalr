@@ -1,28 +1,20 @@
 package signalr
 
 import (
+	"bytes"
 	"io"
 )
 
-// HubProtocol interface
-// ReadMessage() reads a message from buf and returns the message if the buf contained one completely.
+// hubProtocol interface
+// ParseMessages() parses messages from an io.Reader and stores unparsed bytes in remainBuf.
 // If buf does not contain the whole message, it returns a nil message and complete false
 // WriteMessage writes a message to the specified writer
 // UnmarshalArgument() unmarshals a raw message depending of the specified value type into value
-type HubProtocol interface {
-	ParseMessage(reader io.Reader) (interface{}, error)
+type hubProtocol interface {
+	ParseMessages(reader io.Reader, remainBuf *bytes.Buffer) ([]interface{}, error)
 	WriteMessage(message interface{}, writer io.Writer) error
 	UnmarshalArgument(argument interface{}, value interface{}) error
 	setDebugLogger(dbg StructuredLogger)
-}
-
-type HubAdapter interface {
-	// target is the method name, arguments is a protocol specific slice
-	// This func branches between protocol specific sub funcs
-	// The sub funcs have switch which branches between methods
-	Invoke(target string, arguments interface{}, streamIds []string, protocol HubProtocol) (result interface{})
-	IntoChan(target string, chanIndex int, inChan interface{}, item []byte, protocol HubProtocol)
-	FromChan(target string, outChan interface{})
 }
 
 //easyjson:json

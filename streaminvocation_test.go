@@ -56,7 +56,7 @@ func (s *streamHub) SimpleInt() int {
 	return -1
 }
 
-var _ = Describe("Streaminvocation", func() {
+var _ = Describe("StreamInvocation", func() {
 
 	Describe("Simple stream invocation", func() {
 		Context("When invoked by the client", func() {

@@ -57,7 +57,7 @@ func testServer(t *testing.T, connection string) {
 		serverIsDown <- struct{}{}
 	}()
 	<-serverIsUp
-	//runJest(t, quitServer)
+	runJest(t, quitServer)
 	<-serverIsDown
 }
 

@@ -1,33 +1,53 @@
 package signalr
 
 import (
+	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/go-kit/kit/log"
 	"github.com/vmihailenco/msgpack/v5"
 	"io"
-	"reflect"
+	"strconv"
 )
 
-type MessagePackHubProtocol struct {
+type messagePackHubProtocol struct {
 	dbg log.Logger
 }
 
-func (m *MessagePackHubProtocol) ParseMessage(reader io.Reader) (interface{}, error) {
-	d := msgpack.NewDecoder(reader)
+func (m *messagePackHubProtocol) ParseMessages(reader io.Reader, remainBuf *bytes.Buffer) ([]interface{}, error) {
+	messages := make([]interface{}, 0)
+	buf := bytes.Buffer{}
+	d := msgpack.NewDecoder(&buf)
+	for {
+		_, _ = buf.ReadFrom(remainBuf)
+		_, err := buf.ReadFrom(reader)
+		if err != nil {
+			return nil, err
+		}
+		msg, err := d.DecodeSlice()
+		if errors.Is(err, io.EOF) {
+			_, _ = remainBuf.ReadFrom(&buf)
+			if len(messages) > 0 {
+				return messages, nil
+			}
+			break
+		}
+		msgType8, ok := msg[0].(int8)
+		if !ok {
+			return nil, fmt.Errorf("invalid message. Can not read message type %v", msg[0])
+		}
+		message, err := m.parseMessage(int(msgType8), msg)
+		if err != nil {
+			return nil, err
+		}
+		messages = append(messages, message)
+	}
+	return messages, nil
+}
 
-	msg, err := d.DecodeSlice()
-	if err != nil {
-		return nil, err
-	}
-	if len(msg) == 0 {
-		return nil, errors.New("invalid message length 0")
-	}
-	msgType8, ok := msg[0].(int8)
-	if !ok {
-		return nil, fmt.Errorf("invalid message. Can not read message type %v", msg[0])
-	}
-	msgType := int(msgType8)
+func (m *messagePackHubProtocol) parseMessage(msgType int, msg []interface{}) (message interface{}, err error) {
+	var ok bool
 	switch msgType {
 	case 1, 4:
 		if len(msg) != 6 {
@@ -132,7 +152,7 @@ func (m *MessagePackHubProtocol) ParseMessage(reader io.Reader) (interface{}, er
 	return nil, fmt.Errorf("unknown message type %v", msgType)
 }
 
-func (m *MessagePackHubProtocol) WriteMessage(message interface{}, writer io.Writer) (err error) {
+func (m *messagePackHubProtocol) WriteMessage(message interface{}, writer io.Writer) (err error) {
 	e := msgpack.NewEncoder(writer)
 	switch msg := message.(type) {
 	case invocationMessage:
@@ -245,20 +265,1631 @@ func encodeMsgHeader(e *msgpack.Encoder, msgLen int, msgType int) (err error) {
 	return nil
 }
 
-func (m *MessagePackHubProtocol) UnmarshalArgument(argument interface{}, value interface{}) error {
-	v := reflect.Indirect(reflect.ValueOf(value))
-	switch v.Kind() {
-	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		v.SetInt(reflect.ValueOf(argument).Int())
-	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-		v.SetUint(reflect.ValueOf(argument).Uint())
-	case reflect.String:
-		v.Set(reflect.ValueOf(argument))
-	case reflect.Array, reflect.Slice:
-	}
-	return nil
+func (m *messagePackHubProtocol) setDebugLogger(dbg StructuredLogger) {
+	m.dbg = log.WithPrefix(dbg, "ts", log.DefaultTimestampUTC, "protocol", "MSGP")
 }
 
-func (m *MessagePackHubProtocol) setDebugLogger(dbg StructuredLogger) {
-	m.dbg = log.WithPrefix(dbg, "ts", log.DefaultTimestampUTC, "protocol", "MSGP")
+// UnmarshalArgument copies the value of a basic type to another basic type.
+// dst must be a pointer to the destination instance.
+// Copying string to numeric supports the numeric display types supported by strconv.ParseInt()
+func (m *messagePackHubProtocol) UnmarshalArgument(src, dst interface{}) error {
+	switch s := src.(type) {
+	case string:
+		return copyFromString(s, dst)
+	case float32:
+		copyFromFloat32(s, dst)
+	case float64:
+		copyFromFloat64(s, dst)
+	case int8:
+		copyFromInt8(s, dst)
+	case int16:
+		copyFromInt16(s, dst)
+	case int32:
+		copyFromInt32(s, dst)
+	case int64:
+		copyFromInt64(s, dst)
+	case int:
+		copyFromInt(s, dst)
+	case uint8:
+		copyFromUint8(s, dst)
+	case uint16:
+		copyFromUint16(s, dst)
+	case uint32:
+		copyFromUint32(s, dst)
+	case uint64:
+		copyFromUint64(s, dst)
+	case uint:
+		copyFromUint(s, dst)
+	case []string:
+		return copyFromStringSlice(s, dst)
+	case []float32:
+		copyFromFloat32Slice(s, dst)
+	case []float64:
+		copyFromFloat64Slice(s, dst)
+	case []int8:
+		copyFromInt8Slice(s, dst)
+	case []int16:
+		copyFromInt16Slice(s, dst)
+	case []int32:
+		copyFromInt32Slice(s, dst)
+	case []int64:
+		copyFromInt64Slice(s, dst)
+	case []int:
+		copyFromIntSlice(s, dst)
+	case []uint8:
+		copyFromUint8Slice(s, dst)
+	case []uint16:
+		copyFromUint16Slice(s, dst)
+	case []uint32:
+		copyFromUint32Slice(s, dst)
+	case []uint64:
+		copyFromUint64Slice(s, dst)
+	case []uint:
+		copyFromUintSlice(s, dst)
+	}
+	b, err := json.Marshal(src)
+	if err != nil {
+		return err
+	}
+	return json.Unmarshal(b, dst)
+}
+
+func copyFromString(s string, dst interface{}) error {
+	switch d := dst.(type) {
+	case *string:
+		*d = s
+		return nil
+	case *float32:
+		f, err := strconv.ParseFloat(s, 32)
+		if err != nil {
+			return err
+		}
+		*d = float32(f)
+		return nil
+	case *float64:
+		f, err := strconv.ParseFloat(s, 64)
+		if err != nil {
+			return err
+		}
+		*d = f
+		return nil
+	case *int8:
+		i, err := strconv.ParseInt(s, 0, 8)
+		if err != nil {
+			return err
+		}
+		*d = int8(i)
+		return nil
+	case *int16:
+		i, err := strconv.ParseInt(s, 0, 16)
+		if err != nil {
+			return err
+		}
+		*d = int16(i)
+		return nil
+	case *int32:
+		i, err := strconv.ParseInt(s, 0, 32)
+		if err != nil {
+			return err
+		}
+		*d = int32(i)
+		return nil
+	case *int64:
+		i, err := strconv.ParseInt(s, 0, 64)
+		if err != nil {
+			return err
+		}
+		*d = i
+		return nil
+	case *int:
+		i, err := strconv.ParseInt(s, 0, 64)
+		if err != nil {
+			return err
+		}
+		*d = int(i)
+		return nil
+	case *uint8:
+		i, err := strconv.ParseUint(s, 0, 8)
+		if err != nil {
+			return err
+		}
+		*d = uint8(i)
+		return nil
+	case *uint16:
+		i, err := strconv.ParseUint(s, 0, 16)
+		if err != nil {
+			return err
+		}
+		*d = uint16(i)
+		return nil
+	case *uint32:
+		i, err := strconv.ParseUint(s, 0, 32)
+		if err != nil {
+			return err
+		}
+		*d = uint32(i)
+		return nil
+	case *uint64:
+		i, err := strconv.ParseUint(s, 0, 64)
+		if err != nil {
+			return err
+		}
+		*d = i
+		return nil
+	case *uint:
+		i, err := strconv.ParseUint(s, 0, 64)
+		if err != nil {
+			return err
+		}
+		*d = uint(i)
+		return nil
+	}
+	b, err := json.Marshal(s)
+	if err != nil {
+		return err
+	}
+	return json.Unmarshal(b, dst)
+}
+
+func copyFromFloat32(s float32, dst interface{}) {
+	switch d := dst.(type) {
+	case *string:
+		*d = fmt.Sprint(s)
+	case *float32:
+		*d = s
+	case *float64:
+		*d = float64(s)
+	case *int8:
+		*d = int8(s)
+	case *int16:
+		*d = int16(s)
+	case *int32:
+		*d = int32(s)
+	case *int64:
+		*d = int64(s)
+	case *int:
+		*d = int(s)
+	case *uint8:
+		*d = uint8(s)
+	case *uint16:
+		*d = uint16(s)
+	case *uint32:
+		*d = uint32(s)
+	case *uint64:
+		*d = uint64(s)
+	case *uint:
+		*d = uint(s)
+	}
+}
+
+func copyFromFloat64(s float64, dst interface{}) {
+	switch d := dst.(type) {
+	case *string:
+		*d = fmt.Sprint(s)
+	case *float32:
+		*d = float32(s)
+	case *float64:
+		*d = s
+	case *int8:
+		*d = int8(s)
+	case *int16:
+		*d = int16(s)
+	case *int32:
+		*d = int32(s)
+	case *int64:
+		*d = int64(s)
+	case *int:
+		*d = int(s)
+	case *uint8:
+		*d = uint8(s)
+	case *uint16:
+		*d = uint16(s)
+	case *uint32:
+		*d = uint32(s)
+	case *uint64:
+		*d = uint64(s)
+	case *uint:
+		*d = uint(s)
+	}
+}
+
+func copyFromInt8(s int8, dst interface{}) {
+	switch d := dst.(type) {
+	case *string:
+		*d = fmt.Sprint(s)
+	case *float32:
+		*d = float32(s)
+	case *float64:
+		*d = float64(s)
+	case *int8:
+		*d = s
+	case *int16:
+		*d = int16(s)
+	case *int32:
+		*d = int32(s)
+	case *int64:
+		*d = int64(s)
+	case *int:
+		*d = int(s)
+	case *uint8:
+		*d = uint8(s)
+	case *uint16:
+		*d = uint16(s)
+	case *uint32:
+		*d = uint32(s)
+	case *uint64:
+		*d = uint64(s)
+	case *uint:
+		*d = uint(s)
+	}
+}
+
+func copyFromInt16(s int16, dst interface{}) {
+	switch d := dst.(type) {
+	case *string:
+		*d = fmt.Sprint(s)
+	case *float32:
+		*d = float32(s)
+	case *float64:
+		*d = float64(s)
+	case *int8:
+		*d = int8(s)
+	case *int16:
+		*d = s
+	case *int32:
+		*d = int32(s)
+	case *int64:
+		*d = int64(s)
+	case *int:
+		*d = int(s)
+	case *uint8:
+		*d = uint8(s)
+	case *uint16:
+		*d = uint16(s)
+	case *uint32:
+		*d = uint32(s)
+	case *uint64:
+		*d = uint64(s)
+	case *uint:
+		*d = uint(s)
+	}
+}
+
+func copyFromInt32(s int32, dst interface{}) {
+	switch d := dst.(type) {
+	case *string:
+		*d = fmt.Sprint(s)
+	case *float32:
+		*d = float32(s)
+	case *float64:
+		*d = float64(s)
+	case *int8:
+		*d = int8(s)
+	case *int16:
+		*d = int16(s)
+	case *int32:
+		*d = s
+	case *int64:
+		*d = int64(s)
+	case *int:
+		*d = int(s)
+	case *uint8:
+		*d = uint8(s)
+	case *uint16:
+		*d = uint16(s)
+	case *uint32:
+		*d = uint32(s)
+	case *uint64:
+		*d = uint64(s)
+	case *uint:
+		*d = uint(s)
+	}
+}
+
+func copyFromInt64(s int64, dst interface{}) {
+	switch d := dst.(type) {
+	case *string:
+		*d = fmt.Sprint(s)
+	case *float32:
+		*d = float32(s)
+	case *float64:
+		*d = float64(s)
+	case *int8:
+		*d = int8(s)
+	case *int16:
+		*d = int16(s)
+	case *int32:
+		*d = int32(s)
+	case *int64:
+		*d = s
+	case *int:
+		*d = int(s)
+	case *uint8:
+		*d = uint8(s)
+	case *uint16:
+		*d = uint16(s)
+	case *uint32:
+		*d = uint32(s)
+	case *uint64:
+		*d = uint64(s)
+	case *uint:
+		*d = uint(s)
+	}
+}
+
+func copyFromInt(s int, dst interface{}) {
+	switch d := dst.(type) {
+	case *string:
+		*d = fmt.Sprint(s)
+	case *float32:
+		*d = float32(s)
+	case *float64:
+		*d = float64(s)
+	case *int8:
+		*d = int8(s)
+	case *int16:
+		*d = int16(s)
+	case *int32:
+		*d = int32(s)
+	case *int64:
+		*d = int64(s)
+	case *int:
+		*d = s
+	case *uint8:
+		*d = uint8(s)
+	case *uint16:
+		*d = uint16(s)
+	case *uint32:
+		*d = uint32(s)
+	case *uint64:
+		*d = uint64(s)
+	case *uint:
+		*d = uint(s)
+	}
+}
+
+func copyFromUint8(s uint8, dst interface{}) {
+	switch d := dst.(type) {
+	case *string:
+		*d = fmt.Sprint(s)
+	case *float32:
+		*d = float32(s)
+	case *float64:
+		*d = float64(s)
+	case *int8:
+		*d = int8(s)
+	case *int16:
+		*d = int16(s)
+	case *int32:
+		*d = int32(s)
+	case *int64:
+		*d = int64(s)
+	case *int:
+		*d = int(s)
+	case *uint8:
+		*d = s
+	case *uint16:
+		*d = uint16(s)
+	case *uint32:
+		*d = uint32(s)
+	case *uint64:
+		*d = uint64(s)
+	case *uint:
+		*d = uint(s)
+	}
+}
+
+func copyFromUint16(s uint16, dst interface{}) {
+	switch d := dst.(type) {
+	case *string:
+		*d = fmt.Sprint(s)
+	case *float32:
+		*d = float32(s)
+	case *float64:
+		*d = float64(s)
+	case *int8:
+		*d = int8(s)
+	case *int16:
+		*d = int16(s)
+	case *int32:
+		*d = int32(s)
+	case *int64:
+		*d = int64(s)
+	case *int:
+		*d = int(s)
+	case *uint8:
+		*d = uint8(s)
+	case *uint16:
+		*d = s
+	case *uint32:
+		*d = uint32(s)
+	case *uint64:
+		*d = uint64(s)
+	case *uint:
+		*d = uint(s)
+	}
+}
+
+func copyFromUint32(s uint32, dst interface{}) {
+	switch d := dst.(type) {
+	case *string:
+		*d = fmt.Sprint(s)
+	case *float32:
+		*d = float32(s)
+	case *float64:
+		*d = float64(s)
+	case *int8:
+		*d = int8(s)
+	case *int16:
+		*d = int16(s)
+	case *int32:
+		*d = int32(s)
+	case *int64:
+		*d = int64(s)
+	case *int:
+		*d = int(s)
+	case *uint8:
+		*d = uint8(s)
+	case *uint16:
+		*d = uint16(s)
+	case *uint32:
+		*d = s
+	case *uint64:
+		*d = uint64(s)
+	case *uint:
+		*d = uint(s)
+	}
+}
+
+func copyFromUint64(s uint64, dst interface{}) {
+	switch d := dst.(type) {
+	case *string:
+		*d = fmt.Sprint(s)
+	case *float32:
+		*d = float32(s)
+	case *float64:
+		*d = float64(s)
+	case *int8:
+		*d = int8(s)
+	case *int16:
+		*d = int16(s)
+	case *int32:
+		*d = int32(s)
+	case *int64:
+		*d = int64(s)
+	case *int:
+		*d = int(s)
+	case *uint8:
+		*d = uint8(s)
+	case *uint16:
+		*d = uint16(s)
+	case *uint32:
+		*d = uint32(s)
+	case *uint64:
+		*d = s
+	case *uint:
+		*d = uint(s)
+	}
+}
+
+func copyFromUint(s uint, dst interface{}) {
+	switch d := dst.(type) {
+	case *string:
+		*d = fmt.Sprint(s)
+	case *float32:
+		*d = float32(s)
+	case *float64:
+		*d = float64(s)
+	case *int8:
+		*d = int8(s)
+	case *int16:
+		*d = int16(s)
+	case *int32:
+		*d = int32(s)
+	case *int64:
+		*d = int64(s)
+	case *int:
+		*d = int(s)
+	case *uint8:
+		*d = uint8(s)
+	case *uint16:
+		*d = uint16(s)
+	case *uint32:
+		*d = uint32(s)
+	case *uint64:
+		*d = uint64(s)
+	case *uint:
+		*d = s
+	}
+}
+
+func copyFromStringSlice(s []string, dst interface{}) error {
+	switch d := dst.(type) {
+	case *[]string:
+		*d = s
+		return nil
+	case *[]float32:
+		f := make([]float32, len(s))
+		for _, se := range s {
+			fe, err := strconv.ParseFloat(se, 32)
+			if err != nil {
+				return err
+			}
+			f = append(f, float32(fe))
+		}
+		*d = f
+		return nil
+	case *[]float64:
+		f := make([]float64, len(s))
+		for _, se := range s {
+			fe, err := strconv.ParseFloat(se, 64)
+			if err != nil {
+				return err
+			}
+			f = append(f, fe)
+		}
+		*d = f
+		return nil
+	case *[]int8:
+		i := make([]int8, len(s))
+		for _, se := range s {
+			ie, err := strconv.ParseInt(se, 0, 8)
+			if err != nil {
+				return err
+			}
+			i = append(i, int8(ie))
+		}
+		*d = i
+		return nil
+	case *[]int16:
+		i := make([]int16, len(s))
+		for _, se := range s {
+			ie, err := strconv.ParseInt(se, 0, 16)
+			if err != nil {
+				return err
+			}
+			i = append(i, int16(ie))
+		}
+		*d = i
+		return nil
+	case *[]int32:
+		i := make([]int32, len(s))
+		for _, se := range s {
+			ie, err := strconv.ParseInt(se, 0, 32)
+			if err != nil {
+				return err
+			}
+			i = append(i, int32(ie))
+		}
+		*d = i
+		return nil
+	case *[]int64:
+		i := make([]int64, len(s))
+		for _, se := range s {
+			ie, err := strconv.ParseInt(se, 0, 64)
+			if err != nil {
+				return err
+			}
+			i = append(i, ie)
+		}
+		*d = i
+		return nil
+	case *[]int:
+		i := make([]int, len(s))
+		for _, se := range s {
+			ie, err := strconv.ParseInt(se, 0, 64)
+			if err != nil {
+				return err
+			}
+			i = append(i, int(ie))
+		}
+		*d = i
+		return nil
+	case *[]uint8:
+		i := make([]uint8, len(s))
+		for _, se := range s {
+			ie, err := strconv.ParseUint(se, 0, 8)
+			if err != nil {
+				return err
+			}
+			i = append(i, uint8(ie))
+		}
+		*d = i
+		return nil
+	case *[]uint16:
+		i := make([]uint16, len(s))
+		for _, se := range s {
+			ie, err := strconv.ParseUint(se, 0, 16)
+			if err != nil {
+				return err
+			}
+			i = append(i, uint16(ie))
+		}
+		*d = i
+		return nil
+	case *[]uint32:
+		i := make([]uint32, len(s))
+		for _, se := range s {
+			ie, err := strconv.ParseUint(se, 0, 32)
+			if err != nil {
+				return err
+			}
+			i = append(i, uint32(ie))
+		}
+		*d = i
+		return nil
+	case *[]uint64:
+		i := make([]uint64, len(s))
+		for _, se := range s {
+			ie, err := strconv.ParseUint(se, 0, 64)
+			if err != nil {
+				return err
+			}
+			i = append(i, ie)
+		}
+		*d = i
+		return nil
+	case *[]uint:
+		i := make([]uint, len(s))
+		for _, se := range s {
+			ie, err := strconv.ParseUint(se, 0, 64)
+			if err != nil {
+				return err
+			}
+			i = append(i, uint(ie))
+		}
+		*d = i
+		return nil
+	}
+	b, err := json.Marshal(s)
+	if err != nil {
+		return err
+	}
+	return json.Unmarshal(b, dst)
+}
+func copyFromFloat32Slice(s []float32, dst interface{}) {
+	switch d := dst.(type) {
+	case *[]string:
+		t := make([]string, len(s))
+		for _, se := range s {
+			t = append(t, fmt.Sprint(se))
+		}
+		*d = t
+	case *[]float32:
+		*d = s
+	case *[]float64:
+		f := make([]float64, len(s))
+		for _, se := range s {
+			f = append(f, float64(se))
+		}
+		*d = f
+	case *[]int8:
+		i := make([]int8, len(s))
+		for _, se := range s {
+			i = append(i, int8(se))
+		}
+		*d = i
+	case *[]int16:
+		i := make([]int16, len(s))
+		for _, se := range s {
+			i = append(i, int16(se))
+		}
+		*d = i
+	case *[]int32:
+		i := make([]int32, len(s))
+		for _, se := range s {
+			i = append(i, int32(se))
+		}
+		*d = i
+	case *[]int64:
+		i := make([]int64, len(s))
+		for _, se := range s {
+			i = append(i, int64(se))
+		}
+		*d = i
+	case *[]int:
+		i := make([]int, len(s))
+		for _, se := range s {
+			i = append(i, int(se))
+		}
+		*d = i
+	case *[]uint8:
+		i := make([]uint8, len(s))
+		for _, se := range s {
+			i = append(i, uint8(se))
+		}
+		*d = i
+	case *[]uint16:
+		i := make([]uint16, len(s))
+		for _, se := range s {
+			i = append(i, uint16(se))
+		}
+		*d = i
+	case *[]uint32:
+		i := make([]uint32, len(s))
+		for _, se := range s {
+			i = append(i, uint32(se))
+		}
+		*d = i
+	case *[]uint64:
+		i := make([]uint64, len(s))
+		for _, se := range s {
+			i = append(i, uint64(se))
+		}
+		*d = i
+	case *[]uint:
+		i := make([]uint, len(s))
+		for _, se := range s {
+			i = append(i, uint(se))
+		}
+		*d = i
+	}
+}
+func copyFromFloat64Slice(s []float64, dst interface{}) {
+	switch d := dst.(type) {
+	case *[]string:
+		t := make([]string, len(s))
+		for _, se := range s {
+			t = append(t, fmt.Sprint(se))
+		}
+		*d = t
+	case *[]float32:
+		f := make([]float32, len(s))
+		for _, se := range s {
+			f = append(f, float32(se))
+		}
+		*d = f
+	case *[]float64:
+		*d = s
+	case *[]int8:
+		i := make([]int8, len(s))
+		for _, se := range s {
+			i = append(i, int8(se))
+		}
+		*d = i
+	case *[]int16:
+		i := make([]int16, len(s))
+		for _, se := range s {
+			i = append(i, int16(se))
+		}
+		*d = i
+	case *[]int32:
+		i := make([]int32, len(s))
+		for _, se := range s {
+			i = append(i, int32(se))
+		}
+		*d = i
+	case *[]int64:
+		i := make([]int64, len(s))
+		for _, se := range s {
+			i = append(i, int64(se))
+		}
+		*d = i
+	case *[]int:
+		i := make([]int, len(s))
+		for _, se := range s {
+			i = append(i, int(se))
+		}
+		*d = i
+	case *[]uint8:
+		i := make([]uint8, len(s))
+		for _, se := range s {
+			i = append(i, uint8(se))
+		}
+		*d = i
+	case *[]uint16:
+		i := make([]uint16, len(s))
+		for _, se := range s {
+			i = append(i, uint16(se))
+		}
+		*d = i
+	case *[]uint32:
+		i := make([]uint32, len(s))
+		for _, se := range s {
+			i = append(i, uint32(se))
+		}
+		*d = i
+	case *[]uint64:
+		i := make([]uint64, len(s))
+		for _, se := range s {
+			i = append(i, uint64(se))
+		}
+		*d = i
+	case *[]uint:
+		i := make([]uint, len(s))
+		for _, se := range s {
+			i = append(i, uint(se))
+		}
+		*d = i
+	}
+}
+
+func copyFromInt8Slice(s []int8, dst interface{}) {
+	switch d := dst.(type) {
+	case *[]string:
+		t := make([]string, len(s))
+		for _, se := range s {
+			t = append(t, fmt.Sprint(se))
+		}
+		*d = t
+	case *[]float32:
+		f := make([]float32, len(s))
+		for _, se := range s {
+			f = append(f, float32(se))
+		}
+		*d = f
+	case *[]float64:
+		f := make([]float64, len(s))
+		for _, se := range s {
+			f = append(f, float64(se))
+		}
+		*d = f
+	case *[]int8:
+		*d = s
+	case *[]int16:
+		i := make([]int16, len(s))
+		for _, se := range s {
+			i = append(i, int16(se))
+		}
+		*d = i
+	case *[]int32:
+		i := make([]int32, len(s))
+		for _, se := range s {
+			i = append(i, int32(se))
+		}
+		*d = i
+	case *[]int64:
+		i := make([]int64, len(s))
+		for _, se := range s {
+			i = append(i, int64(se))
+		}
+		*d = i
+	case *[]int:
+		i := make([]int, len(s))
+		for _, se := range s {
+			i = append(i, int(se))
+		}
+		*d = i
+	case *[]uint8:
+		i := make([]uint8, len(s))
+		for _, se := range s {
+			i = append(i, uint8(se))
+		}
+		*d = i
+	case *[]uint16:
+		i := make([]uint16, len(s))
+		for _, se := range s {
+			i = append(i, uint16(se))
+		}
+		*d = i
+	case *[]uint32:
+		i := make([]uint32, len(s))
+		for _, se := range s {
+			i = append(i, uint32(se))
+		}
+		*d = i
+	case *[]uint64:
+		i := make([]uint64, len(s))
+		for _, se := range s {
+			i = append(i, uint64(se))
+		}
+		*d = i
+	case *[]uint:
+		i := make([]uint, len(s))
+		for _, se := range s {
+			i = append(i, uint(se))
+		}
+		*d = i
+	}
+}
+
+func copyFromInt16Slice(s []int16, dst interface{}) {
+	switch d := dst.(type) {
+	case *[]string:
+		t := make([]string, len(s))
+		for _, se := range s {
+			t = append(t, fmt.Sprint(se))
+		}
+		*d = t
+	case *[]float32:
+		f := make([]float32, len(s))
+		for _, se := range s {
+			f = append(f, float32(se))
+		}
+		*d = f
+	case *[]float64:
+		f := make([]float64, len(s))
+		for _, se := range s {
+			f = append(f, float64(se))
+		}
+		*d = f
+	case *[]int8:
+		i := make([]int8, len(s))
+		for _, se := range s {
+			i = append(i, int8(se))
+		}
+		*d = i
+	case *[]int16:
+		*d = s
+	case *[]int32:
+		i := make([]int32, len(s))
+		for _, se := range s {
+			i = append(i, int32(se))
+		}
+		*d = i
+	case *[]int64:
+		i := make([]int64, len(s))
+		for _, se := range s {
+			i = append(i, int64(se))
+		}
+		*d = i
+	case *[]int:
+		i := make([]int, len(s))
+		for _, se := range s {
+			i = append(i, int(se))
+		}
+		*d = i
+	case *[]uint8:
+		i := make([]uint8, len(s))
+		for _, se := range s {
+			i = append(i, uint8(se))
+		}
+		*d = i
+	case *[]uint16:
+		i := make([]uint16, len(s))
+		for _, se := range s {
+			i = append(i, uint16(se))
+		}
+		*d = i
+	case *[]uint32:
+		i := make([]uint32, len(s))
+		for _, se := range s {
+			i = append(i, uint32(se))
+		}
+		*d = i
+	case *[]uint64:
+		i := make([]uint64, len(s))
+		for _, se := range s {
+			i = append(i, uint64(se))
+		}
+		*d = i
+	case *[]uint:
+		i := make([]uint, len(s))
+		for _, se := range s {
+			i = append(i, uint(se))
+		}
+		*d = i
+	}
+}
+
+func copyFromInt32Slice(s []int32, dst interface{}) {
+	switch d := dst.(type) {
+	case *[]string:
+		t := make([]string, len(s))
+		for _, se := range s {
+			t = append(t, fmt.Sprint(se))
+		}
+		*d = t
+	case *[]float32:
+		f := make([]float32, len(s))
+		for _, se := range s {
+			f = append(f, float32(se))
+		}
+		*d = f
+	case *[]float64:
+		f := make([]float64, len(s))
+		for _, se := range s {
+			f = append(f, float64(se))
+		}
+		*d = f
+	case *[]int8:
+		i := make([]int8, len(s))
+		for _, se := range s {
+			i = append(i, int8(se))
+		}
+		*d = i
+	case *[]int16:
+		i := make([]int16, len(s))
+		for _, se := range s {
+			i = append(i, int16(se))
+		}
+		*d = i
+	case *[]int32:
+		*d = s
+	case *[]int64:
+		i := make([]int64, len(s))
+		for _, se := range s {
+			i = append(i, int64(se))
+		}
+		*d = i
+	case *[]int:
+		i := make([]int, len(s))
+		for _, se := range s {
+			i = append(i, int(se))
+		}
+		*d = i
+	case *[]uint8:
+		i := make([]uint8, len(s))
+		for _, se := range s {
+			i = append(i, uint8(se))
+		}
+		*d = i
+	case *[]uint16:
+		i := make([]uint16, len(s))
+		for _, se := range s {
+			i = append(i, uint16(se))
+		}
+		*d = i
+	case *[]uint32:
+		i := make([]uint32, len(s))
+		for _, se := range s {
+			i = append(i, uint32(se))
+		}
+		*d = i
+	case *[]uint64:
+		i := make([]uint64, len(s))
+		for _, se := range s {
+			i = append(i, uint64(se))
+		}
+		*d = i
+	case *[]uint:
+		i := make([]uint, len(s))
+		for _, se := range s {
+			i = append(i, uint(se))
+		}
+		*d = i
+	}
+}
+
+func copyFromInt64Slice(s []int64, dst interface{}) {
+	switch d := dst.(type) {
+	case *[]string:
+		t := make([]string, len(s))
+		for _, se := range s {
+			t = append(t, fmt.Sprint(se))
+		}
+		*d = t
+	case *[]float32:
+		f := make([]float32, len(s))
+		for _, se := range s {
+			f = append(f, float32(se))
+		}
+		*d = f
+	case *[]float64:
+		f := make([]float64, len(s))
+		for _, se := range s {
+			f = append(f, float64(se))
+		}
+		*d = f
+	case *[]int8:
+		i := make([]int8, len(s))
+		for _, se := range s {
+			i = append(i, int8(se))
+		}
+		*d = i
+	case *[]int16:
+		i := make([]int16, len(s))
+		for _, se := range s {
+			i = append(i, int16(se))
+		}
+		*d = i
+	case *[]int32:
+		i := make([]int32, len(s))
+		for _, se := range s {
+			i = append(i, int32(se))
+		}
+		*d = i
+	case *[]int64:
+		*d = s
+	case *[]int:
+		i := make([]int, len(s))
+		for _, se := range s {
+			i = append(i, int(se))
+		}
+		*d = i
+	case *[]uint8:
+		i := make([]uint8, len(s))
+		for _, se := range s {
+			i = append(i, uint8(se))
+		}
+		*d = i
+	case *[]uint16:
+		i := make([]uint16, len(s))
+		for _, se := range s {
+			i = append(i, uint16(se))
+		}
+		*d = i
+	case *[]uint32:
+		i := make([]uint32, len(s))
+		for _, se := range s {
+			i = append(i, uint32(se))
+		}
+		*d = i
+	case *[]uint64:
+		i := make([]uint64, len(s))
+		for _, se := range s {
+			i = append(i, uint64(se))
+		}
+		*d = i
+	case *[]uint:
+		i := make([]uint, len(s))
+		for _, se := range s {
+			i = append(i, uint(se))
+		}
+		*d = i
+	}
+}
+
+func copyFromIntSlice(s []int, dst interface{}) {
+	switch d := dst.(type) {
+	case *[]string:
+		t := make([]string, len(s))
+		for _, se := range s {
+			t = append(t, fmt.Sprint(se))
+		}
+		*d = t
+	case *[]float32:
+		f := make([]float32, len(s))
+		for _, se := range s {
+			f = append(f, float32(se))
+		}
+		*d = f
+	case *[]float64:
+		f := make([]float64, len(s))
+		for _, se := range s {
+			f = append(f, float64(se))
+		}
+		*d = f
+	case *[]int8:
+		i := make([]int8, len(s))
+		for _, se := range s {
+			i = append(i, int8(se))
+		}
+		*d = i
+	case *[]int16:
+		i := make([]int16, len(s))
+		for _, se := range s {
+			i = append(i, int16(se))
+		}
+		*d = i
+	case *[]int32:
+		i := make([]int32, len(s))
+		for _, se := range s {
+			i = append(i, int32(se))
+		}
+		*d = i
+	case *[]int64:
+		i := make([]int64, len(s))
+		for _, se := range s {
+			i = append(i, int64(se))
+		}
+		*d = i
+	case *[]int:
+		*d = s
+	case *[]uint8:
+		i := make([]uint8, len(s))
+		for _, se := range s {
+			i = append(i, uint8(se))
+		}
+		*d = i
+	case *[]uint16:
+		i := make([]uint16, len(s))
+		for _, se := range s {
+			i = append(i, uint16(se))
+		}
+		*d = i
+	case *[]uint32:
+		i := make([]uint32, len(s))
+		for _, se := range s {
+			i = append(i, uint32(se))
+		}
+		*d = i
+	case *[]uint64:
+		i := make([]uint64, len(s))
+		for _, se := range s {
+			i = append(i, uint64(se))
+		}
+		*d = i
+	case *[]uint:
+		i := make([]uint, len(s))
+		for _, se := range s {
+			i = append(i, uint(se))
+		}
+		*d = i
+	}
+}
+
+func copyFromUint8Slice(s []uint8, dst interface{}) {
+	switch d := dst.(type) {
+	case *[]string:
+		t := make([]string, len(s))
+		for _, se := range s {
+			t = append(t, fmt.Sprint(se))
+		}
+		*d = t
+	case *[]float32:
+		f := make([]float32, len(s))
+		for _, se := range s {
+			f = append(f, float32(se))
+		}
+		*d = f
+	case *[]float64:
+		f := make([]float64, len(s))
+		for _, se := range s {
+			f = append(f, float64(se))
+		}
+		*d = f
+	case *[]int8:
+		i := make([]int8, len(s))
+		for _, se := range s {
+			i = append(i, int8(se))
+		}
+		*d = i
+	case *[]int16:
+		i := make([]int16, len(s))
+		for _, se := range s {
+			i = append(i, int16(se))
+		}
+		*d = i
+	case *[]int32:
+		i := make([]int32, len(s))
+		for _, se := range s {
+			i = append(i, int32(se))
+		}
+		*d = i
+	case *[]int64:
+		i := make([]int64, len(s))
+		for _, se := range s {
+			i = append(i, int64(se))
+		}
+		*d = i
+	case *[]int:
+		i := make([]int, len(s))
+		for _, se := range s {
+			i = append(i, int(se))
+		}
+		*d = i
+	case *[]uint8:
+		*d = s
+	case *[]uint16:
+		i := make([]uint16, len(s))
+		for _, se := range s {
+			i = append(i, uint16(se))
+		}
+		*d = i
+	case *[]uint32:
+		i := make([]uint32, len(s))
+		for _, se := range s {
+			i = append(i, uint32(se))
+		}
+		*d = i
+	case *[]uint64:
+		i := make([]uint64, len(s))
+		for _, se := range s {
+			i = append(i, uint64(se))
+		}
+		*d = i
+	case *[]uint:
+		i := make([]uint, len(s))
+		for _, se := range s {
+			i = append(i, uint(se))
+		}
+		*d = i
+	}
+}
+
+func copyFromUint16Slice(s []uint16, dst interface{}) {
+	switch d := dst.(type) {
+	case *[]string:
+		t := make([]string, len(s))
+		for _, se := range s {
+			t = append(t, fmt.Sprint(se))
+		}
+		*d = t
+	case *[]float32:
+		f := make([]float32, len(s))
+		for _, se := range s {
+			f = append(f, float32(se))
+		}
+		*d = f
+	case *[]float64:
+		f := make([]float64, len(s))
+		for _, se := range s {
+			f = append(f, float64(se))
+		}
+		*d = f
+	case *[]int8:
+		i := make([]int8, len(s))
+		for _, se := range s {
+			i = append(i, int8(se))
+		}
+		*d = i
+	case *[]int16:
+		i := make([]int16, len(s))
+		for _, se := range s {
+			i = append(i, int16(se))
+		}
+		*d = i
+	case *[]int32:
+		i := make([]int32, len(s))
+		for _, se := range s {
+			i = append(i, int32(se))
+		}
+		*d = i
+	case *[]int64:
+		i := make([]int64, len(s))
+		for _, se := range s {
+			i = append(i, int64(se))
+		}
+		*d = i
+	case *[]int:
+		i := make([]int, len(s))
+		for _, se := range s {
+			i = append(i, int(se))
+		}
+		*d = i
+	case *[]uint8:
+		i := make([]uint8, len(s))
+		for _, se := range s {
+			i = append(i, uint8(se))
+		}
+		*d = i
+	case *[]uint16:
+		*d = s
+	case *[]uint32:
+		i := make([]uint32, len(s))
+		for _, se := range s {
+			i = append(i, uint32(se))
+		}
+		*d = i
+	case *[]uint64:
+		i := make([]uint64, len(s))
+		for _, se := range s {
+			i = append(i, uint64(se))
+		}
+		*d = i
+	case *[]uint:
+		i := make([]uint, len(s))
+		for _, se := range s {
+			i = append(i, uint(se))
+		}
+		*d = i
+	}
+}
+
+func copyFromUint32Slice(s []uint32, dst interface{}) {
+	switch d := dst.(type) {
+	case *[]string:
+		t := make([]string, len(s))
+		for _, se := range s {
+			t = append(t, fmt.Sprint(se))
+		}
+		*d = t
+	case *[]float32:
+		f := make([]float32, len(s))
+		for _, se := range s {
+			f = append(f, float32(se))
+		}
+		*d = f
+	case *[]float64:
+		f := make([]float64, len(s))
+		for _, se := range s {
+			f = append(f, float64(se))
+		}
+		*d = f
+	case *[]int8:
+		i := make([]int8, len(s))
+		for _, se := range s {
+			i = append(i, int8(se))
+		}
+		*d = i
+	case *[]int16:
+		i := make([]int16, len(s))
+		for _, se := range s {
+			i = append(i, int16(se))
+		}
+		*d = i
+	case *[]int32:
+		i := make([]int32, len(s))
+		for _, se := range s {
+			i = append(i, int32(se))
+		}
+		*d = i
+	case *[]int64:
+		i := make([]int64, len(s))
+		for _, se := range s {
+			i = append(i, int64(se))
+		}
+		*d = i
+	case *[]int:
+		i := make([]int, len(s))
+		for _, se := range s {
+			i = append(i, int(se))
+		}
+		*d = i
+	case *[]uint8:
+		i := make([]uint8, len(s))
+		for _, se := range s {
+			i = append(i, uint8(se))
+		}
+		*d = i
+	case *[]uint16:
+		i := make([]uint16, len(s))
+		for _, se := range s {
+			i = append(i, uint16(se))
+		}
+		*d = i
+	case *[]uint32:
+		*d = s
+	case *[]uint64:
+		i := make([]uint64, len(s))
+		for _, se := range s {
+			i = append(i, uint64(se))
+		}
+		*d = i
+	case *[]uint:
+		i := make([]uint, len(s))
+		for _, se := range s {
+			i = append(i, uint(se))
+		}
+		*d = i
+	}
+}
+
+func copyFromUint64Slice(s []uint64, dst interface{}) {
+	switch d := dst.(type) {
+	case *[]string:
+		t := make([]string, len(s))
+		for _, se := range s {
+			t = append(t, fmt.Sprint(se))
+		}
+		*d = t
+	case *[]float32:
+		f := make([]float32, len(s))
+		for _, se := range s {
+			f = append(f, float32(se))
+		}
+		*d = f
+	case *[]float64:
+		f := make([]float64, len(s))
+		for _, se := range s {
+			f = append(f, float64(se))
+		}
+		*d = f
+	case *[]int8:
+		i := make([]int8, len(s))
+		for _, se := range s {
+			i = append(i, int8(se))
+		}
+		*d = i
+	case *[]int16:
+		i := make([]int16, len(s))
+		for _, se := range s {
+			i = append(i, int16(se))
+		}
+		*d = i
+	case *[]int32:
+		i := make([]int32, len(s))
+		for _, se := range s {
+			i = append(i, int32(se))
+		}
+		*d = i
+	case *[]int64:
+		i := make([]int64, len(s))
+		for _, se := range s {
+			i = append(i, int64(se))
+		}
+		*d = i
+	case *[]int:
+		i := make([]int, len(s))
+		for _, se := range s {
+			i = append(i, int(se))
+		}
+		*d = i
+	case *[]uint8:
+		i := make([]uint8, len(s))
+		for _, se := range s {
+			i = append(i, uint8(se))
+		}
+		*d = i
+	case *[]uint16:
+		i := make([]uint16, len(s))
+		for _, se := range s {
+			i = append(i, uint16(se))
+		}
+		*d = i
+	case *[]uint32:
+		i := make([]uint32, len(s))
+		for _, se := range s {
+			i = append(i, uint32(se))
+		}
+		*d = i
+	case *[]uint64:
+		*d = s
+	case *[]uint:
+		i := make([]uint, len(s))
+		for _, se := range s {
+			i = append(i, uint(se))
+		}
+		*d = i
+	}
+}
+
+func copyFromUintSlice(s []uint, dst interface{}) {
+	switch d := dst.(type) {
+	case *[]string:
+		t := make([]string, len(s))
+		for _, se := range s {
+			t = append(t, fmt.Sprint(se))
+		}
+		*d = t
+	case *[]float32:
+		f := make([]float32, len(s))
+		for _, se := range s {
+			f = append(f, float32(se))
+		}
+		*d = f
+	case *[]float64:
+		f := make([]float64, len(s))
+		for _, se := range s {
+			f = append(f, float64(se))
+		}
+		*d = f
+	case *[]int8:
+		i := make([]int8, len(s))
+		for _, se := range s {
+			i = append(i, int8(se))
+		}
+		*d = i
+	case *[]int16:
+		i := make([]int16, len(s))
+		for _, se := range s {
+			i = append(i, int16(se))
+		}
+		*d = i
+	case *[]int32:
+		i := make([]int32, len(s))
+		for _, se := range s {
+			i = append(i, int32(se))
+		}
+		*d = i
+	case *[]int64:
+		i := make([]int64, len(s))
+		for _, se := range s {
+			i = append(i, int64(se))
+		}
+		*d = i
+	case *[]int:
+		i := make([]int, len(s))
+		for _, se := range s {
+			i = append(i, int(se))
+		}
+		*d = i
+	case *[]uint8:
+		i := make([]uint8, len(s))
+		for _, se := range s {
+			i = append(i, uint8(se))
+		}
+		*d = i
+	case *[]uint16:
+		i := make([]uint16, len(s))
+		for _, se := range s {
+			i = append(i, uint16(se))
+		}
+		*d = i
+	case *[]uint32:
+		i := make([]uint32, len(s))
+		for _, se := range s {
+			i = append(i, uint32(se))
+		}
+		*d = i
+	case *[]uint64:
+		i := make([]uint64, len(s))
+		for _, se := range s {
+			i = append(i, uint64(se))
+		}
+		*d = i
+	case *[]uint:
+		*d = s
+	}
 }

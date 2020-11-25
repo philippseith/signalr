@@ -542,7 +542,7 @@ var _ = Describe("ClientStreaming", func() {
 					Fail("timed out")
 				}
 				close(done)
-			}, 1000)
+			})
 		})
 	})
 })

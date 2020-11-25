@@ -1,26 +1,25 @@
 package signalr
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"github.com/dave/jennifer/jen"
 	"github.com/go-kit/kit/log"
-	"github.com/mailru/easyjson/jwriter"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"io"
 	"os"
 	"reflect"
 	"testing"
 )
 
 var _ = Describe("Protocol", func() {
-	var buf bytes.Buffer
-	Context("InvocationMessage JSONHubProtocol", func() {
-		p := JSONHubProtocol{easyWriter: jwriter.Writer{}}
+	reader, writer := io.Pipe()
+	XContext("InvocationMessage jsonHubProtocol", func() {
+		p := jsonHubProtocol{}
 		p.setDebugLogger(log.NewLogfmtLogger(os.Stderr))
 		It("be equal after roundtrip", func() {
 			want := jsonInvocationMessage{
@@ -30,14 +29,14 @@ var _ = Describe("Protocol", func() {
 				Arguments:    make([]json.RawMessage, 0),
 				StreamIds:    nil,
 			}
-			Expect(p.WriteMessage(want, &buf)).NotTo(HaveOccurred())
-			got, err := p.ParseMessage(&buf)
+			Expect(p.WriteMessage(want, writer)).NotTo(HaveOccurred())
+			got, err := p.ParseMessages(reader, nil)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(got).To(BeEquivalentTo(want))
 		})
 	})
-	Context("InvocationMessage MessagePackHubProtocol", func() {
-		p := &MessagePackHubProtocol{}
+	FContext("InvocationMessage messagePackHubProtocol", func() {
+		p := &messagePackHubProtocol{}
 		p.setDebugLogger(log.NewLogfmtLogger(os.Stderr))
 		It("be equal after roundtrip", func() {
 			want := invocationMessage{
@@ -47,18 +46,18 @@ var _ = Describe("Protocol", func() {
 				Arguments:    make([]interface{}, 0),
 				StreamIds:    nil,
 			}
-			Expect(p.WriteMessage(want, &buf)).NotTo(HaveOccurred())
-			got, err := p.ParseMessage(&buf)
+			Expect(p.WriteMessage(want, writer)).NotTo(HaveOccurred())
+			got, err := p.ParseMessages(reader, nil)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(got).To(BeEquivalentTo(want))
+			Expect(got[0]).To(BeEquivalentTo(want))
 		})
 	})
-	for _, p := range []HubProtocol{
-		//&JSONHubProtocol{easyWriter: jwriter.Writer{}},
-		&MessagePackHubProtocol{},
+	for _, p := range []hubProtocol{
+		&jsonHubProtocol{},
+		&messagePackHubProtocol{},
 	} {
 		p.setDebugLogger(log.NewLogfmtLogger(os.Stderr))
-		XDescribe(fmt.Sprintf("%T: WriteMessage/ParseMessage roundtrip", p), func() {
+		Describe(fmt.Sprintf("%T: WriteMessage/ParseMessages roundtrip", p), func() {
 			Context("StreamItemMessage", func() {
 				It("be equal after roundtrip", func() {
 					for _, want := range []streamItemMessage{
@@ -70,11 +69,11 @@ var _ = Describe("Protocol", func() {
 						{Type: 2, InvocationID: "1", Item: []int64{1, 2, 3}},
 						{Type: 2, InvocationID: "1", Item: map[string]int{"1": 4, "2": 5, "3": 6}},
 					} {
-						Expect(p.WriteMessage(want, &buf)).NotTo(HaveOccurred())
-						got, err := p.ParseMessage(&buf)
+						Expect(p.WriteMessage(want, writer)).NotTo(HaveOccurred())
+						got, err := p.ParseMessages(reader, nil)
 						Expect(err).NotTo(HaveOccurred())
 						Expect(got).To(BeAssignableToTypeOf(streamItemMessage{}))
-						gotMsg := got.(streamItemMessage)
+						gotMsg := got[0].(streamItemMessage)
 						Expect(gotMsg.InvocationID).To(Equal(want.InvocationID))
 						t := reflect.TypeOf(want.Item)
 						value := reflect.New(t)
@@ -131,30 +130,6 @@ type hubInfo struct {
 func (g *generator) Generate() {
 	f := jen.NewFile("t1")
 	for hub, hubInfo := range g.hubs {
-		f.Func().Params(jen.Id(hubInfo.receiver).Op("*").Id(hub)).Id("Invoke").
-			Params(
-				jen.Id("target").String(),
-				jen.Id("arguments").Interface(),
-				jen.Id("streamIds").Index().String(),
-				jen.Id("protocol").Qual("github.com/philippseith/signalr", "HubProtocol")).
-			Params(
-				jen.Interface(),
-				jen.Error()).
-			Block(
-				jen.Switch(jen.Id("protocol").Assert(jen.Type())).Block(
-					jen.Case(jen.Qual("github.com/philippseith/signalr", "JSONHubProtocol")).
-						Block(
-							jen.Return(jen.Id("InvokeJSON").Params(
-								jen.Id("target"),
-								jen.Id("arguments"),
-								jen.Id("streamIds")))),
-					jen.Case(jen.Qual("github.com/philippseith/signalr", "MessagePackHubProtocol")).
-						Block(
-							jen.Return(jen.Id("InvokeMessagePack").Params(
-								jen.Id("target"),
-								jen.Id("arguments"),
-								jen.Id("streamIds"))))),
-				jen.Return(jen.Nil(), jen.Nil()))
 		g.generateInvokeProtocol(f, "JSON", hub, hubInfo)
 		g.generateInvokeProtocol(f, "MessagePack", hub, hubInfo)
 	}
