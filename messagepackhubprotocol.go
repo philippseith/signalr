@@ -16,23 +16,31 @@ type messagePackHubProtocol struct {
 }
 
 func (m *messagePackHubProtocol) ParseMessages(reader io.Reader, remainBuf *bytes.Buffer) ([]interface{}, error) {
-	messages := make([]interface{}, 0)
 	buf := bytes.Buffer{}
+	_, _ = buf.ReadFrom(remainBuf)
 	d := msgpack.NewDecoder(&buf)
+	p := make([]byte, 1<<15)
+	notYetDecoded := make([]byte, 0)
 	for {
-		_, _ = buf.ReadFrom(remainBuf)
-		_, err := buf.ReadFrom(reader)
+		buf.Write(notYetDecoded)
+		n, err := reader.Read(p)
 		if err != nil {
 			return nil, err
 		}
+		_, _ = buf.Write(p[:n])
 		msg, err := d.DecodeSlice()
-		if errors.Is(err, io.EOF) {
-			_, _ = remainBuf.ReadFrom(&buf)
-			if len(messages) > 0 {
-				return messages, nil
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				// Could not decode because bytes are missing. We need to read additional content
+				notYetDecoded = append(notYetDecoded, p[:n]...)
+				continue
 			}
-			break
+			// Could not decode because it is garbage
+			return nil, err
 		}
+		// Could decode. Store remaining buf content
+		_, _ = remainBuf.ReadFrom(&buf)
+		// Decode slice contents
 		msgType8, ok := msg[0].(int8)
 		if !ok {
 			return nil, fmt.Errorf("invalid message. Can not read message type %v", msg[0])
@@ -41,9 +49,8 @@ func (m *messagePackHubProtocol) ParseMessages(reader io.Reader, remainBuf *byte
 		if err != nil {
 			return nil, err
 		}
-		messages = append(messages, message)
+		return []interface{}{message}, nil
 	}
-	return messages, nil
 }
 
 func (m *messagePackHubProtocol) parseMessage(msgType int, msg []interface{}) (message interface{}, err error) {
@@ -153,7 +160,8 @@ func (m *messagePackHubProtocol) parseMessage(msgType int, msg []interface{}) (m
 }
 
 func (m *messagePackHubProtocol) WriteMessage(message interface{}, writer io.Writer) (err error) {
-	e := msgpack.NewEncoder(writer)
+	var buf bytes.Buffer
+	e := msgpack.NewEncoder(&buf)
 	switch msg := message.(type) {
 	case invocationMessage:
 		if err = encodeMsgHeader(e, 6, msg.Type); err != nil {
@@ -249,7 +257,8 @@ func (m *messagePackHubProtocol) WriteMessage(message interface{}, writer io.Wri
 			return err
 		}
 	}
-	return nil
+	_, err = buf.WriteTo(writer)
+	return err
 }
 
 func encodeMsgHeader(e *msgpack.Encoder, msgLen int, msgType int) (err error) {

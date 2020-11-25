@@ -33,8 +33,8 @@ func (w *addHub) Echo(s string) string {
 var _ = Describe("HTTP server", func() {
 	for _, transport := range [][]string{
 		{"WebSockets", "Text"},
-		//{ "WebSockets", "Binary" },
-		//{ "ServerSentEvents", "Text" },
+		{"WebSockets", "Binary"},
+		{"ServerSentEvents", "Text"},
 	} {
 		Context("A correct negotiation request is sent", func() {
 			It(fmt.Sprintf("should send a correct negotiation response with support for %v with text protocol", transport), func(done Done) {
@@ -59,7 +59,9 @@ var _ = Describe("HTTP server", func() {
 				Expect(avtVal["transferFormats"]).To(BeAssignableToTypeOf([]interface{}{}))
 				tf := avtVal["transferFormats"].([]interface{})
 				Expect(tf).To(ContainElement("Text"))
-				Expect(tf).To(ContainElement("Binary"))
+				if transport[0] == "WebSockets" {
+					Expect(tf).To(ContainElement("Binary"))
+				}
 				close(done)
 			})
 		})
@@ -130,7 +132,7 @@ var _ = Describe("HTTP server", func() {
 				Expect(s).To(Equal(hugo))
 
 				close(done)
-			}, 10)
+			}, 10000)
 		})
 	}
 	Context("When no negotiation is send", func() {

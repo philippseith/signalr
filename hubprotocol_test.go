@@ -1,7 +1,7 @@
 package signalr
 
 import (
-	"encoding/json"
+	"bytes"
 	"fmt"
 	"github.com/dave/jennifer/jen"
 	"github.com/go-kit/kit/log"
@@ -10,33 +10,15 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
-	"io"
 	"os"
 	"reflect"
 	"testing"
 )
 
 var _ = Describe("Protocol", func() {
-	reader, writer := io.Pipe()
-	XContext("InvocationMessage jsonHubProtocol", func() {
+	buf := bytes.Buffer{}
+	Context("InvocationMessage jsonHubProtocol", func() {
 		p := jsonHubProtocol{}
-		p.setDebugLogger(log.NewLogfmtLogger(os.Stderr))
-		It("be equal after roundtrip", func() {
-			want := jsonInvocationMessage{
-				Type:         1,
-				Target:       "A",
-				InvocationID: "B",
-				Arguments:    make([]json.RawMessage, 0),
-				StreamIds:    nil,
-			}
-			Expect(p.WriteMessage(want, writer)).NotTo(HaveOccurred())
-			got, err := p.ParseMessages(reader, nil)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(got).To(BeEquivalentTo(want))
-		})
-	})
-	FContext("InvocationMessage messagePackHubProtocol", func() {
-		p := &messagePackHubProtocol{}
 		p.setDebugLogger(log.NewLogfmtLogger(os.Stderr))
 		It("be equal after roundtrip", func() {
 			want := invocationMessage{
@@ -46,10 +28,33 @@ var _ = Describe("Protocol", func() {
 				Arguments:    make([]interface{}, 0),
 				StreamIds:    nil,
 			}
-			Expect(p.WriteMessage(want, writer)).NotTo(HaveOccurred())
-			got, err := p.ParseMessages(reader, nil)
+			Expect(p.WriteMessage(want, &buf)).NotTo(HaveOccurred())
+			var remainBuf bytes.Buffer
+			got, err := p.ParseMessages(&buf, &remainBuf)
 			Expect(err).NotTo(HaveOccurred())
+			Expect(len(got)).To(Equal(1))
 			Expect(got[0]).To(BeEquivalentTo(want))
+		})
+	})
+	Context("InvocationMessage messagePackHubProtocol", func() {
+		p := &messagePackHubProtocol{}
+		p.setDebugLogger(log.NewLogfmtLogger(os.Stderr))
+		It("be equal after roundtrip", func(done Done) {
+			want := invocationMessage{
+				Type:         1,
+				Target:       "A",
+				InvocationID: "B",
+				Arguments:    make([]interface{}, 0),
+				StreamIds:    nil,
+			}
+			err := p.WriteMessage(want, &buf)
+			Expect(err).NotTo(HaveOccurred())
+			var remainBuf bytes.Buffer
+			got, err := p.ParseMessages(&buf, &remainBuf)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(len(got)).To(Equal(1))
+			Expect(got[0]).To(BeEquivalentTo(want))
+			close(done)
 		})
 	})
 	for _, p := range []hubProtocol{
@@ -59,7 +64,7 @@ var _ = Describe("Protocol", func() {
 		p.setDebugLogger(log.NewLogfmtLogger(os.Stderr))
 		Describe(fmt.Sprintf("%T: WriteMessage/ParseMessages roundtrip", p), func() {
 			Context("StreamItemMessage", func() {
-				It("be equal after roundtrip", func() {
+				It("be equal after roundtrip", func(done Done) {
 					for _, want := range []streamItemMessage{
 						//{Type: 2, InvocationID: "", Item: nil},
 						{Type: 2, InvocationID: "1", Item: "3"},
@@ -69,10 +74,12 @@ var _ = Describe("Protocol", func() {
 						{Type: 2, InvocationID: "1", Item: []int64{1, 2, 3}},
 						{Type: 2, InvocationID: "1", Item: map[string]int{"1": 4, "2": 5, "3": 6}},
 					} {
-						Expect(p.WriteMessage(want, writer)).NotTo(HaveOccurred())
-						got, err := p.ParseMessages(reader, nil)
+						Expect(p.WriteMessage(want, &buf)).NotTo(HaveOccurred())
+						var remainBuf bytes.Buffer
+						got, err := p.ParseMessages(&buf, &remainBuf)
 						Expect(err).NotTo(HaveOccurred())
-						Expect(got).To(BeAssignableToTypeOf(streamItemMessage{}))
+						Expect(len(got)).To(Equal(1))
+						Expect(got[0]).To(BeAssignableToTypeOf(streamItemMessage{}))
 						gotMsg := got[0].(streamItemMessage)
 						Expect(gotMsg.InvocationID).To(Equal(want.InvocationID))
 						t := reflect.TypeOf(want.Item)
@@ -80,6 +87,7 @@ var _ = Describe("Protocol", func() {
 						_ = p.UnmarshalArgument(gotMsg.Item, value.Interface())
 						Expect(reflect.Indirect(value).Interface()).To(Equal(want.Item))
 					}
+					close(done)
 				})
 			})
 		})
@@ -97,13 +105,13 @@ type simpleStruct struct {
 	AsString string
 }
 
-type parserHub struct {
-	Hub
-}
-
-func (p *parserHub) Parse(fileName string) []string {
-	return nil
-}
+//type parserHub struct {
+//	Hub
+//}
+//
+//func (p *parserHub) Parse(fileName string) []string {
+//	return nil
+//}
 
 func devParse() error {
 	fSet := token.NewFileSet()
