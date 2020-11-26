@@ -50,6 +50,9 @@ func (j *jsonHubProtocol) UnmarshalArgument(argument interface{}, value interfac
 // If buf does not contain the whole message, it returns a nil message and complete false
 func (j *jsonHubProtocol) ParseMessages(reader io.Reader, remainBuf *bytes.Buffer) (messages []interface{}, err error) {
 	texts, err := parseTextMessageFormat(reader, remainBuf)
+	if err != nil {
+		return nil, err
+	}
 	message := hubMessage{}
 	messages = make([]interface{}, 0)
 	for _, text := range texts {
