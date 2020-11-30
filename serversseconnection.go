@@ -19,6 +19,7 @@ type serverSSEConnection struct {
 	postWriting bool
 	postWriter  io.Writer
 	postReader  io.Reader
+	mxWriter    sync.Mutex
 	sseWriter   io.Writer
 	sseFlusher  http.Flusher
 }
@@ -84,9 +85,12 @@ func (s *serverSSEConnection) Write(p []byte) (n int, err error) {
 	for _, line := range strings.Split(strings.TrimRight(string(p), "\n"), "\n") {
 		payload = payload + "data: " + line + "\n"
 	}
+	// The Write/Flush sequence might be called on different threads, so keep it atomic
+	s.mxWriter.Lock()
 	n, err = s.sseWriter.Write([]byte(payload + "\n"))
 	if err == nil {
 		s.sseFlusher.Flush()
 	}
+	s.mxWriter.Unlock()
 	return n, err
 }

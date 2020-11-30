@@ -183,6 +183,8 @@ func (c *defaultHubConnection) Ping() error {
 }
 
 func (c *defaultHubConnection) LastWriteStamp() time.Time {
+	defer c.mx.Unlock()
+	c.mx.Lock()
 	return c.lastWriteStamp
 }
 
