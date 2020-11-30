@@ -351,86 +351,146 @@ func copyFromString(s string, dst interface{}) error {
 	case *float32:
 		f, err := strconv.ParseFloat(s, 32)
 		if err != nil {
-			return err
+			i, err := strconv.ParseInt(s, 0, 64)
+			if err != nil {
+				return err
+			}
+			*d = float32(i)
+		} else {
+			*d = float32(f)
 		}
-		*d = float32(f)
 		return nil
 	case *float64:
 		f, err := strconv.ParseFloat(s, 64)
 		if err != nil {
-			return err
+			i, err := strconv.ParseInt(s, 0, 64)
+			if err != nil {
+				return err
+			}
+			*d = float64(i)
+		} else {
+			*d = f
 		}
-		*d = f
 		return nil
 	case *int8:
 		i, err := strconv.ParseInt(s, 0, 8)
 		if err != nil {
-			return err
+			f, err := strconv.ParseFloat(s, 64)
+			if err != nil {
+				return err
+			}
+			*d = int8(f)
+		} else {
+			*d = int8(i)
 		}
-		*d = int8(i)
 		return nil
 	case *int16:
 		i, err := strconv.ParseInt(s, 0, 16)
 		if err != nil {
-			return err
+			f, err := strconv.ParseFloat(s, 64)
+			if err != nil {
+				return err
+			}
+			*d = int16(f)
+		} else {
+			*d = int16(i)
 		}
-		*d = int16(i)
 		return nil
 	case *int32:
 		i, err := strconv.ParseInt(s, 0, 32)
 		if err != nil {
-			return err
+			f, err := strconv.ParseFloat(s, 64)
+			if err != nil {
+				return err
+			}
+			*d = int32(f)
+		} else {
+			*d = int32(i)
 		}
-		*d = int32(i)
 		return nil
 	case *int64:
 		i, err := strconv.ParseInt(s, 0, 64)
 		if err != nil {
-			return err
+			f, err := strconv.ParseFloat(s, 64)
+			if err != nil {
+				return err
+			}
+			*d = int64(f)
+		} else {
+			*d = i
 		}
-		*d = i
 		return nil
 	case *int:
 		i, err := strconv.ParseInt(s, 0, 64)
 		if err != nil {
-			return err
+			f, err := strconv.ParseFloat(s, 64)
+			if err != nil {
+				return err
+			}
+			*d = int(f)
+		} else {
+			*d = int(i)
 		}
-		*d = int(i)
 		return nil
 	case *uint8:
 		i, err := strconv.ParseUint(s, 0, 8)
 		if err != nil {
-			return err
+			f, err := strconv.ParseFloat(s, 64)
+			if err != nil {
+				return err
+			}
+			*d = uint8(f)
+		} else {
+			*d = uint8(i)
 		}
-		*d = uint8(i)
 		return nil
 	case *uint16:
 		i, err := strconv.ParseUint(s, 0, 16)
 		if err != nil {
-			return err
+			f, err := strconv.ParseFloat(s, 64)
+			if err != nil {
+				return err
+			}
+			*d = uint16(f)
+		} else {
+			*d = uint16(i)
 		}
-		*d = uint16(i)
 		return nil
 	case *uint32:
 		i, err := strconv.ParseUint(s, 0, 32)
 		if err != nil {
-			return err
+			f, err := strconv.ParseFloat(s, 64)
+			if err != nil {
+				return err
+			}
+			*d = uint32(f)
+		} else {
+			*d = uint32(i)
 		}
-		*d = uint32(i)
 		return nil
 	case *uint64:
 		i, err := strconv.ParseUint(s, 0, 64)
 		if err != nil {
-			return err
+			f, err := strconv.ParseFloat(s, 64)
+			if err != nil {
+				return err
+			}
+			*d = uint64(f)
+		} else {
+			*d = i
 		}
-		*d = i
 		return nil
 	case *uint:
 		i, err := strconv.ParseUint(s, 0, 64)
 		if err != nil {
-			return err
+			f, err := strconv.ParseFloat(s, 64)
+			if err != nil {
+				return err
+			}
+			*d = uint(f)
+		} else {
+			*d = uint(i)
 		}
-		*d = uint(i)
 		return nil
 	}
 	b, err := json.Marshal(s)
