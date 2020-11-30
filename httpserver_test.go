@@ -36,6 +36,7 @@ var _ = Describe("HTTP server", func() {
 		{"WebSockets", "Binary"},
 		{"ServerSentEvents", "Text"},
 	} {
+		transport := transport
 		Context("A correct negotiation request is sent", func() {
 			It(fmt.Sprintf("should send a correct negotiation response with support for %v with text protocol", transport), func(done Done) {
 				// Start server
