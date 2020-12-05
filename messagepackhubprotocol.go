@@ -17,7 +17,7 @@ type messagePackHubProtocol struct {
 func (m *messagePackHubProtocol) ParseMessages(reader io.Reader, remainBuf *bytes.Buffer) ([]interface{}, error) {
 	buf := bytes.Buffer{}
 	_, _ = buf.ReadFrom(remainBuf)
-	d := msgpack.NewDecoder(&buf)
+	decoder := msgpack.NewDecoder(&buf)
 	p := make([]byte, 1<<15)
 	notYetDecoded := make([]byte, 0)
 	for {
@@ -27,7 +27,7 @@ func (m *messagePackHubProtocol) ParseMessages(reader io.Reader, remainBuf *byte
 			return nil, err
 		}
 		_, _ = buf.Write(p[:n])
-		msg, err := d.DecodeSlice()
+		msg, err := decoder.DecodeSlice()
 		if err != nil {
 			if errors.Is(err, io.EOF) {
 				// Could not decode because bytes are missing. We need to read additional content
@@ -760,6 +760,7 @@ func copyFromFloat32Slice(s []float32, dst interface{}) {
 		*d = i
 	}
 }
+
 func copyFromFloat64Slice(s []float64, dst interface{}) {
 	switch d := dst.(type) {
 	case *[]float32:

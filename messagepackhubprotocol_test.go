@@ -21,7 +21,7 @@ var _ = Describe("MessagePackHubProtocol", func() {
 			})
 			It("unmarshal correctly to float32", func() {
 				var dst float32
-				err := m.UnmarshalArgument(src, &dst)
+				err := protocol.UnmarshalArgument(src, &dst)
 				got := dst
 				Expect(err).NotTo(HaveOccurred())
 				Expect(json.Unmarshal(data, &dst)).NotTo(HaveOccurred())
@@ -29,7 +29,7 @@ var _ = Describe("MessagePackHubProtocol", func() {
 			})
 			It("unmarshal correctly to float64", func() {
 				var dst float64
-				err := m.UnmarshalArgument(src, &dst)
+				err := protocol.UnmarshalArgument(src, &dst)
 				got := dst
 				Expect(err).NotTo(HaveOccurred())
 				Expect(json.Unmarshal(data, &dst)).NotTo(HaveOccurred())
@@ -37,7 +37,7 @@ var _ = Describe("MessagePackHubProtocol", func() {
 			})
 			It("unmarshal correctly to int8", func() {
 				var dst int8
-				err := m.UnmarshalArgument(src, &dst)
+				err := protocol.UnmarshalArgument(src, &dst)
 				got := dst
 				Expect(err).NotTo(HaveOccurred())
 				Expect(json.Unmarshal(data, &dst)).NotTo(HaveOccurred())
@@ -45,7 +45,7 @@ var _ = Describe("MessagePackHubProtocol", func() {
 			})
 			It("unmarshal correctly to int16", func() {
 				var dst int16
-				err := m.UnmarshalArgument(src, &dst)
+				err := protocol.UnmarshalArgument(src, &dst)
 				got := dst
 				Expect(err).NotTo(HaveOccurred())
 				Expect(json.Unmarshal(data, &dst)).NotTo(HaveOccurred())
@@ -53,7 +53,7 @@ var _ = Describe("MessagePackHubProtocol", func() {
 			})
 			It("unmarshal correctly to int32", func() {
 				var dst int32
-				err := m.UnmarshalArgument(src, &dst)
+				err := protocol.UnmarshalArgument(src, &dst)
 				got := dst
 				Expect(err).NotTo(HaveOccurred())
 				Expect(json.Unmarshal(data, &dst)).NotTo(HaveOccurred())
@@ -61,7 +61,7 @@ var _ = Describe("MessagePackHubProtocol", func() {
 			})
 			It("unmarshal correctly to int64", func() {
 				var dst int64
-				err := m.UnmarshalArgument(src, &dst)
+				err := protocol.UnmarshalArgument(src, &dst)
 				got := dst
 				Expect(err).NotTo(HaveOccurred())
 				Expect(json.Unmarshal(data, &dst)).NotTo(HaveOccurred())
@@ -69,7 +69,7 @@ var _ = Describe("MessagePackHubProtocol", func() {
 			})
 			It("unmarshal correctly to int", func() {
 				var dst int
-				err := m.UnmarshalArgument(src, &dst)
+				err := protocol.UnmarshalArgument(src, &dst)
 				got := dst
 				Expect(err).NotTo(HaveOccurred())
 				Expect(json.Unmarshal(data, &dst)).NotTo(HaveOccurred())
@@ -77,7 +77,7 @@ var _ = Describe("MessagePackHubProtocol", func() {
 			})
 			It("unmarshal correctly to uint8", func() {
 				var dst uint8
-				err := m.UnmarshalArgument(src, &dst)
+				err := protocol.UnmarshalArgument(src, &dst)
 				got := dst
 				Expect(err).NotTo(HaveOccurred())
 				Expect(json.Unmarshal(data, &dst)).NotTo(HaveOccurred())
@@ -85,7 +85,7 @@ var _ = Describe("MessagePackHubProtocol", func() {
 			})
 			It("unmarshal correctly to uint16", func() {
 				var dst uint16
-				err := m.UnmarshalArgument(src, &dst)
+				err := protocol.UnmarshalArgument(src, &dst)
 				got := dst
 				Expect(err).NotTo(HaveOccurred())
 				Expect(json.Unmarshal(data, &dst)).NotTo(HaveOccurred())
@@ -93,7 +93,7 @@ var _ = Describe("MessagePackHubProtocol", func() {
 			})
 			It("unmarshal correctly to uint32", func() {
 				var dst uint32
-				err := m.UnmarshalArgument(src, &dst)
+				err := protocol.UnmarshalArgument(src, &dst)
 				got := dst
 				Expect(err).NotTo(HaveOccurred())
 				Expect(json.Unmarshal(data, &dst)).NotTo(HaveOccurred())
@@ -101,7 +101,7 @@ var _ = Describe("MessagePackHubProtocol", func() {
 			})
 			It("unmarshal correctly to uint64", func() {
 				var dst uint64
-				err := m.UnmarshalArgument(src, &dst)
+				err := protocol.UnmarshalArgument(src, &dst)
 				got := dst
 				Expect(err).NotTo(HaveOccurred())
 				Expect(json.Unmarshal(data, &dst)).NotTo(HaveOccurred())
@@ -109,7 +109,7 @@ var _ = Describe("MessagePackHubProtocol", func() {
 			})
 			It("unmarshal correctly to uint", func() {
 				var dst uint
-				err := m.UnmarshalArgument(src, &dst)
+				err := protocol.UnmarshalArgument(src, &dst)
 				got := dst
 				Expect(err).NotTo(HaveOccurred())
 				Expect(json.Unmarshal(data, &dst)).NotTo(HaveOccurred())
@@ -130,7 +130,7 @@ var _ = Describe("MessagePackHubProtocol", func() {
 			})
 			It("unmarshal correctly to float32", func() {
 				var dst []float32
-				err := m.UnmarshalArgument(src, &dst)
+				err := protocol.UnmarshalArgument(src, &dst)
 				got := dst
 				Expect(err).NotTo(HaveOccurred())
 				Expect(json.Unmarshal(data, &dst)).NotTo(HaveOccurred())
@@ -138,7 +138,7 @@ var _ = Describe("MessagePackHubProtocol", func() {
 			})
 			It("unmarshal correctly to float64", func() {
 				var dst []float64
-				err := m.UnmarshalArgument(src, &dst)
+				err := protocol.UnmarshalArgument(src, &dst)
 				got := dst
 				Expect(err).NotTo(HaveOccurred())
 				Expect(json.Unmarshal(data, &dst)).NotTo(HaveOccurred())
@@ -146,7 +146,7 @@ var _ = Describe("MessagePackHubProtocol", func() {
 			})
 			It("unmarshal correctly to int8", func() {
 				var dst []int8
-				err := m.UnmarshalArgument(src, &dst)
+				err := protocol.UnmarshalArgument(src, &dst)
 				got := dst
 				Expect(err).NotTo(HaveOccurred())
 				Expect(json.Unmarshal(data, &dst)).NotTo(HaveOccurred())
@@ -154,7 +154,7 @@ var _ = Describe("MessagePackHubProtocol", func() {
 			})
 			It("unmarshal correctly to int16", func() {
 				var dst []int16
-				err := m.UnmarshalArgument(src, &dst)
+				err := protocol.UnmarshalArgument(src, &dst)
 				got := dst
 				Expect(err).NotTo(HaveOccurred())
 				Expect(json.Unmarshal(data, &dst)).NotTo(HaveOccurred())
@@ -162,7 +162,7 @@ var _ = Describe("MessagePackHubProtocol", func() {
 			})
 			It("unmarshal correctly to int32", func() {
 				var dst []int32
-				err := m.UnmarshalArgument(src, &dst)
+				err := protocol.UnmarshalArgument(src, &dst)
 				got := dst
 				Expect(err).NotTo(HaveOccurred())
 				Expect(json.Unmarshal(data, &dst)).NotTo(HaveOccurred())
@@ -170,7 +170,7 @@ var _ = Describe("MessagePackHubProtocol", func() {
 			})
 			It("unmarshal correctly to int64", func() {
 				var dst []int64
-				err := m.UnmarshalArgument(src, &dst)
+				err := protocol.UnmarshalArgument(src, &dst)
 				got := dst
 				Expect(err).NotTo(HaveOccurred())
 				Expect(json.Unmarshal(data, &dst)).NotTo(HaveOccurred())
@@ -178,7 +178,7 @@ var _ = Describe("MessagePackHubProtocol", func() {
 			})
 			It("unmarshal correctly to int", func() {
 				var dst []int
-				err := m.UnmarshalArgument(src, &dst)
+				err := protocol.UnmarshalArgument(src, &dst)
 				got := dst
 				Expect(err).NotTo(HaveOccurred())
 				Expect(json.Unmarshal(data, &dst)).NotTo(HaveOccurred())
@@ -205,7 +205,7 @@ var _ = Describe("MessagePackHubProtocol", func() {
 			})
 			It("unmarshal correctly to float32", func() {
 				var dst []float32
-				err := m.UnmarshalArgument(src, &dst)
+				err := protocol.UnmarshalArgument(src, &dst)
 				got := dst
 				Expect(err).NotTo(HaveOccurred())
 				Expect(json.Unmarshal(data, &dst)).NotTo(HaveOccurred())
@@ -213,7 +213,7 @@ var _ = Describe("MessagePackHubProtocol", func() {
 			})
 			It("unmarshal correctly to float64", func() {
 				var dst []float64
-				err := m.UnmarshalArgument(src, &dst)
+				err := protocol.UnmarshalArgument(src, &dst)
 				got := dst
 				Expect(err).NotTo(HaveOccurred())
 				Expect(json.Unmarshal(data, &dst)).NotTo(HaveOccurred())
@@ -221,7 +221,7 @@ var _ = Describe("MessagePackHubProtocol", func() {
 			})
 			It("unmarshal correctly to int8", func() {
 				var dst []int8
-				err := m.UnmarshalArgument(src, &dst)
+				err := protocol.UnmarshalArgument(src, &dst)
 				got := dst
 				Expect(err).NotTo(HaveOccurred())
 				Expect(json.Unmarshal(data, &dst)).NotTo(HaveOccurred())
@@ -229,7 +229,7 @@ var _ = Describe("MessagePackHubProtocol", func() {
 			})
 			It("unmarshal correctly to int16", func() {
 				var dst []int16
-				err := m.UnmarshalArgument(src, &dst)
+				err := protocol.UnmarshalArgument(src, &dst)
 				got := dst
 				Expect(err).NotTo(HaveOccurred())
 				Expect(json.Unmarshal(data, &dst)).NotTo(HaveOccurred())
@@ -237,7 +237,7 @@ var _ = Describe("MessagePackHubProtocol", func() {
 			})
 			It("unmarshal correctly to int32", func() {
 				var dst []int32
-				err := m.UnmarshalArgument(src, &dst)
+				err := protocol.UnmarshalArgument(src, &dst)
 				got := dst
 				Expect(err).NotTo(HaveOccurred())
 				Expect(json.Unmarshal(data, &dst)).NotTo(HaveOccurred())
@@ -245,7 +245,7 @@ var _ = Describe("MessagePackHubProtocol", func() {
 			})
 			It("unmarshal correctly to int64", func() {
 				var dst []int64
-				err := m.UnmarshalArgument(src, &dst)
+				err := protocol.UnmarshalArgument(src, &dst)
 				got := dst
 				Expect(err).NotTo(HaveOccurred())
 				Expect(json.Unmarshal(data, &dst)).NotTo(HaveOccurred())
@@ -253,7 +253,7 @@ var _ = Describe("MessagePackHubProtocol", func() {
 			})
 			It("unmarshal correctly to int", func() {
 				var dst []int
-				err := m.UnmarshalArgument(src, &dst)
+				err := protocol.UnmarshalArgument(src, &dst)
 				got := dst
 				Expect(err).NotTo(HaveOccurred())
 				Expect(json.Unmarshal(data, &dst)).NotTo(HaveOccurred())
@@ -261,7 +261,7 @@ var _ = Describe("MessagePackHubProtocol", func() {
 			})
 			It("unmarshal correctly to uint8", func() {
 				var dst []uint8
-				err := m.UnmarshalArgument(src, &dst)
+				err := protocol.UnmarshalArgument(src, &dst)
 				got := dst
 				Expect(err).NotTo(HaveOccurred())
 				Expect(json.Unmarshal(data, &dst)).NotTo(HaveOccurred())
@@ -269,7 +269,7 @@ var _ = Describe("MessagePackHubProtocol", func() {
 			})
 			It("unmarshal correctly to uint16", func() {
 				var dst []uint16
-				err := m.UnmarshalArgument(src, &dst)
+				err := protocol.UnmarshalArgument(src, &dst)
 				got := dst
 				Expect(err).NotTo(HaveOccurred())
 				Expect(json.Unmarshal(data, &dst)).NotTo(HaveOccurred())
@@ -277,7 +277,7 @@ var _ = Describe("MessagePackHubProtocol", func() {
 			})
 			It("unmarshal correctly to uint32", func() {
 				var dst []uint32
-				err := m.UnmarshalArgument(src, &dst)
+				err := protocol.UnmarshalArgument(src, &dst)
 				got := dst
 				Expect(err).NotTo(HaveOccurred())
 				Expect(json.Unmarshal(data, &dst)).NotTo(HaveOccurred())
@@ -285,7 +285,7 @@ var _ = Describe("MessagePackHubProtocol", func() {
 			})
 			It("unmarshal correctly to uint64", func() {
 				var dst []uint64
-				err := m.UnmarshalArgument(src, &dst)
+				err := protocol.UnmarshalArgument(src, &dst)
 				got := dst
 				Expect(err).NotTo(HaveOccurred())
 				Expect(json.Unmarshal(data, &dst)).NotTo(HaveOccurred())
@@ -293,7 +293,7 @@ var _ = Describe("MessagePackHubProtocol", func() {
 			})
 			It("unmarshal correctly to uint", func() {
 				var dst []uint
-				err := m.UnmarshalArgument(src, &dst)
+				err := protocol.UnmarshalArgument(src, &dst)
 				got := dst
 				Expect(err).NotTo(HaveOccurred())
 				Expect(json.Unmarshal(data, &dst)).NotTo(HaveOccurred())
