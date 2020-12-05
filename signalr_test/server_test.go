@@ -89,7 +89,8 @@ func runJest(t *testing.T, quitServer chan struct{}) {
 func runServer(t *testing.T, serverIsUp chan struct{}, quitServer chan struct{}, transports []string) {
 	// Install a handler to cancel the server
 	doneQuit := make(chan struct{}, 1)
-	sRServer, _ := signalr.NewServer(context.TODO(), signalr.SimpleHubFactory(&hub{}),
+	ctx, cancelSignalRServer := context.WithCancel(context.Background())
+	sRServer, _ := signalr.NewServer(ctx, signalr.SimpleHubFactory(&hub{}),
 		signalr.KeepAliveInterval(2*time.Second),
 		signalr.HTTPTransports(transports...),
 		signalr.Logger(log.NewLogfmtLogger(os.Stderr), true))
@@ -106,6 +107,9 @@ func runServer(t *testing.T, serverIsUp chan struct{}, quitServer chan struct{},
 	// wait for someone triggering quitServer
 	go func() {
 		<-quitServer
+		// Cancel the signalR server and all its connections
+		cancelSignalRServer()
+		// Now shutdown the http server
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		// If it does not Shutdown during 10s, try to end it by canceling the context
 		defer cancel()
