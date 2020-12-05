@@ -1,13 +1,36 @@
 package signalr
 
 import (
+	"bytes"
 	"encoding/json"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
 
 var _ = Describe("MessagePackHubProtocol", func() {
-	m := messagePackHubProtocol{}
+	protocol := messagePackHubProtocol{}
+	Context("ParseMessages", func() {
+		FIt("should encode/decode an InvocationMessage", func() {
+			message := invocationMessage{
+				Type:         4,
+				Target:       "target",
+				InvocationID: "1",
+				// because DecodeSlice below decodes ints to the smallest type and arrays always to []interface{}, we need to be very specific
+				Arguments: []interface{}{"1", int8(1), []interface{}{int8(7), int8(3)}},
+				StreamIds: []string{"0"},
+			}
+			buf := bytes.Buffer{}
+			err := protocol.WriteMessage(message, &buf)
+			Expect(err).NotTo(HaveOccurred())
+			remainBuf := bytes.Buffer{}
+			got, err := protocol.ParseMessages(&buf, &remainBuf)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(remainBuf.Len()).To(Equal(0))
+			Expect(len(got)).To(Equal(1))
+			Expect(got[0]).To(BeAssignableToTypeOf(invocationMessage{}))
+			Expect(got[0].(invocationMessage)).To(Equal(message))
+		})
+	})
 	Context("UnmarshalArgument for numeric types", func() {
 		for _, src := range []interface{}{
 			float32(1), float64(2),
