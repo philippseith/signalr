@@ -26,6 +26,7 @@ func newLoop(p Party, conn Connection, protocol hubProtocol) *loop {
 	_, dbg := p.loggers()
 	protocol.setDebugLogger(dbg)
 	pInfo, pDbg := p.prefixLoggers(conn.ConnectionID())
+	conn.SetTimeout(p.timeout())
 	hubConn := newHubConnection(conn, protocol, p.maximumReceiveMessageSize(), pInfo)
 	return &loop{
 		party:        p,
