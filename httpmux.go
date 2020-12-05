@@ -1,22 +1,21 @@
 package signalr
 
 import (
-	"context"
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"golang.org/x/net/websocket"
+	"github.com/gorilla/websocket"
 	"net/http"
 	"strings"
 	"sync"
+	"time"
 )
 
 type httpMux struct {
 	mx            sync.Mutex
 	connectionMap map[string]Connection
 	server        Server
-	wsServer      websocket.Server
 }
 
 func newHTTPMux(server Server) *httpMux {
@@ -71,60 +70,56 @@ func (h *httpMux) handleGet(writer http.ResponseWriter, request *http.Request) {
 	}
 	if upgrade &&
 		strings.ToLower(request.Header.Get("Upgrade")) == "websocket" {
-		h.wsServer = websocket.Server{
-			// Use custom Handshake. Default with websocket.Handler is to reject nil origin.
-			// This not useful when testing using the typescript client outside the browser (e.g. in node.js)
-			// or any other client with origin not set.
-			Handshake: func(config *websocket.Config, req *http.Request) (err error) {
-				config.Origin, err = websocket.Origin(config, req)
-				return err
-			},
-			Handler: func(ws *websocket.Conn) { h.handleWebsocket(request.Context(), ws) },
-		}
-		h.wsServer.ServeHTTP(writer, request)
+		h.handleWebsocket(writer, request)
 	} else if strings.ToLower(request.Header.Get("Accept")) == "text/event-stream" {
-		connectionID := request.URL.Query().Get("id")
-		if connectionID == "" {
-			writer.WriteHeader(400) // Bad request
-			return
-		}
-		h.mx.Lock()
-		c, ok := h.connectionMap[connectionID]
-		h.mx.Unlock()
-		if ok {
-			if c == nil {
-				// Connection is negotiated but not initiated
-				// Check for SSE
-				if strings.ToLower(request.Header.Get("Accept")) == "text/event-stream" {
-					// We compose http and send it over sse
-					writer.Header().Set("Content-Type", "text/event-stream")
-					writer.Header().Set("Connection", "keep-alive")
-					writer.Header().Set("Cache-Control", "no-cache")
-					writer.WriteHeader(200)
-					// End this Server Sent Event (yes, your response now is one and the client will wait for this initial event to end)
-					_, _ = fmt.Fprint(writer, ":\r\n\r\n")
-					writer.(http.Flusher).Flush()
-					if sseConn, err := newServerSSEConnection(h.server.context(), request.Context(), connectionID, writer); err != nil {
-						writer.WriteHeader(500) // Internal server error
-					} else {
-						h.serveConnection(sseConn)
-					}
-				}
-				//  TODO Long polling
-			} else {
-				// connectionID in use
-				writer.WriteHeader(409) // Conflict
-			}
-		} else {
-			writer.WriteHeader(404) // Not found
-		}
+		h.handleServerSentEvent(writer, request)
 	} else {
 		writer.WriteHeader(400) // Bad request
 	}
 }
 
-func (h *httpMux) handleWebsocket(requestContext context.Context, ws *websocket.Conn) {
-	connectionID := ws.Request().URL.Query().Get("id")
+func (h *httpMux) handleServerSentEvent(writer http.ResponseWriter, request *http.Request) {
+	connectionID := request.URL.Query().Get("id")
+	if connectionID == "" {
+		writer.WriteHeader(400) // Bad request
+		return
+	}
+	h.mx.Lock()
+	c, ok := h.connectionMap[connectionID]
+	h.mx.Unlock()
+	if ok {
+		if c == nil {
+			// Connection is negotiated but not initiated
+			// We compose http and send it over sse
+			writer.Header().Set("Content-Type", "text/event-stream")
+			writer.Header().Set("Connection", "keep-alive")
+			writer.Header().Set("Cache-Control", "no-cache")
+			writer.WriteHeader(200)
+			// End this Server Sent Event (yes, your response now is one and the client will wait for this initial event to end)
+			_, _ = fmt.Fprint(writer, ":\r\n\r\n")
+			writer.(http.Flusher).Flush()
+			if sseConn, err := newServerSSEConnection(h.server.context(), request.Context(), connectionID, writer); err != nil {
+				writer.WriteHeader(500) // Internal server error
+			} else {
+				h.serveConnection(sseConn)
+			}
+		} else {
+			// connectionID in use
+			writer.WriteHeader(409) // Conflict
+		}
+	} else {
+		writer.WriteHeader(404) // Not found
+	}
+}
+
+func (h *httpMux) handleWebsocket(writer http.ResponseWriter, request *http.Request) {
+	upgrader := websocket.Upgrader{}
+	websocketConn, err := upgrader.Upgrade(writer, request, nil)
+	if err != nil {
+		writer.WriteHeader(400) // Bad request
+		return
+	}
+	connectionID := request.URL.Query().Get("id")
 	if connectionID == "" {
 		// Support websocket connection without negotiate
 		connectionID = newConnectionID()
@@ -138,17 +133,18 @@ func (h *httpMux) handleWebsocket(requestContext context.Context, ws *websocket.
 	if ok {
 		if c == nil {
 			// Connection is negotiated but not initiated
-			h.serveConnection(newWebSocketConnection(h.server.context(), requestContext, connectionID, ws))
+			h.serveConnection(newWebSocketConnection(h.server.context(), request.Context(), connectionID, websocketConn))
 		} else {
 			// Already initiated
-			_ = ws.WriteClose(409) // Bad request
-			// TODO Test client and server reaction (should we call c.cancel()?)
+			_ = websocketConn.WriteControl(websocket.CloseMessage,
+				websocket.FormatCloseMessage(409, "Bad request"),
+				time.Now().Add(h.server.timeout()))
 		}
 	} else {
-		_ = ws.WriteClose(404) // Not found
-		// TODO Test client and server reaction (should we call c.cancel()?)
+		_ = websocketConn.WriteControl(websocket.CloseMessage,
+			websocket.FormatCloseMessage(404, "Not found"),
+			time.Now().Add(h.server.timeout()))
 	}
-
 }
 
 func (h *httpMux) negotiate(w http.ResponseWriter, req *http.Request) {

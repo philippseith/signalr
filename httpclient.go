@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"golang.org/x/net/websocket"
+	"github.com/gorilla/websocket"
 	"io/ioutil"
 	"net/http"
 	"net/url"
@@ -46,7 +46,7 @@ func NewHTTPClient(ctx context.Context, address string, options ...func(Party) e
 	} else if formats = nr.getTransferFormats("WebSockets"); formats != nil {
 		wsURL := reqURL
 		wsURL.Scheme = "ws"
-		ws, err := websocket.Dial(wsURL.String(), "", "http://localhost")
+		ws, _, err := websocket.DefaultDialer.DialContext(ctx, wsURL.String(), nil)
 		if err != nil {
 			return nil, err
 		}

@@ -7,9 +7,9 @@ import (
 	"fmt"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
+	"github.com/gorilla/websocket"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	"golang.org/x/net/websocket"
 	"io/ioutil"
 	"net"
 	"net/http"
@@ -208,7 +208,7 @@ func handShakeAndCallWebSocketTestServer(port int, connectionID string) {
 	if connectionID != "" {
 		urlParam = fmt.Sprintf("?id=%v", connectionID)
 	}
-	ws, err := websocket.Dial(fmt.Sprintf("ws://127.0.0.1:%v/hub%v", port, urlParam), "json", "http://127.0.0.1")
+	ws, _, err := websocket.DefaultDialer.Dial(fmt.Sprintf("ws://127.0.0.1:%v/hub%v", port, urlParam), nil)
 	Expect(err).To(BeNil())
 	defer func() {
 		_ = ws.Close()
