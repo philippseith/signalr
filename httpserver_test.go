@@ -7,12 +7,12 @@ import (
 	"fmt"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
-	"github.com/gorilla/websocket"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"io/ioutil"
 	"net"
 	"net/http"
+	"nhooyr.io/websocket"
 	"os"
 	"strings"
 	"time"
@@ -208,10 +208,10 @@ func handShakeAndCallWebSocketTestServer(port int, connectionID string) {
 	if connectionID != "" {
 		urlParam = fmt.Sprintf("?id=%v", connectionID)
 	}
-	ws, _, err := websocket.DefaultDialer.Dial(fmt.Sprintf("ws://127.0.0.1:%v/hub%v", port, urlParam), nil)
+	ws, _, err := websocket.Dial(context.Background(), fmt.Sprintf("ws://127.0.0.1:%v/hub%v", port, urlParam), nil)
 	Expect(err).To(BeNil())
 	defer func() {
-		_ = ws.Close()
+		_ = ws.Close(websocket.StatusNormalClosure, "")
 	}()
 	wsConn := newWebSocketConnection(context.TODO(), context.TODO(), connectionID, ws)
 	cliConn := newHubConnection(wsConn, &protocol, 1<<15, log.NewLogfmtLogger(os.Stderr))

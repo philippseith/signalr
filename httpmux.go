@@ -5,11 +5,10 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"github.com/gorilla/websocket"
 	"net/http"
+	"nhooyr.io/websocket"
 	"strings"
 	"sync"
-	"time"
 )
 
 type httpMux struct {
@@ -113,8 +112,7 @@ func (h *httpMux) handleServerSentEvent(writer http.ResponseWriter, request *htt
 }
 
 func (h *httpMux) handleWebsocket(writer http.ResponseWriter, request *http.Request) {
-	upgrader := websocket.Upgrader{}
-	websocketConn, err := upgrader.Upgrade(writer, request, nil)
+	websocketConn, err := websocket.Accept(writer, request, nil)
 	if err != nil {
 		writer.WriteHeader(400) // Bad request
 		return
@@ -136,14 +134,11 @@ func (h *httpMux) handleWebsocket(writer http.ResponseWriter, request *http.Requ
 			h.serveConnection(newWebSocketConnection(h.server.context(), request.Context(), connectionID, websocketConn))
 		} else {
 			// Already initiated
-			_ = websocketConn.WriteControl(websocket.CloseMessage,
-				websocket.FormatCloseMessage(409, "Bad request"),
-				time.Now().Add(h.server.timeout()))
+			_ = websocketConn.Close(409, "Bad request")
 		}
 	} else {
-		_ = websocketConn.WriteControl(websocket.CloseMessage,
-			websocket.FormatCloseMessage(404, "Not found"),
-			time.Now().Add(h.server.timeout()))
+		// Not negotiated
+		_ = websocketConn.Close(404, "Not found")
 	}
 }
 

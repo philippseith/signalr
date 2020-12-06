@@ -3,17 +3,14 @@ package signalr
 import (
 	"bytes"
 	"context"
-	"github.com/gorilla/websocket"
 	"github.com/rotisserie/eris"
 	"github.com/teivah/onecontext"
-	"sync"
-	"time"
+	"nhooyr.io/websocket"
 )
 
 type webSocketConnection struct {
 	baseConnection
-	conn    *websocket.Conn
-	writeMx sync.Mutex
+	conn *websocket.Conn
 }
 
 func newWebSocketConnection(parentContext context.Context, requestContext context.Context, connectionID string, conn *websocket.Conn) *webSocketConnection {
@@ -25,10 +22,6 @@ func newWebSocketConnection(parentContext context.Context, requestContext contex
 			connectionID: connectionID,
 		},
 	}
-	go func() {
-		<-ctx.Done()
-		_ = conn.Close()
-	}()
 	return w
 }
 
@@ -36,13 +29,13 @@ func (w *webSocketConnection) Write(p []byte) (n int, err error) {
 	if err := w.Context().Err(); err != nil {
 		return 0, eris.Wrap(err, "webSocketConnection canceled")
 	}
+	ctx := w.ctx
 	if w.timeout > 0 {
-		defer func() { _ = w.conn.SetWriteDeadline(time.Time{}) }()
-		_ = w.conn.SetWriteDeadline(time.Now().Add(w.Timeout()))
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(w.ctx, w.Timeout())
+		defer cancel() // has no effect because timeoutCtx is either done or not used anymore after websocket returns. But it keeps lint quiet
 	}
-	w.writeMx.Lock()
-	err = w.conn.WriteMessage(websocket.TextMessage, p)
-	w.writeMx.Unlock()
+	err = w.conn.Write(ctx, websocket.MessageText, p)
 	if err != nil {
 		return 0, err
 	}
@@ -53,11 +46,13 @@ func (w *webSocketConnection) Read(p []byte) (n int, err error) {
 	if err := w.Context().Err(); err != nil {
 		return 0, eris.Wrap(err, "webSocketConnection canceled")
 	}
+	ctx := w.ctx
 	if w.timeout > 0 {
-		defer func() { _ = w.conn.SetReadDeadline(time.Time{}) }()
-		_ = w.conn.SetReadDeadline(time.Now().Add(w.Timeout()))
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(w.ctx, w.Timeout())
+		defer cancel() // has no effect because timeoutCtx is either done or not used anymore after websocket returns. But it keeps lint quiet
 	}
-	_, data, err := w.conn.ReadMessage()
+	_, data, err := w.conn.Read(ctx)
 	if err != nil {
 		return 0, err
 	}

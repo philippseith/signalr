@@ -4,10 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/gorilla/websocket"
 	"io/ioutil"
 	"net/http"
 	"net/url"
+	"nhooyr.io/websocket"
 )
 
 // NewHTTPClient creates a signalR Client using the websocket transport
@@ -46,7 +46,7 @@ func NewHTTPClient(ctx context.Context, address string, options ...func(Party) e
 	} else if formats = nr.getTransferFormats("WebSockets"); formats != nil {
 		wsURL := reqURL
 		wsURL.Scheme = "ws"
-		ws, _, err := websocket.DefaultDialer.DialContext(ctx, wsURL.String(), nil)
+		ws, _, err := websocket.Dial(ctx, wsURL.String(), nil)
 		if err != nil {
 			return nil, err
 		}
