@@ -3,7 +3,7 @@ package signalr
 import (
 	"context"
 	"errors"
-	"github.com/rotisserie/eris"
+	"fmt"
 	"github.com/teivah/onecontext"
 	"io"
 	"io/ioutil"
@@ -72,14 +72,14 @@ func (s *serverSSEConnection) consumeRequest(request *http.Request) int {
 
 func (s *serverSSEConnection) Read(p []byte) (n int, err error) {
 	if err := s.Context().Err(); err != nil {
-		return 0, eris.Wrap(err, "serverSSEConnection canceled")
+		return 0, fmt.Errorf("serverSSEConnection canceled: %w", s.ctx.Err())
 	}
 	return s.postReader.Read(p)
 }
 
 func (s *serverSSEConnection) Write(p []byte) (n int, err error) {
 	if err := s.Context().Err(); err != nil {
-		return 0, eris.Wrap(err, "serverSSEConnection canceled")
+		return 0, fmt.Errorf("serverSSEConnection canceled: %w", s.ctx.Err())
 	}
 	payload := ""
 	for _, line := range strings.Split(strings.TrimRight(string(p), "\n"), "\n") {
