@@ -314,10 +314,11 @@ var _ = Describe("Server options", func() {
 					select {
 					case m := <-hmc:
 						Expect(strings.TrimRight(m.(string), "\n")).To(Equal("{\"type\":6}"))
-					case <-time.After(300 * time.Millisecond):
+					case <-time.After(600 * time.Millisecond):
 						Fail("timed out")
 					}
 				}
+				server.cancel()
 				close(done)
 			}, 2.0)
 		})
