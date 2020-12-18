@@ -1,9 +1,9 @@
 /*
 package signalr contains a signalr client and a signalr server.
-(see https://github.com/dotnet/aspnetcore/blob/master/src/SignalR/docs/specs/HubProtocol.md)
-Both support the signalr transport types Websockets and Server-Sent Events
-(see https://github.com/dotnet/aspnetcore/blob/master/src/SignalR/docs/specs/TransportProtocols.md)
-and the transfer format Text (JSON). Rudimentary support for binary transfer format (MessagePack) is available.
+Both support the signalr transport types Websockets and Server-Sent Events and the transfer format Text (JSON).
+Rudimentary support for binary transfer format (MessagePack) is available.
+For a deeper understanding of signalr see https://github.com/dotnet/aspnetcore/blob/master/src/SignalR/docs/specs/HubProtocol.md
+and https://github.com/dotnet/aspnetcore/blob/master/src/SignalR/docs/specs/TransportProtocols.md
 
 Basics
 
