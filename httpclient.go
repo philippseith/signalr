@@ -10,7 +10,7 @@ import (
 	"nhooyr.io/websocket"
 )
 
-// NewHTTPClient creates a signalR Client using the websocket transport
+// NewHTTPClient creates a signalR Client which tries to connect over http to the given address
 func NewHTTPClient(ctx context.Context, address string, options ...func(Party) error) (Client, error) {
 	req, err := http.NewRequest("POST", fmt.Sprintf("%v/negotiate", address), nil)
 	if err != nil {

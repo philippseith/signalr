@@ -279,7 +279,6 @@ func (m *messagePackHubProtocol) setDebugLogger(dbg StructuredLogger) {
 
 // UnmarshalArgument copies the value of a basic type to another basic type.
 // dst must be a pointer to the destination instance.
-// Copying string to numeric supports the numeric display types supported by strconv.ParseInt()
 func (m *messagePackHubProtocol) UnmarshalArgument(src, dst interface{}) error {
 	switch s := src.(type) {
 	case float32:

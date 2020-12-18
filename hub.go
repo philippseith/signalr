@@ -37,7 +37,7 @@ func (h *Hub) Items() *sync.Map {
 	return h.context.Items()
 }
 
-// Logger returns the logger used in this server
+// Logger returns the loggers used in this server. By this, derived hubs can use the same loggers as the server.
 func (h *Hub) Logger() (info StructuredLogger, dbg StructuredLogger) {
 	return h.context.Logger()
 }
