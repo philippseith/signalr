@@ -72,12 +72,12 @@ func (c *contextHub) Abort() {
 
 var hubContextInvocationQueue = make(chan string, 10)
 
-func connectMany() []*testingConnection {
+func connectMany() (Server, []*testingConnection) {
 	server, err := NewServer(context.TODO(), SimpleHubFactory(&contextHub{}),
 		Logger(log.NewLogfmtLogger(os.Stderr), false))
 	if err != nil {
 		Fail(err.Error())
-		return nil
+		return nil, nil
 	}
 	conns := make([]*testingConnection, 3)
 	for i := 0; i < 3; i++ {
@@ -87,13 +87,22 @@ func connectMany() []*testingConnection {
 		<-hubContextOnConnectMsg
 	}
 
-	return conns
+	return server, conns
 }
 
 var _ = Describe("HubContext", func() {
+	var server Server
+	var conns []*testingConnection
+	BeforeEach(func(done Done) {
+		server, conns = connectMany()
+		close(done)
+	})
+	AfterEach(func(done Done) {
+		server.cancel()
+		close(done)
+	})
 	Context("Clients().All()", func() {
 		It("should invoke all clients", func(didIt Done) {
-			conns := connectMany()
 			conns[0].ClientSend(`{"type":1,"invocationId": "123","target":"callall"}`)
 			callCount := make(chan int, 1)
 			callCount <- 0
@@ -128,7 +137,6 @@ var _ = Describe("HubContext", func() {
 
 	Context("Clients().Caller()", func() {
 		It("should invoke only the caller", func(didIt Done) {
-			conns := connectMany()
 			conns[0].ClientSend(`{"type":1,"invocationId": "123","target":"callcaller"}`)
 			done := make(chan bool)
 			callCount := make(chan int, 1)
@@ -167,7 +175,6 @@ var _ = Describe("HubContext", func() {
 
 	Context("Clients().Client()", func() {
 		It("should invoke only the client which was addressed", func(didIt Done) {
-			conns := connectMany()
 			conns[0].ClientSend(fmt.Sprintf(`{"type":1,"invocationId": "123","target":"callclient","arguments":["%v"]}`, conns[2].ConnectionID()))
 			done := make(chan bool)
 			go func(conns []*testingConnection) {
@@ -208,7 +215,6 @@ var _ = Describe("HubContext", func() {
 
 	Context("Clients().Group()", func() {
 		It("should invoke only the clients in the group", func(ditIt Done) {
-			conns := connectMany()
 			conns[0].ClientSend(fmt.Sprintf(`{"type":1,"invocationId": "123","target":"buildgroup","arguments":["%v","%v"]}`, conns[1].ConnectionID(), conns[2].ConnectionID()))
 			<-hubContextInvocationQueue
 			<-conns[0].received
@@ -250,7 +256,6 @@ var _ = Describe("HubContext", func() {
 
 	Context("RemoveFromGroup should remove clients from the group", func() {
 		It("should invoke only the clients in the group", func(ditIt Done) {
-			conns := connectMany()
 			conns[0].ClientSend(fmt.Sprintf(`{"type":1,"invocationId": "123","target":"buildgroup","arguments":["%v","%v"]}`, conns[1].ConnectionID(), conns[2].ConnectionID()))
 			Expect(<-hubContextInvocationQueue).To(Equal("BuildGroup()"))
 			<-conns[0].received
@@ -298,7 +303,6 @@ var _ = Describe("HubContext", func() {
 
 	Context("Items()", func() {
 		It("should hold Items connection wise", func(done Done) {
-			conns := connectMany()
 			conns[0].ClientSend(`{"type":1,"invocationId": "123","target":"additem","arguments":["first",1]}`)
 			// Wait for execution
 			Expect(<-hubContextInvocationQueue).To(Equal("AddItem()"))
@@ -320,41 +324,49 @@ var _ = Describe("HubContext", func() {
 			close(done)
 		}, 2.0)
 	})
+})
 
-	Context("Abort()", func() {
-		It("should abort the connection of the current caller", func(done Done) {
-			conn0 := connect(&contextHub{})
-			conn1 := connect(&contextHub{})
-			conn0.ClientSend(`{"type":1,"invocationId": "ab0ab0","target":"abort"}`)
-			// Wait for execution
-			Expect(<-hubContextInvocationQueue).To(Equal("Abort()"))
-			// We get the completion and the close message, the order depends on server timing
-			msg := <-conn0.received
-			_, isClose := msg.(closeMessage)
-			Expect(isClose).To(Equal(true))
-			// This connection should not work anymore
-			conn0.ClientSend(`{"type":1,"invocationId": "ab123","target":"additem","arguments":["first",2]}`)
-			select {
-			case <-conn0.received:
-				Fail("closed connection still receives messages")
-			case <-time.After(10 * time.Millisecond):
-				// OK
-			}
-			// Other connections should still work
-			conn1.ClientSend(`{"type":1,"invocationId": "ab123","target":"additem","arguments":["first",2]}`)
-			// Wait for execution
-			Expect(<-hubContextInvocationQueue).To(Equal("AddItem()"))
-			// Read completion
-			<-conn1.received
-			conn1.ClientSend(`{"type":1,"invocationId": "ab123","target":"getitem","arguments":["first"]}`)
-			// Wait for execution
-			Expect(<-hubContextInvocationQueue).To(Equal("GetItem()"))
-			msg = <-conn1.received
-			Expect(msg).To(BeAssignableToTypeOf(completionMessage{}))
-			Expect(msg.(completionMessage).Result).To(Equal(float64(2)))
-			close(done)
-		}, 2.0)
-	})
+var _ = Describe("Abort()", func() {
+	It("should abort the connection of the current caller", func(done Done) {
+		server, err := NewServer(context.TODO(), SimpleHubFactory(&contextHub{}),
+			Logger(log.NewLogfmtLogger(os.Stderr), false),
+			ChanReceiveTimeout(200*time.Millisecond),
+			StreamBufferCapacity(5))
+		Expect(err).NotTo(HaveOccurred())
+		conn0 := newTestingConnectionForServer()
+		go server.Serve(conn0)
+		conn1 := newTestingConnectionForServer()
+		go server.Serve(conn1)
+		conn0.ClientSend(`{"type":1,"invocationId": "ab0ab0","target":"abort"}`)
+		// Wait for execution
+		Expect(<-hubContextInvocationQueue).To(Equal("Abort()"))
+		// We get the completion and the close message, the order depends on server timing
+		msg := <-conn0.received
+		_, isClose := msg.(closeMessage)
+		Expect(isClose).To(Equal(true))
+		// This connection should not work anymore
+		conn0.ClientSend(`{"type":1,"invocationId": "ab123","target":"additem","arguments":["first",2]}`)
+		select {
+		case <-conn0.received:
+			Fail("closed connection still receives messages")
+		case <-time.After(10 * time.Millisecond):
+			// OK
+		}
+		// Other connections should still work
+		conn1.ClientSend(`{"type":1,"invocationId": "ab123","target":"additem","arguments":["first",2]}`)
+		// Wait for execution
+		Expect(<-hubContextInvocationQueue).To(Equal("AddItem()"))
+		// Read completion
+		<-conn1.received
+		conn1.ClientSend(`{"type":1,"invocationId": "ab123","target":"getitem","arguments":["first"]}`)
+		// Wait for execution
+		Expect(<-hubContextInvocationQueue).To(Equal("GetItem()"))
+		msg = <-conn1.received
+		Expect(msg).To(BeAssignableToTypeOf(completionMessage{}))
+		Expect(msg.(completionMessage).Result).To(Equal(float64(2)))
+		server.cancel()
+		close(done)
+	}, 2.0)
 })
 
 func expectInvocation(msg interface{}, callCount chan int, done chan bool, doneCount int) {

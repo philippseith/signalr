@@ -11,7 +11,6 @@ require (
 	github.com/mailru/easyjson v0.7.6
 	github.com/onsi/ginkgo v1.11.0
 	github.com/onsi/gomega v1.8.1
-	github.com/rotisserie/eris v0.4.1
 	github.com/teivah/onecontext v0.0.0-20200513185103-40f981bfd775
 	github.com/vmihailenco/msgpack/v5 v5.0.0-rc.5
 	golang.org/x/net v0.0.0-20201021035429-f5854403a974 // indirect

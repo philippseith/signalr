@@ -3,7 +3,6 @@ package signalr
 import (
 	"errors"
 	"fmt"
-	"github.com/rotisserie/eris"
 	"reflect"
 	"runtime/debug"
 	"strings"
@@ -101,8 +100,11 @@ msgLoop:
 				err = fmt.Errorf("client timeout interval elapsed (%v)", l.party.timeout())
 				break pingLoop
 			case <-l.hubConn.Context().Done():
-				err = eris.Wrap(l.hubConn.Context().Err(), "hubConnection canceled")
+				err = fmt.Errorf("breaking loop. hubConnection canceled: %w", l.hubConn.Context().Err())
 				break pingLoop
+				case <- l.party.context().Done():
+					err = fmt.Errorf("breaking loop. Party canceled: %w", l.party.context().Err())
+					break pingLoop
 			}
 		}
 		if err != nil {

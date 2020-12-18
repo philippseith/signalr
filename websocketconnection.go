@@ -3,7 +3,7 @@ package signalr
 import (
 	"bytes"
 	"context"
-	"github.com/rotisserie/eris"
+	"fmt"
 	"github.com/teivah/onecontext"
 	"nhooyr.io/websocket"
 )
@@ -27,7 +27,7 @@ func newWebSocketConnection(parentContext context.Context, requestContext contex
 
 func (w *webSocketConnection) Write(p []byte) (n int, err error) {
 	if err := w.Context().Err(); err != nil {
-		return 0, eris.Wrap(err, "webSocketConnection canceled")
+		return 0, fmt.Errorf("webSocketConnection canceled: %w", w.ctx.Err())
 	}
 	ctx := w.ctx
 	if w.timeout > 0 {
@@ -44,7 +44,7 @@ func (w *webSocketConnection) Write(p []byte) (n int, err error) {
 
 func (w *webSocketConnection) Read(p []byte) (n int, err error) {
 	if err := w.Context().Err(); err != nil {
-		return 0, eris.Wrap(err, "webSocketConnection canceled")
+		return 0, fmt.Errorf("webSocketConnection canceled: %w", w.ctx.Err())
 	}
 	ctx := w.ctx
 	if w.timeout > 0 {

@@ -11,9 +11,18 @@ import (
 var _ = Describe("Connection", func() {
 
 	Describe("Connection closed", func() {
+		var server Server
+		var conn *testingConnection
+		BeforeEach(func(done Done) {
+			server, conn = connect(&Hub{})
+			close(done)
+		})
+		AfterEach(func(done Done) {
+			server.cancel()
+			close(done)
+		})
 		Context("When the connection is closed", func() {
 			It("should close the connection and not answer an invocation", func(done Done) {
-				conn := connect(&Hub{})
 				conn.ClientSend(`{"type":7}`)
 				conn.ClientSend(`{"type":1,"invocationId": "123","target":"unknownFunc"}`)
 				// When the connection is closed, the server should either send a closeMessage or nothing at all
@@ -27,7 +36,6 @@ var _ = Describe("Connection", func() {
 		})
 		Context("When the connection is closed with an invalid close message", func() {
 			It("should close the connection and should not answer an invocation", func(done Done) {
-				conn := connect(&Hub{})
 				conn.ClientSend(`{"type":7,"error":1}`)
 				conn.ClientSend(`{"type":1,"invocationId": "123","target":"unknownFunc"}`)
 				// When the connection is closed, the server should either send a closeMessage or nothing at all
@@ -43,11 +51,19 @@ var _ = Describe("Connection", func() {
 })
 
 var _ = Describe("Protocol", func() {
-
+	var server Server
+	var conn *testingConnection
+	BeforeEach(func(done Done) {
+		server, conn = connect(&Hub{})
+		close(done)
+	})
+	AfterEach(func(done Done) {
+		server.cancel()
+		close(done)
+	})
 	Describe("Invalid messages", func() {
 		Context("When a message with invalid id is sent", func() {
 			It("should close the connection with an error", func(done Done) {
-				conn := connect(&Hub{})
 				conn.ClientSend(`{"type":99}`)
 				select {
 				case message := <-conn.received:
@@ -64,7 +80,6 @@ var _ = Describe("Protocol", func() {
 	Describe("Ping", func() {
 		Context("When a ping is received", func() {
 			It("should ignore it", func(done Done) {
-				conn := connect(&Hub{})
 				conn.ClientSend(`{"type":6}`)
 				select {
 				case <-conn.received:
@@ -88,12 +103,20 @@ func (h *handshakeHub) Shake() {
 var shakeQueue = make(chan string, 10)
 
 var _ = Describe("Handshake", func() {
-
+	var server Server
+	var conn *testingConnection
+	BeforeEach(func(done Done) {
+		server, _ = NewServer(context.TODO(), SimpleHubFactory(&handshakeHub{}))
+		conn = newTestingConnection()
+		go server.Serve(conn)
+		close(done)
+	})
+	AfterEach(func(done Done) {
+		server.cancel()
+		close(done)
+	})
 	Context("When the handshake is sent as one message to the server", func() {
 		It("should be connected", func(done Done) {
-			server, _ := NewServer(context.TODO(), SimpleHubFactory(&handshakeHub{}))
-			conn := newTestingConnection()
-			go server.Serve(conn)
 			conn.ClientSend(`{"protocol": "json","version": 1}`)
 			conn.ClientSend(`{"type":1,"invocationId": "123A","target":"shake"}`)
 			Expect(<-shakeQueue).To(Equal("Shake()"))
@@ -102,9 +125,6 @@ var _ = Describe("Handshake", func() {
 	})
 	Context("When the handshake is sent as partial message to the server", func() {
 		It("should be connected", func(done Done) {
-			server, _ := NewServer(context.TODO(), SimpleHubFactory(&handshakeHub{}))
-			conn := newTestingConnection()
-			go server.Serve(conn)
 			_, _ = conn.cliWriter.Write([]byte(`{"protocol"`))
 			conn.ClientSend(`: "json","version": 1}`)
 			conn.ClientSend(`{"type":1,"invocationId": "123B","target":"shake"}`)
@@ -114,9 +134,6 @@ var _ = Describe("Handshake", func() {
 	})
 	Context("When an invalid handshake is sent as partial message to the server", func() {
 		It("should not be connected", func(done Done) {
-			server, _ := NewServer(context.TODO(), SimpleHubFactory(&handshakeHub{}))
-			conn := newTestingConnection()
-			go server.Serve(conn)
 			_, _ = conn.cliWriter.Write([]byte(`{"protocol"`))
 			// Opening curly brace is invalid
 			conn.ClientSend(`{: "json","version": 1}`)
@@ -131,9 +148,6 @@ var _ = Describe("Handshake", func() {
 	})
 	Context("When a handshake is sent with an unsupported protocol", func() {
 		It("should return an error handshake response and be not connected", func(done Done) {
-			server, _ := NewServer(context.TODO(), SimpleHubFactory(&handshakeHub{}))
-			conn := newTestingConnection()
-			go server.Serve(conn)
 			conn.ClientSend(`{"protocol": "bson","version": 1}`)
 			response, err := conn.ClientReceive()
 			Expect(err).To(BeNil())
@@ -153,9 +167,6 @@ var _ = Describe("Handshake", func() {
 	})
 	Context("When the connection fails before the server can receive handshake request", func() {
 		It("should not be connected", func(done Done) {
-			server, _ := NewServer(context.TODO(), SimpleHubFactory(&handshakeHub{}))
-			conn := newTestingConnection()
-			go server.Serve(conn)
 			conn.SetFailRead("failed read in handshake")
 			conn.ClientSend(`{"protocol": "json","version": 1}`)
 			conn.ClientSend(`{"type":1,"invocationId": "123E","target":"shake"}`)
@@ -169,9 +180,6 @@ var _ = Describe("Handshake", func() {
 	})
 	Context("When the handshake is received by the server but the connection fails when the response should be sent ", func() {
 		It("should not be connected", func(done Done) {
-			server, _ := NewServer(context.TODO(), SimpleHubFactory(&handshakeHub{}))
-			conn := newTestingConnection()
-			go server.Serve(conn)
 			conn.SetFailWrite("failed write in handshake")
 			conn.ClientSend(`{"protocol": "json","version": 1}`)
 			conn.ClientSend(`{"type":1,"invocationId": "123F","target":"shake"}`)
@@ -185,9 +193,6 @@ var _ = Describe("Handshake", func() {
 	})
 	Context("When the handshake with an unsupported protocol is received by the server but the connection fails when the response should be sent ", func() {
 		It("should not be connected", func(done Done) {
-			server, _ := NewServer(context.TODO(), SimpleHubFactory(&handshakeHub{}))
-			conn := newTestingConnection()
-			go server.Serve(conn)
 			conn.SetFailWrite("failed write in handshake")
 			conn.ClientSend(`{"protocol": "bson","version": 1}`)
 			conn.ClientSend(`{"type":1,"invocationId": "123G","target":"shake"}`)
@@ -212,7 +217,8 @@ var _ = Describe("Handshake", func() {
 				Fail("server connected with fail before handshake")
 			case <-time.After(100 * time.Millisecond):
 			}
+			server.cancel()
 			close(done)
-		})
+		}, 2.0)
 	})
 })

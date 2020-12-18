@@ -58,9 +58,18 @@ func (i *invocationHub) Panic() {
 var _ = Describe("Invocation", func() {
 
 	Describe("Simple invocation", func() {
+		var server Server
+		var conn *testingConnection
+		BeforeEach(func(done Done) {
+			server, conn = connect(&invocationHub{})
+			close(done)
+		})
+		AfterEach(func(done Done) {
+			server.cancel()
+			close(done)
+		})
 		Context("When invoked by the client", func() {
 			It("should be invoked and return a completion", func(done Done) {
-				conn := connect(&invocationHub{})
 				conn.ClientSend(`{"type":1,"invocationId": "123","target":"simple"}`)
 				Expect(<-invocationQueue).To(Equal("Simple()"))
 				recv := (<-conn.received).(completionMessage)
@@ -73,7 +82,6 @@ var _ = Describe("Invocation", func() {
 		})
 		Context("When invoked by the client two times in one frame", func() {
 			It("should be invoked and return a completion", func(done Done) {
-				conn := connect(&invocationHub{})
 				conn.ClientSend(`{"type":1,"invocationId": "123","target":"simple"}`)
 				conn.ClientSend(`{"type":1,"invocationId": "123","target":"simple"}`)
 				Expect(<-invocationQueue).To(Equal("Simple()"))
@@ -89,9 +97,18 @@ var _ = Describe("Invocation", func() {
 	})
 
 	Describe("Non blocking invocation", func() {
+		var server Server
+		var conn *testingConnection
+		BeforeEach(func(done Done) {
+			server, conn = connect(&invocationHub{})
+			close(done)
+		})
+		AfterEach(func(done Done) {
+			server.cancel()
+			close(done)
+		})
 		Context("When invoked by the client", func() {
 			It("should be invoked and return no completion", func(done Done) {
-				conn := connect(&invocationHub{})
 				conn.ClientSend(`{"type":1,"target":"simple"}`)
 				Expect(<-invocationQueue).To(Equal("Simple()"))
 				select {
@@ -107,9 +124,18 @@ var _ = Describe("Invocation", func() {
 	})
 
 	Describe("Invalid invocation", func() {
+		var server Server
+		var conn *testingConnection
+		BeforeEach(func(done Done) {
+			server, conn = connect(&invocationHub{})
+			close(done)
+		})
+		AfterEach(func(done Done) {
+			server.cancel()
+			close(done)
+		})
 		Context("When an invalid invocation message is sent", func() {
 			It("close the connection with error", func(done Done) {
-				conn := connect(&invocationHub{})
 				// Invalid. invocationId should be a string
 				conn.ClientSend(`{"type":1,"invocationId":1}`)
 				select {
@@ -125,9 +151,18 @@ var _ = Describe("Invocation", func() {
 	})
 
 	Describe("Invalid json", func() {
+		var server Server
+		var conn *testingConnection
+		BeforeEach(func(done Done) {
+			server, conn = connect(&invocationHub{})
+			close(done)
+		})
+		AfterEach(func(done Done) {
+			server.cancel()
+			close(done)
+		})
 		Context("when invalid json is received", func() {
 			It("should close the connection with an error", func(done Done) {
-				conn := connect(&invocationHub{})
 				conn.ClientSend(`{"type":1,"invocationId": "4444","target":"simpleint", arguments[CanNotParse]}`)
 				select {
 				case message := <-conn.received:
@@ -142,9 +177,18 @@ var _ = Describe("Invocation", func() {
 	})
 
 	Describe("SimpleInt invocation", func() {
+		var server Server
+		var conn *testingConnection
+		BeforeEach(func(done Done) {
+			server, conn = connect(&invocationHub{})
+			close(done)
+		})
+		AfterEach(func(done Done) {
+			server.cancel()
+			close(done)
+		})
 		Context("When invoked by the client", func() {
 			It("should be invoked on the server, get an int and return an int", func(done Done) {
-				conn := connect(&invocationHub{})
 				var value = 314
 				conn.ClientSend(fmt.Sprintf(
 					`{"type":1,"invocationId": "666","target":"simpleint","arguments":[%v]}`, value))
@@ -160,9 +204,18 @@ var _ = Describe("Invocation", func() {
 	})
 
 	Describe("SimpleInt invocation with invalid argument", func() {
+		var server Server
+		var conn *testingConnection
+		BeforeEach(func(done Done) {
+			server, conn = connect(&invocationHub{})
+			close(done)
+		})
+		AfterEach(func(done Done) {
+			server.cancel()
+			close(done)
+		})
 		Context("When invoked by the client with an invalid argument", func() {
 			It("should not be invoked on the server and return an error", func(done Done) {
-				conn := connect(&invocationHub{})
 				conn.ClientSend(
 					`{"type":1,"invocationId": "555","target":"simpleint","arguments":["CantParse"]}`)
 				recv := (<-conn.received).(completionMessage)
@@ -175,9 +228,18 @@ var _ = Describe("Invocation", func() {
 	})
 
 	Describe("SimpleFloat invocation", func() {
+		var server Server
+		var conn *testingConnection
+		BeforeEach(func(done Done) {
+			server, conn = connect(&invocationHub{})
+			close(done)
+		})
+		AfterEach(func(done Done) {
+			server.cancel()
+			close(done)
+		})
 		Context("When invoked by the client", func() {
 			It("should be invoked on the server, get a float and return a two floats", func(done Done) {
-				conn := connect(&invocationHub{})
 				var value = 3.1415
 				conn.ClientSend(fmt.Sprintf(
 					`{"type":1,"invocationId": "8087","target":"simplefloat","arguments":[%v]}`, value))
@@ -193,9 +255,18 @@ var _ = Describe("Invocation", func() {
 	})
 
 	Describe("SimpleString invocation", func() {
+		var server Server
+		var conn *testingConnection
+		BeforeEach(func(done Done) {
+			server, conn = connect(&invocationHub{})
+			close(done)
+		})
+		AfterEach(func(done Done) {
+			server.cancel()
+			close(done)
+		})
 		Context("When invoked by the client", func() {
 			It("should be invoked on the server, get two strings and return a string", func(done Done) {
-				conn := connect(&invocationHub{})
 				value1 := "Camel"
 				value2 := "Cased"
 				conn.ClientSend(fmt.Sprintf(
@@ -212,9 +283,18 @@ var _ = Describe("Invocation", func() {
 	})
 
 	Describe("Async invocation", func() {
+		var server Server
+		var conn *testingConnection
+		BeforeEach(func(done Done) {
+			server, conn = connect(&invocationHub{})
+			close(done)
+		})
+		AfterEach(func(done Done) {
+			server.cancel()
+			close(done)
+		})
 		Context("When invoked by the client", func() {
 			It("should be invoked on the server and return true asynchronously", func(done Done) {
-				conn := connect(&invocationHub{})
 				conn.ClientSend(`{"type":1,"invocationId": "mfg","target":"async"}`)
 				Expect(<-invocationQueue).To(Equal("Async()"))
 				recv := (<-conn.received).(completionMessage)
@@ -228,9 +308,18 @@ var _ = Describe("Invocation", func() {
 	})
 
 	Describe("Async invocation with buggy server method which returns a closed channel", func() {
+		var server Server
+		var conn *testingConnection
+		BeforeEach(func(done Done) {
+			server, conn = connect(&invocationHub{})
+			close(done)
+		})
+		AfterEach(func(done Done) {
+			server.cancel()
+			close(done)
+		})
 		Context("When invoked by the client", func() {
 			It("should be invoked on the server and return an error", func(done Done) {
-				conn := connect(&invocationHub{})
 				conn.ClientSend(`{"type":1,"invocationId": "ouch","target":"asyncclosedchan"}`)
 				Expect(<-invocationQueue).To(Equal("AsyncClosedChan()"))
 				recv := (<-conn.received).(completionMessage)
@@ -243,10 +332,19 @@ var _ = Describe("Invocation", func() {
 		})
 	})
 
-	Describe("Panic in invoked func", func() {
+	Describe("Panic in invoked func", func() {var server Server
+		var conn *testingConnection
+		BeforeEach(func(done Done) {
+			server, conn = connect(&invocationHub{})
+			close(done)
+		})
+		AfterEach(func(done Done) {
+			server.cancel()
+			close(done)
+		})
+
 		Context("When a func is invoked by the client and panics", func() {
 			It("should be invoked on the server and return an error but no result", func(done Done) {
-				conn := connect(&invocationHub{})
 				conn.ClientSend(`{"type":1,"invocationId": "???","target":"panic"}`)
 				Expect(<-invocationQueue).To(Equal("Panic()"))
 				recv := (<-conn.received).(completionMessage)
@@ -260,9 +358,18 @@ var _ = Describe("Invocation", func() {
 	})
 
 	Describe("Missing method invocation", func() {
+		var server Server
+		var conn *testingConnection
+		BeforeEach(func(done Done) {
+			server, conn = connect(&invocationHub{})
+			close(done)
+		})
+		AfterEach(func(done Done) {
+			server.cancel()
+			close(done)
+		})
 		Context("When a missing server method invoked by the client", func() {
 			It("should return an error", func(done Done) {
-				conn := connect(&invocationHub{})
 				conn.ClientSend(`{"type":1,"invocationId": "0000","target":"missing"}`)
 				recv := (<-conn.received).(completionMessage)
 				Expect(recv).NotTo(BeNil())
