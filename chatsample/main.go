@@ -114,7 +114,7 @@ func (c *chat) UploadStream(upload1 <-chan int, factor float64, upload2 <-chan f
 //			break
 //		}
 //
-//		go server.MapConnection(context.TODO(), newNetConnection(conn))
+//		go server.Serve(context.TODO(), newNetConnection(conn))
 //	}
 //}
 

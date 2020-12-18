@@ -82,7 +82,7 @@ func connectMany() []*testingConnection {
 	conns := make([]*testingConnection, 3)
 	for i := 0; i < 3; i++ {
 		conns[i] = newTestingConnectionForServer()
-		go server.MapConnection(conns[i])
+		go server.Serve(conns[i])
 		// Ensure to return all connection with connected hubs
 		<-hubContextOnConnectMsg
 	}

@@ -23,12 +23,14 @@ import (
 // 	MapHTTP(mux *http.ServeMux, path string)
 // maps the servers hub to an path on an http.ServeMux.
 //
-// 	MapConnection(conn Connection)]
-// maps its hub on one connection. The same server might serve different connections in parallel.
+// 	Serve(conn Connection)
+// serves the hub of the server on one connection.
+// The same server might serve different connections in parallel. Serve does not return until the connection is closed
+// or the servers context is canceled.
 type Server interface {
 	Party
 	MapHTTP(mux *http.ServeMux, path string)
-	MapConnection(conn Connection)
+	Serve(conn Connection)
 	availableTransports() []string
 }
 
@@ -75,15 +77,17 @@ func NewServer(ctx context.Context, options ...func(Party) error) (Server, error
 	return server, nil
 }
 
-// MapHTTP maps the servers hub to an path on an http.ServeMux
+// MapHTTP maps the servers hub to an path in an http.ServeMux
 func (s *server) MapHTTP(mux *http.ServeMux, path string) {
 	httpMux := newHTTPMux(s)
 	mux.HandleFunc(fmt.Sprintf("%s/negotiate", path), httpMux.negotiate)
 	mux.Handle(path, httpMux)
 }
 
-// MapConnection maps its hub on one connection. The same server might serve different connections in parallel
-func (s *server) MapConnection(conn Connection) {
+// Serve serves the hub of the server on one connection.
+// The same server might serve different connections in parallel. Serve does not return until the connection is closed
+// or the servers context is canceled.
+func (s *server) Serve(conn Connection) {
 	if protocol, err := s.processHandshake(conn); err != nil {
 		info, _ := s.prefixLoggers("")
 		_ = info.Log(evt, "processHandshake", "connectionId", conn.ConnectionID(), "error", err, react, "do not connect")

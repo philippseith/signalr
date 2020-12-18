@@ -125,7 +125,7 @@ var _ = Describe("Client", func() {
 			// Create both ends of the connection
 			cliConn, srvConn := newClientServerConnections()
 			// Start the server
-			go server.MapConnection(srvConn)
+			go server.Serve(srvConn)
 			// Create the Client
 			clientConn, err := NewClient(context.TODO(), cliConn, formatOption)
 			Expect(err).NotTo(HaveOccurred())
@@ -152,11 +152,10 @@ var _ = Describe("Client", func() {
 			// Create both ends of the connection
 			cliConn, srvConn = newClientServerConnections()
 			// Start the server
-			go server.MapConnection(srvConn)
+			go server.Serve(srvConn)
 			// Create the Client
 			client, _ = NewClient(context.TODO(), cliConn, Receiver(simpleReceiver{}), formatOption)
 			// Start it
-			client.SetReceiver(simpleReceiver{})
 			_ = client.Start()
 			close(done)
 		}, 2.0)
@@ -205,11 +204,10 @@ var _ = Describe("Client", func() {
 			// Create both ends of the connection
 			cliConn, srvConn = newClientServerConnections()
 			// Start the server
-			go server.MapConnection(srvConn)
+			go server.Serve(srvConn)
 			// Create the Client
 			client, _ = NewClient(context.TODO(), cliConn, Receiver(receiver), formatOption)
 			// Start it
-			client.SetReceiver(receiver)
 			_ = client.Start()
 			close(done)
 		}, 2.0)
@@ -285,10 +283,11 @@ var _ = Describe("Client", func() {
 			// Create both ends of the connection
 			cliConn, srvConn = newClientServerConnections()
 			// Start the server
-			go server.MapConnection(srvConn)
+			go server.Serve(srvConn)
 			// Create the Client
 			receiver := &simpleReceiver{}
 			client, _ = NewClient(context.TODO(), cliConn, Receiver(receiver), formatOption)
+			// Start it
 			_ = client.Start()
 			close(done)
 		}, 2.0)
@@ -351,10 +350,11 @@ var _ = Describe("Client", func() {
 			// Create both ends of the connection
 			cliConn, srvConn = newClientServerConnections()
 			// Start the server
-			go server.MapConnection(srvConn)
+			go server.Serve(srvConn)
 			// Create the Client
 			receiver := &simpleReceiver{}
 			client, _ = NewClient(context.TODO(), cliConn, Receiver(receiver), formatOption)
+			// Start it
 			_ = client.Start()
 			close(done)
 		}, 2.0)
