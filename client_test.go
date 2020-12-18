@@ -336,20 +336,6 @@ var _ = Describe("Client", func() {
 			close(done)
 		}, 2.0)
 	})
-	Context("GetConnectionID", func() {
-		It("should return distinct IDs", func(done Done) {
-			c, _ := NewClient(context.TODO(), nil)
-			cc := c.(*client)
-			ids := make(map[string]string)
-			for i := 1; i < 10000; i++ {
-				id := cc.GetNewID()
-				_, ok := ids[id]
-				Expect(ok).To(BeFalse())
-				ids[id] = id
-			}
-			close(done)
-		})
-	})
 	Context("PushStreams", func() {
 		var cliConn *pipeConnection
 		var srvConn *pipeConnection

@@ -24,8 +24,7 @@ type Client interface {
 	PushStreams(method string, arguments ...interface{}) <-chan error
 }
 
-// NewClient build a new Client.
-// conn is a transport connection.
+// NewClient builds a new Client.
 func NewClient(ctx context.Context, conn Connection, options ...func(Party) error) (Client, error) {
 	info, dbg := buildInfoDebugLogger(log.NewLogfmtLogger(os.Stderr), true)
 	c := &client{
@@ -82,7 +81,7 @@ func (c *client) Invoke(method string, arguments ...interface{}) <-chan InvokeRe
 	if ok, ch, _ := c.isLoopEnded(); ok {
 		return ch
 	}
-	id := c.GetNewID()
+	id := c.loop.GetNewID()
 	resultChan, errChan := c.loop.invokeClient.newInvocation(id)
 	ch := MakeInvokeResultChan(resultChan, errChan)
 	if err := c.loop.hubConn.SendInvocation(id, method, arguments); err != nil {
@@ -98,7 +97,7 @@ func (c *client) Send(method string, arguments ...interface{}) <-chan error {
 	if ok, _, ch := c.isLoopEnded(); ok {
 		return ch
 	}
-	id := c.GetNewID()
+	id := c.loop.GetNewID()
 	_, errChan := c.loop.invokeClient.newInvocation(id)
 	err := c.loop.hubConn.SendInvocation(id, method, arguments)
 	if err != nil {
@@ -112,58 +111,14 @@ func (c *client) PullStream(method string, arguments ...interface{}) <-chan Invo
 	if ok, ch, _ := c.isLoopEnded(); ok {
 		return ch
 	}
-	id := c.GetNewID()
-	_, errChan := c.loop.invokeClient.newInvocation(id)
-	upChan := c.loop.streamClient.newUpstreamChannel(id)
-	ch := MakeInvokeResultChan(upChan, errChan)
-	if err := c.loop.hubConn.SendStreamInvocation(id, method, arguments, nil); err != nil {
-		// When we get an error here, the loop is closed and the errChan might be already closed
-		// We create a new one to deliver our error
-		ch, _ = createResultChansWithError(err)
-		c.loop.streamClient.deleteUpstreamChannel(id)
-		c.loop.invokeClient.deleteInvocation(id)
-	}
-	return ch
+	return c.loop.PullStream(method, c.loop.GetNewID(), arguments...)
 }
 
 func (c *client) PushStreams(method string, arguments ...interface{}) <-chan error {
 	if ok, _, ch := c.isLoopEnded(); ok {
 		return ch
 	}
-	id := c.GetNewID()
-	_, errChan := c.loop.invokeClient.newInvocation(id)
-	invokeArgs := make([]interface{}, 0)
-	reflectedChannels := make([]reflect.Value, 0)
-	streamIds := make([]string, 0)
-	// Parse arguments for channels and other kind of arguments
-	for _, arg := range arguments {
-		if reflect.TypeOf(arg).Kind() == reflect.Chan {
-			reflectedChannels = append(reflectedChannels, reflect.ValueOf(arg))
-			streamIds = append(streamIds, c.GetNewID())
-		} else {
-			invokeArgs = append(invokeArgs, arg)
-		}
-	}
-	// Tell the server we are streaming now
-	if err := c.loop.hubConn.SendStreamInvocation(c.GetNewID(), method, invokeArgs, streamIds); err != nil {
-		// When we get an error here, the loop is closed and the errChan might be already closed
-		// We create a new one to deliver our error
-		_, errChan = createResultChansWithError(err)
-		c.loop.invokeClient.deleteInvocation(id)
-		return errChan
-	}
-	// Start streaming on all channels
-	for i, reflectedChannel := range reflectedChannels {
-		c.loop.streamer.Start(streamIds[i], reflectedChannel)
-	}
-	return errChan
-}
-
-
-// GetNewID returns a new, connection-unique id for invocations and streams
-func (c *client) GetNewID() string {
-	c.lastID++
-	return fmt.Sprint(c.lastID)
+	return c.loop.PushStreams(method, c.loop.GetNewID(), arguments...)
 }
 
 func (c *client) isLoopEnded() (bool, <-chan InvokeResult, <-chan error) {
