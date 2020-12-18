@@ -5,6 +5,17 @@ import (
 	"fmt"
 )
 
+// Receiver sets the object which will receive server side calls to client methods (e.g. callbacks)
+func Receiver(receiver interface{}) func(Party) error {
+	return func(party Party) error {
+		if client, ok := party.(*client); ok {
+			client.receiver = receiver
+			return nil
+		}
+		return errors.New("option Receiver is client only")
+	}
+}
+
 // TransferFormat sets the transfer format used on the transport. Allowed values are "Text" and "Binary"
 func TransferFormat(format string) func(Party) error {
 	return func(p Party) error {

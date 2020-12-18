@@ -154,7 +154,7 @@ var _ = Describe("Client", func() {
 			// Start the server
 			go server.MapConnection(srvConn)
 			// Create the Client
-			client, _ = NewClient(context.TODO(), cliConn, formatOption)
+			client, _ = NewClient(context.TODO(), cliConn, Receiver(simpleReceiver{}), formatOption)
 			// Start it
 			client.SetReceiver(simpleReceiver{})
 			_ = client.Start()
@@ -207,7 +207,7 @@ var _ = Describe("Client", func() {
 			// Start the server
 			go server.MapConnection(srvConn)
 			// Create the Client
-			client, _ = NewClient(context.TODO(), cliConn, formatOption)
+			client, _ = NewClient(context.TODO(), cliConn, Receiver(receiver), formatOption)
 			// Start it
 			client.SetReceiver(receiver)
 			_ = client.Start()
@@ -287,10 +287,8 @@ var _ = Describe("Client", func() {
 			// Start the server
 			go server.MapConnection(srvConn)
 			// Create the Client
-			client, _ = NewClient(context.TODO(), cliConn, formatOption)
-			// Start it
 			receiver := &simpleReceiver{}
-			client.SetReceiver(receiver)
+			client, _ = NewClient(context.TODO(), cliConn, Receiver(receiver), formatOption)
 			_ = client.Start()
 			close(done)
 		}, 2.0)
@@ -369,10 +367,8 @@ var _ = Describe("Client", func() {
 			// Start the server
 			go server.MapConnection(srvConn)
 			// Create the Client
-			client, _ = NewClient(context.TODO(), cliConn, formatOption)
-			// Start it
 			receiver := &simpleReceiver{}
-			client.SetReceiver(receiver)
+			client, _ = NewClient(context.TODO(), cliConn, Receiver(receiver), formatOption)
 			_ = client.Start()
 			close(done)
 		}, 2.0)

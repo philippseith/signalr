@@ -22,9 +22,6 @@ type Client interface {
 	Send(method string, arguments ...interface{}) <-chan error
 	PullStream(method string, arguments ...interface{}) <-chan InvokeResult
 	PushStreams(method string, arguments ...interface{}) <-chan error
-	// It is not necessary to register callbacks with On(...),
-	// the server can "call back" all exported methods of the receiver
-	SetReceiver(receiver interface{})
 }
 
 // NewClient build a new Client.
@@ -162,9 +159,6 @@ func (c *client) PushStreams(method string, arguments ...interface{}) <-chan err
 	return errChan
 }
 
-func (c *client) SetReceiver(receiver interface{}) {
-	c.receiver = receiver
-}
 
 // GetNewID returns a new, connection-unique id for invocations and streams
 func (c *client) GetNewID() string {
