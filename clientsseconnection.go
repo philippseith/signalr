@@ -11,7 +11,7 @@ import (
 )
 
 type clientSSEConnection struct {
-	baseConnection
+	ConnectionBase
 	reqURL    string
 	sseReader io.Reader
 	sseWriter io.Writer
@@ -27,7 +27,7 @@ func newClientSSEConnection(parentContext context.Context, address string, conne
 	q.Set("id", connectionID)
 	reqUrl.RawQuery = q.Encode()
 	c := clientSSEConnection{
-		baseConnection: baseConnection{
+		ConnectionBase: ConnectionBase{
 			ctx:          parentContext,
 			connectionID: connectionID,
 		},

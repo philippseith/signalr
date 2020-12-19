@@ -9,7 +9,7 @@ import (
 )
 
 type webSocketConnection struct {
-	baseConnection
+	ConnectionBase
 	conn *websocket.Conn
 }
 
@@ -17,7 +17,7 @@ func newWebSocketConnection(parentContext context.Context, requestContext contex
 	ctx, _ := onecontext.Merge(parentContext, requestContext)
 	w := &webSocketConnection{
 		conn: conn,
-		baseConnection: baseConnection{
+		ConnectionBase: ConnectionBase{
 			ctx:          ctx,
 			connectionID: connectionID,
 		},

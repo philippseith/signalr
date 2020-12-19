@@ -14,7 +14,7 @@ import (
 )
 
 type serverSSEConnection struct {
-	baseConnection
+	ConnectionBase
 	mx          sync.Mutex
 	postWriting bool
 	postWriter  io.Writer
@@ -32,7 +32,7 @@ func newServerSSEConnection(parentContext context.Context, requestContext contex
 	}
 	ctx, _ := onecontext.Merge(parentContext, requestContext)
 	s := serverSSEConnection{
-		baseConnection: baseConnection{
+		ConnectionBase: ConnectionBase{
 			ctx:          ctx,
 			connectionID: connectionID,
 		},

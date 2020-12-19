@@ -43,6 +43,8 @@ func (pc *pipeConnection) ConnectionID() string {
 	return "X"
 }
 
+func (pc *pipeConnection) SetConnectionID(id string) {}
+
 func (pc *pipeConnection) SetTimeout(timeout time.Duration) {
 	pc.timeout = timeout
 }
