@@ -83,7 +83,7 @@ func (c *client) Invoke(method string, arguments ...interface{}) <-chan InvokeRe
 	}
 	id := c.loop.GetNewID()
 	resultChan, errChan := c.loop.invokeClient.newInvocation(id)
-	ch := MakeInvokeResultChan(resultChan, errChan)
+	ch := newInvokeResultChan(resultChan, errChan)
 	if err := c.loop.hubConn.SendInvocation(id, method, arguments); err != nil {
 		// When we get an error here, the loop is closed and the errChan might be already closed
 		// We create a new one to deliver our error
@@ -136,7 +136,7 @@ func createResultChansWithError(err error) (<-chan InvokeResult, chan error) {
 	resultChan := make(chan interface{}, 1)
 	errChan := make(chan error, 1)
 	errChan <- err
-	invokeResultChan := MakeInvokeResultChan(resultChan, errChan)
+	invokeResultChan := newInvokeResultChan(resultChan, errChan)
 	close(errChan)
 	close(resultChan)
 	return invokeResultChan, errChan

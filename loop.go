@@ -102,9 +102,9 @@ msgLoop:
 			case <-l.hubConn.Context().Done():
 				err = fmt.Errorf("breaking loop. hubConnection canceled: %w", l.hubConn.Context().Err())
 				break pingLoop
-				case <- l.party.context().Done():
-					err = fmt.Errorf("breaking loop. Party canceled: %w", l.party.context().Err())
-					break pingLoop
+			case <-l.party.context().Done():
+				err = fmt.Errorf("breaking loop. Party canceled: %w", l.party.context().Err())
+				break pingLoop
 			}
 		}
 		if err != nil {
@@ -124,7 +124,7 @@ msgLoop:
 func (l *loop) PullStream(method, id string, arguments ...interface{}) <-chan InvokeResult {
 	_, errChan := l.invokeClient.newInvocation(id)
 	upChan := l.streamClient.newUpstreamChannel(id)
-	ch := MakeInvokeResultChan(upChan, errChan)
+	ch := newInvokeResultChan(upChan, errChan)
 	if err := l.hubConn.SendStreamInvocation(id, method, arguments, nil); err != nil {
 		// When we get an error here, the loop is closed and the errChan might be already closed
 		// We create a new one to deliver our error

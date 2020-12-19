@@ -6,8 +6,8 @@ type InvokeResult struct {
 	Error error
 }
 
-// MakeInvokeResultChan combines a value result and an error result channel into one InvokeResult channel
-func MakeInvokeResultChan(resultChan <-chan interface{}, errChan <-chan error) <-chan InvokeResult {
+// newInvokeResultChan combines a value result and an error result channel into one InvokeResult channel
+func newInvokeResultChan(resultChan <-chan interface{}, errChan <-chan error) <-chan InvokeResult {
 	ch := make(chan InvokeResult, 1)
 	go func(ch chan InvokeResult, resultChan <-chan interface{}, errChan <-chan error) {
 		for resultChan != nil || errChan != nil {
