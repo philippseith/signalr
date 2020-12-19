@@ -1,9 +1,7 @@
 /*
-package signalr contains a signalr client and a signalr server.
-Both support the signalr transport types Websockets and Server-Sent Events and the transfer format Text (JSON).
+package signalr contains a SignalR client and a SignalR server.
+Both support the SignalR transport types Websockets and Server-Sent Events and the transfer format Text (JSON).
 Rudimentary support for binary transfer format (MessagePack) is available.
-For a deeper understanding of signalr see https://github.com/dotnet/aspnetcore/blob/master/src/SignalR/docs/specs/HubProtocol.md
-and https://github.com/dotnet/aspnetcore/blob/master/src/SignalR/docs/specs/TransportProtocols.md
 
 Basics
 
@@ -29,15 +27,17 @@ servers context is canceled.
 To server a HTTP connection, use server.MapHTTP(), which connects the server with a path in an http.ServeMux.
 The server then automatically negotiates, which kind of connection (Websockets, Server-Sent Events) will be used.
 
-Supported Hub / Receiver method parameter and return types
+Supported method signatures
 
+The SignalR protocol constrains the signature of hub or receiver methods that can be used over SignalR.
 All methods with serializable types as parameters and return types are supported.
-Methods with multiple return values are supported.
-Hub methods with a single sending channel (<-chan) are used to initiate server side streaming.
-The client will receive the contents of the channel as stream.
+Methods with multiple serializable return values are supported.
+Methods which return single sending channel (<-chan) are used to initiate callee side streaming.
+The caller will receive the contents of the channel as stream.
 When the returned channel is closed, the stream will be completed.
-Hub methods with one or multiple receiving channels (chan<-) as parameters are used as receivers for client side streaming.
-The client invokes this method and pushes one or multiple streams to the server. The method should end when all channels
+Methods with one or multiple receiving channels (chan<-) as parameters are used as receivers for caller side streaming.
+The caller invokes this method and pushes one or multiple streams to the callee. The method should end when all channels
 are closed. A channel is closed by the server when the assigned stream is completed.
+In most cases, the caller will be the client and the callee the server. But the vice versa case is also possible.
 */
 package signalr
