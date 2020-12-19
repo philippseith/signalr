@@ -366,7 +366,7 @@ var _ = Describe("Abort()", func() {
 		Expect(msg.(completionMessage).Result).To(Equal(float64(2)))
 		server.cancel()
 		close(done)
-	}, 2.0)
+	}, 10.0)
 })
 
 func expectInvocation(msg interface{}, callCount chan int, done chan bool, doneCount int) {
