@@ -12,6 +12,7 @@ type Connection interface {
 	io.Writer
 	Context() context.Context
 	ConnectionID() string
-	SetTimeout(duration time.Duration)
+	SetConnectionID(id string)
 	Timeout() time.Duration
+	SetTimeout(duration time.Duration)
 }

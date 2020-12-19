@@ -59,9 +59,18 @@ func (s *streamHub) SimpleInt() int {
 var _ = Describe("StreamInvocation", func() {
 
 	Describe("Simple stream invocation", func() {
+		var server Server
+		var conn *testingConnection
+		BeforeEach(func(done Done) {
+			server, conn = connect(&streamHub{})
+			close(done)
+		})
+		AfterEach(func(done Done) {
+			server.cancel()
+			close(done)
+		})
 		Context("When invoked by the client", func() {
 			It("should be invoked on the server, return stream items and a final completion without result", func(done Done) {
-				conn := connect(&streamHub{})
 				conn.ClientSend(`{"type":4,"invocationId": "zzz","target":"simplestream"}`)
 				Expect(<-streamInvocationQueue).To(Equal("SimpleStream()"))
 				for i := 1; i < 4; i++ {
@@ -81,9 +90,18 @@ var _ = Describe("StreamInvocation", func() {
 	})
 
 	Describe("Slice stream invocation", func() {
+		var server Server
+		var conn *testingConnection
+		BeforeEach(func(done Done) {
+			server, conn = connect(&streamHub{})
+			close(done)
+		})
+		AfterEach(func(done Done) {
+			server.cancel()
+			close(done)
+		})
 		Context("When invoked by the client", func() {
 			It("should be invoked on the server, return stream items and a final completion without result", func(done Done) {
-				conn := connect(&streamHub{})
 				conn.ClientSend(`{"type":4,"invocationId": "slice","target":"slicestream"}`)
 				Expect(<-streamInvocationQueue).To(Equal("SliceStream()"))
 				for i := 1; i < 4; i++ {
@@ -106,9 +124,18 @@ var _ = Describe("StreamInvocation", func() {
 	})
 
 	Describe("Stop simple stream invocation", func() {
+		var server Server
+		var conn *testingConnection
+		BeforeEach(func(done Done) {
+			server, conn = connect(&streamHub{})
+			close(done)
+		})
+		AfterEach(func(done Done) {
+			server.cancel()
+			close(done)
+		})
 		Context("When invoked by the client and stop after one result", func() {
 			It("should be invoked on the server, return stream one item and a final completion without result", func(done Done) {
-				conn := connect(&streamHub{})
 				conn.ClientSend(`{"type":4,"invocationId": "xxx","target":"endlessstream"}`)
 				Expect(<-streamInvocationQueue).To(Equal("EndlessStream()"))
 				recv := (<-conn.received).(streamItemMessage)
@@ -137,9 +164,18 @@ var _ = Describe("StreamInvocation", func() {
 	})
 
 	Describe("Invalid CancelInvocation", func() {
+		var server Server
+		var conn *testingConnection
+		BeforeEach(func(done Done) {
+			server, conn = connect(&streamHub{})
+			close(done)
+		})
+		AfterEach(func(done Done) {
+			server.cancel()
+			close(done)
+		})
 		Context("When invoked by the client and receiving an invalid CancelInvocation", func() {
 			It("should close the connection with an error", func(done Done) {
-				conn := connect(&streamHub{})
 				conn.ClientSend(`{"type":4,"invocationId": "xyz","target":"endlessstream"}`)
 				Expect(<-streamInvocationQueue).To(Equal("EndlessStream()"))
 				recv := (<-conn.received).(streamItemMessage)
@@ -164,9 +200,18 @@ var _ = Describe("StreamInvocation", func() {
 	})
 
 	Describe("Stream invocation of method with no stream result", func() {
+		var server Server
+		var conn *testingConnection
+		BeforeEach(func(done Done) {
+			server, conn = connect(&streamHub{})
+			close(done)
+		})
+		AfterEach(func(done Done) {
+			server.cancel()
+			close(done)
+		})
 		Context("When invoked by the client", func() {
 			It("should be invoked on the server, return one stream item with the \"no stream\" result and a final completion without result", func(done Done) {
-				conn := connect(&streamHub{})
 				conn.ClientSend(`{"type":4,"invocationId": "yyy","target":"simpleint"}`)
 				Expect(<-streamInvocationQueue).To(Equal("SimpleInt()"))
 				sRecv := (<-conn.received).(streamItemMessage)
@@ -184,9 +229,18 @@ var _ = Describe("StreamInvocation", func() {
 	})
 
 	Describe("invalid messages", func() {
+		var server Server
+		var conn *testingConnection
+		BeforeEach(func(done Done) {
+			server, conn = connect(&streamHub{})
+			close(done)
+		})
+		AfterEach(func(done Done) {
+			server.cancel()
+			close(done)
+		})
 		Context("When an invalid stream invocation message is sent", func() {
 			It("should return a completion with error", func(done Done) {
-				conn := connect(&streamHub{})
 				conn.ClientSend(`{"type":4}`)
 				select {
 				case message := <-conn.received:

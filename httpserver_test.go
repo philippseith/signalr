@@ -9,10 +9,10 @@ import (
 	"github.com/go-kit/kit/log/level"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	"golang.org/x/net/websocket"
 	"io/ioutil"
 	"net"
 	"net/http"
+	"nhooyr.io/websocket"
 	"os"
 	"strings"
 	"time"
@@ -64,7 +64,7 @@ var _ = Describe("HTTP server", func() {
 					Expect(tf).To(ContainElement("Binary"))
 				}
 				close(done)
-			})
+			}, 2.0)
 		})
 
 		Context("A invalid negotiation request is sent", func() {
@@ -85,7 +85,7 @@ var _ = Describe("HTTP server", func() {
 				Expect(resp).NotTo(BeNil())
 				Expect(resp.StatusCode).ToNot(Equal(200))
 				close(done)
-			})
+			}, 2.0)
 		})
 
 		Context("Connection with client", func() {
@@ -133,7 +133,7 @@ var _ = Describe("HTTP server", func() {
 				Expect(s).To(Equal(hugo))
 
 				close(done)
-			}, 10000)
+			}, 10.0)
 		})
 	}
 	Context("When no negotiation is send", func() {
@@ -150,7 +150,7 @@ var _ = Describe("HTTP server", func() {
 			waitForPort(port)
 			handShakeAndCallWebSocketTestServer(port, "")
 			close(done)
-		})
+		}, 2.0)
 	})
 })
 
@@ -208,10 +208,10 @@ func handShakeAndCallWebSocketTestServer(port int, connectionID string) {
 	if connectionID != "" {
 		urlParam = fmt.Sprintf("?id=%v", connectionID)
 	}
-	ws, err := websocket.Dial(fmt.Sprintf("ws://127.0.0.1:%v/hub%v", port, urlParam), "json", "http://127.0.0.1")
+	ws, _, err := websocket.Dial(context.Background(), fmt.Sprintf("ws://127.0.0.1:%v/hub%v", port, urlParam), nil)
 	Expect(err).To(BeNil())
 	defer func() {
-		_ = ws.Close()
+		_ = ws.Close(websocket.StatusNormalClosure, "")
 	}()
 	wsConn := newWebSocketConnection(context.TODO(), context.TODO(), connectionID, ws)
 	cliConn := newHubConnection(wsConn, &protocol, 1<<15, log.NewLogfmtLogger(os.Stderr))

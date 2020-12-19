@@ -4,13 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"golang.org/x/net/websocket"
 	"io/ioutil"
 	"net/http"
 	"net/url"
+	"nhooyr.io/websocket"
 )
 
-// NewHTTPClient creates a signalR Client using the websocket transport
+// NewHTTPClient creates a signalR Client which tries to connect over http to the given address
 func NewHTTPClient(ctx context.Context, address string, options ...func(Party) error) (Client, error) {
 	req, err := http.NewRequest("POST", fmt.Sprintf("%v/negotiate", address), nil)
 	if err != nil {
@@ -46,7 +46,7 @@ func NewHTTPClient(ctx context.Context, address string, options ...func(Party) e
 	} else if formats = nr.getTransferFormats("WebSockets"); formats != nil {
 		wsURL := reqURL
 		wsURL.Scheme = "ws"
-		ws, err := websocket.Dial(wsURL.String(), "", "http://localhost")
+		ws, _, err := websocket.Dial(ctx, wsURL.String(), nil)
 		if err != nil {
 			return nil, err
 		}

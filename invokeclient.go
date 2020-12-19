@@ -9,26 +9,26 @@ import (
 
 type invokeClient struct {
 	mx                 sync.Mutex
-	resultChans        map[string]invokeResult
+	resultChans        map[string]invocationResultChans
 	chanReceiveTimeout time.Duration
 }
 
 func newInvokeClient(chanReceiveTimeout time.Duration) *invokeClient {
 	return &invokeClient{
 		mx:                 sync.Mutex{},
-		resultChans:        make(map[string]invokeResult),
+		resultChans:        make(map[string]invocationResultChans),
 		chanReceiveTimeout: chanReceiveTimeout,
 	}
 }
 
-type invokeResult struct {
+type invocationResultChans struct {
 	resultChan chan interface{}
 	errChan    chan error
 }
 
 func (i *invokeClient) newInvocation(id string) (chan interface{}, chan error) {
 	i.mx.Lock()
-	r := invokeResult{
+	r := invocationResultChans{
 		resultChan: make(chan interface{}, 1),
 		errChan:    make(chan error, 1),
 	}
@@ -57,7 +57,7 @@ func (i *invokeClient) cancelAllInvokes() {
 		}(r.errChan)
 	}
 	// Clear map
-	i.resultChans = make(map[string]invokeResult)
+	i.resultChans = make(map[string]invocationResultChans)
 	i.mx.Unlock()
 }
 

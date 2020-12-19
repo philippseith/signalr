@@ -3,7 +3,7 @@ package signalr
 import (
 	"bytes"
 	"context"
-	"github.com/rotisserie/eris"
+	"fmt"
 	"io"
 	"sync"
 	"time"
@@ -194,13 +194,13 @@ func (c *defaultHubConnection) writeMessage(message interface{}) error {
 	c.mx.Unlock()
 	err := func() error {
 		if c.ctx.Err() != nil {
-			return eris.Wrap(c.ctx.Err(), "hubConnection canceled")
+			return fmt.Errorf("hubConnection canceled: %w", c.ctx.Err())
 		}
 		e := make(chan error, 1)
 		go func() { e <- c.protocol.WriteMessage(message, c.connection) }()
 		select {
 		case <-c.ctx.Done():
-			return eris.Wrap(c.ctx.Err(), "hubConnection canceled")
+			return fmt.Errorf("hubConnection canceled: %w", c.ctx.Err())
 		case err := <-e:
 			if err != nil {
 				c.Abort()

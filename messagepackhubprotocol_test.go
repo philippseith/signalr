@@ -10,7 +10,7 @@ import (
 var _ = Describe("MessagePackHubProtocol", func() {
 	protocol := messagePackHubProtocol{}
 	Context("ParseMessages", func() {
-		FIt("should encode/decode an InvocationMessage", func() {
+		It("should encode/decode an InvocationMessage", func() {
 			message := invocationMessage{
 				Type:         4,
 				Target:       "target",

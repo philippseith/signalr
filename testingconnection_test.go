@@ -54,6 +54,10 @@ func (t *testingConnection) ConnectionID() string {
 	return t.connectionID
 }
 
+func (t *testingConnection) SetConnectionID(id string) {
+	t.connectionID = id
+}
+
 func (t *testingConnection) Read(b []byte) (n int, err error) {
 	if fr := t.FailRead(); fr != "" {
 		defer func() { t.SetFailRead("") }()

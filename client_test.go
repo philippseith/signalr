@@ -43,6 +43,8 @@ func (pc *pipeConnection) ConnectionID() string {
 	return "X"
 }
 
+func (pc *pipeConnection) SetConnectionID(id string) {}
+
 func (pc *pipeConnection) SetTimeout(timeout time.Duration) {
 	pc.timeout = timeout
 }
@@ -125,7 +127,7 @@ var _ = Describe("Client", func() {
 			// Create both ends of the connection
 			cliConn, srvConn := newClientServerConnections()
 			// Start the server
-			go server.MapConnection(srvConn)
+			go server.Serve(srvConn)
 			// Create the Client
 			clientConn, err := NewClient(context.TODO(), cliConn, formatOption)
 			Expect(err).NotTo(HaveOccurred())
@@ -152,11 +154,10 @@ var _ = Describe("Client", func() {
 			// Create both ends of the connection
 			cliConn, srvConn = newClientServerConnections()
 			// Start the server
-			go server.MapConnection(srvConn)
+			go server.Serve(srvConn)
 			// Create the Client
-			client, _ = NewClient(context.TODO(), cliConn, formatOption)
+			client, _ = NewClient(context.TODO(), cliConn, Receiver(simpleReceiver{}), formatOption)
 			// Start it
-			client.SetReceiver(simpleReceiver{})
 			_ = client.Start()
 			close(done)
 		}, 2.0)
@@ -205,11 +206,10 @@ var _ = Describe("Client", func() {
 			// Create both ends of the connection
 			cliConn, srvConn = newClientServerConnections()
 			// Start the server
-			go server.MapConnection(srvConn)
+			go server.Serve(srvConn)
 			// Create the Client
-			client, _ = NewClient(context.TODO(), cliConn, formatOption)
+			client, _ = NewClient(context.TODO(), cliConn, Receiver(receiver), formatOption)
 			// Start it
-			client.SetReceiver(receiver)
 			_ = client.Start()
 			close(done)
 		}, 2.0)
@@ -285,12 +285,11 @@ var _ = Describe("Client", func() {
 			// Create both ends of the connection
 			cliConn, srvConn = newClientServerConnections()
 			// Start the server
-			go server.MapConnection(srvConn)
+			go server.Serve(srvConn)
 			// Create the Client
-			client, _ = NewClient(context.TODO(), cliConn, formatOption)
-			// Start it
 			receiver := &simpleReceiver{}
-			client.SetReceiver(receiver)
+			client, _ = NewClient(context.TODO(), cliConn, Receiver(receiver), formatOption)
+			// Start it
 			_ = client.Start()
 			close(done)
 		}, 2.0)
@@ -338,20 +337,6 @@ var _ = Describe("Client", func() {
 			close(done)
 		}, 2.0)
 	})
-	Context("GetConnectionID", func() {
-		It("should return distinct IDs", func(done Done) {
-			c, _ := NewClient(context.TODO(), nil)
-			cc := c.(*client)
-			ids := make(map[string]string)
-			for i := 1; i < 10000; i++ {
-				id := cc.GetNewID()
-				_, ok := ids[id]
-				Expect(ok).To(BeFalse())
-				ids[id] = id
-			}
-			close(done)
-		})
-	})
 	Context("PushStreams", func() {
 		var cliConn *pipeConnection
 		var srvConn *pipeConnection
@@ -367,12 +352,11 @@ var _ = Describe("Client", func() {
 			// Create both ends of the connection
 			cliConn, srvConn = newClientServerConnections()
 			// Start the server
-			go server.MapConnection(srvConn)
+			go server.Serve(srvConn)
 			// Create the Client
-			client, _ = NewClient(context.TODO(), cliConn, formatOption)
-			// Start it
 			receiver := &simpleReceiver{}
-			client.SetReceiver(receiver)
+			client, _ = NewClient(context.TODO(), cliConn, Receiver(receiver), formatOption)
+			// Start it
 			_ = client.Start()
 			close(done)
 		}, 2.0)
