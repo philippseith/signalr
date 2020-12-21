@@ -2,12 +2,12 @@ package signalr
 
 import (
 	"bytes"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/go-kit/kit/log"
 	"github.com/vmihailenco/msgpack/v5"
 	"io"
+	"reflect"
 )
 
 type messagePackHubProtocol struct {
@@ -280,6 +280,11 @@ func (m *messagePackHubProtocol) setDebugLogger(dbg StructuredLogger) {
 // UnmarshalArgument copies the value of a basic type to another basic type.
 // dst must be a pointer to the destination instance.
 func (m *messagePackHubProtocol) UnmarshalArgument(src, dst interface{}) error {
+	// If dst point towards an interface{} value, assigning is easy
+	if dstPtr, ok := dst.(*interface{}); ok {
+		*dstPtr = src
+		return nil
+	}
 	switch s := src.(type) {
 	case float32:
 		copyFromFloat32(s, dst)
@@ -330,11 +335,13 @@ func (m *messagePackHubProtocol) UnmarshalArgument(src, dst interface{}) error {
 	case []uint:
 		copyFromUintSlice(s, dst)
 	default:
-		b, err := json.Marshal(src)
-		if err != nil {
-			return err
+		rDst := reflect.ValueOf(dst)
+		if rDst.Kind() != reflect.Ptr {
+			return fmt.Errorf("dst ist not a pointer but %T", dst)
 		}
-		return json.Unmarshal(b, dst)
+		if reflect.TypeOf(src).AssignableTo(rDst.Elem().Type()) {
+			rDst.Elem().Set(reflect.ValueOf(src))
+		}
 	}
 	return nil
 }

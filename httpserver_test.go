@@ -131,7 +131,6 @@ var _ = Describe("HTTP server", func() {
 				Expect(result.Error).NotTo(HaveOccurred())
 				s := result.Value.(string)
 				Expect(s).To(Equal(hugo))
-
 				close(done)
 			}, 10.0)
 		})
@@ -228,7 +227,9 @@ func handShakeAndCallWebSocketTestServer(port int, connectionID string) {
 	}()
 	select {
 	case r := <-result:
-		Expect(r).To(Equal(3.0))
+		var f float64
+		Expect(protocol.UnmarshalArgument(r, &f)).NotTo(HaveOccurred())
+		Expect(f).To(Equal(3.0))
 	case <-time.After(1000 * time.Millisecond):
 		Fail("timed out")
 	}

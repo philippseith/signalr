@@ -214,9 +214,14 @@ func receiveLoop(conn clientReceiver) func() {
 							errorHandler(err)
 						}
 					case 2:
-						var streamItemMessage streamItemMessage
-						if err = json.Unmarshal([]byte(message), &streamItemMessage); err == nil {
-							conn.ReceiveChan() <- streamItemMessage
+						var jsonStreamItemMessage jsonStreamItemMessage
+						if err = json.Unmarshal([]byte(message), &jsonStreamItemMessage); err == nil {
+
+							conn.ReceiveChan() <- streamItemMessage{
+								Type:         jsonStreamItemMessage.Type,
+								InvocationID: jsonStreamItemMessage.InvocationID,
+								Item:         jsonStreamItemMessage.Item,
+							}
 						} else {
 							errorHandler(err)
 						}

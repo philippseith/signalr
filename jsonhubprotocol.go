@@ -15,7 +15,7 @@ type jsonHubProtocol struct {
 	dbg log.Logger
 }
 
-// Protocol specific message for correct unmarshaling of Arguments.
+// Protocol specific messages for correct unmarshaling of arguments or results.
 // jsonInvocationMessage is only used in ParseMessages, not in WriteMessage
 //easyjson:json
 type jsonInvocationMessage struct {
@@ -24,6 +24,21 @@ type jsonInvocationMessage struct {
 	InvocationID string            `json:"invocationId"`
 	Arguments    []json.RawMessage `json:"arguments"`
 	StreamIds    []string          `json:"streamIds,omitempty"`
+}
+
+//easyjson:json
+type jsonStreamItemMessage struct {
+	Type         int             `json:"type"`
+	InvocationID string          `json:"invocationId"`
+	Item         json.RawMessage `json:"item"`
+}
+
+//easyjson:json
+type jsonCompletionMessage struct {
+	Type         int             `json:"type"`
+	InvocationID string          `json:"invocationId"`
+	Result       json.RawMessage `json:"result,omitempty"`
+	Error        string          `json:"error,omitempty"`
 }
 
 type jsonError struct {
@@ -74,7 +89,7 @@ func (j *jsonHubProtocol) ParseMessages(reader io.Reader, remainBuf *bytes.Buffe
 	return messages, nil
 }
 
-func (j *jsonHubProtocol) parseMessage(messageType int, text []byte) (m interface{}, err error) {
+func (j *jsonHubProtocol) parseMessage(messageType int, text []byte) (message interface{}, err error) {
 	switch messageType {
 	case 1, 4:
 		jsonInvocation := jsonInvocationMessage{}
@@ -85,24 +100,38 @@ func (j *jsonHubProtocol) parseMessage(messageType int, text []byte) (m interfac
 		for i, a := range jsonInvocation.Arguments {
 			arguments[i] = a
 		}
-		invocation := invocationMessage{
+		return invocationMessage{
 			Type:         jsonInvocation.Type,
 			Target:       jsonInvocation.Target,
 			InvocationID: jsonInvocation.InvocationID,
 			Arguments:    arguments,
 			StreamIds:    jsonInvocation.StreamIds,
-		}
-		return invocation, err
+		}, err
 	case 2:
-		streamItem := streamItemMessage{}
-		if err = streamItem.UnmarshalJSON(text); err != nil {
+		jsonStreamItem := jsonStreamItemMessage{}
+		if err = json.Unmarshal(text, &jsonStreamItem); err != nil {
 			err = &jsonError{string(text), err}
 		}
-		return streamItem, err
+		return streamItemMessage{
+			Type:         jsonStreamItem.Type,
+			InvocationID: jsonStreamItem.InvocationID,
+			Item:         jsonStreamItem.Item,
+		}, err
 	case 3:
-		completion := completionMessage{}
-		if err = completion.UnmarshalJSON(text); err != nil {
+		jsonCompletion := jsonCompletionMessage{}
+		if err = json.Unmarshal(text, &jsonCompletion); err != nil {
 			err = &jsonError{string(text), err}
+		}
+		completion := completionMessage{
+			Type:         jsonCompletion.Type,
+			InvocationID: jsonCompletion.InvocationID,
+			Error:        jsonCompletion.Error,
+		}
+		// Only assign Result when non nil. setting interface{} Result to (json.RawMessage)(nil)
+		// will produce a value which can not compared to nil even if it is pointing towards nil!
+		// See https://www.calhoun.io/when-nil-isnt-equal-to-nil/ for explanation
+		if jsonCompletion.Result != nil {
+			completion.Result = jsonCompletion.Result
 		}
 		return completion, err
 	case 5:

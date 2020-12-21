@@ -10,13 +10,15 @@ import (
 type invokeClient struct {
 	mx                 sync.Mutex
 	resultChans        map[string]invocationResultChans
+	protocol           hubProtocol
 	chanReceiveTimeout time.Duration
 }
 
-func newInvokeClient(chanReceiveTimeout time.Duration) *invokeClient {
+func newInvokeClient(protocol hubProtocol, chanReceiveTimeout time.Duration) *invokeClient {
 	return &invokeClient{
 		mx:                 sync.Mutex{},
 		resultChans:        make(map[string]invocationResultChans),
+		protocol:           protocol,
 		chanReceiveTimeout: chanReceiveTimeout,
 	}
 }
@@ -87,9 +89,14 @@ func (i *invokeClient) receiveCompletionItem(completion completionMessage) error
 			}
 		}
 		if completion.Result != nil {
+			var result interface{}
+			if err := i.protocol.UnmarshalArgument(completion.Result, &result); err != nil {
+				return err
+			}
 			done := make(chan struct{})
 			go func() {
-				ir.resultChan <- completion.Result
+				ir.resultChan <- result
+				ir.resultChan <- result
 				done <- struct{}{}
 			}()
 			select {
