@@ -7,7 +7,6 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/vmihailenco/msgpack/v5"
 	"io"
-	"reflect"
 )
 
 type messagePackHubProtocol struct {
@@ -17,7 +16,12 @@ type messagePackHubProtocol struct {
 func (m *messagePackHubProtocol) ParseMessages(reader io.Reader, remainBuf *bytes.Buffer) ([]interface{}, error) {
 	buf := bytes.Buffer{}
 	_, _ = buf.ReadFrom(remainBuf)
-	decoder := msgpack.NewDecoder(&buf)
+	decoder := msgpack.GetDecoder()
+	decoder.Reset(&buf)
+	// Default map decoding expects all maps to have string keys
+	decoder.SetMapDecoder(func(decoder *msgpack.Decoder) (interface{}, error) {
+		return decoder.DecodeUntypedMap()
+	})
 	p := make([]byte, 1<<15)
 	notYetDecoded := make([]byte, 0)
 	for {
@@ -160,48 +164,48 @@ func (m *messagePackHubProtocol) parseMessage(msgType int, msg []interface{}) (m
 
 func (m *messagePackHubProtocol) WriteMessage(message interface{}, writer io.Writer) (err error) {
 	var buf bytes.Buffer
-	e := msgpack.NewEncoder(&buf)
+	encoder := msgpack.NewEncoder(&buf)
 	switch msg := message.(type) {
 	case invocationMessage:
-		if err = encodeMsgHeader(e, 6, msg.Type); err != nil {
+		if err = encodeMsgHeader(encoder, 6, msg.Type); err != nil {
 			return err
 		}
 		if msg.InvocationID == "" {
-			if err = e.EncodeNil(); err != nil {
+			if err = encoder.EncodeNil(); err != nil {
 				return err
 			}
 		} else {
-			if err = e.EncodeString(msg.InvocationID); err != nil {
+			if err = encoder.EncodeString(msg.InvocationID); err != nil {
 				return err
 			}
 		}
-		if err = e.EncodeString(msg.Target); err != nil {
+		if err = encoder.EncodeString(msg.Target); err != nil {
 			return err
 		}
-		if err = e.EncodeArrayLen(len(msg.Arguments)); err != nil {
+		if err = encoder.EncodeArrayLen(len(msg.Arguments)); err != nil {
 			return err
 		}
 		for _, arg := range msg.Arguments {
-			if err = e.Encode(arg); err != nil {
+			if err = encoder.Encode(arg); err != nil {
 				return err
 			}
 		}
-		if err = e.EncodeArrayLen(len(msg.StreamIds)); err != nil {
+		if err = encoder.EncodeArrayLen(len(msg.StreamIds)); err != nil {
 			return err
 		}
 		for _, id := range msg.StreamIds {
-			if err = e.EncodeString(id); err != nil {
+			if err = encoder.EncodeString(id); err != nil {
 				return err
 			}
 		}
 	case streamItemMessage:
-		if err = encodeMsgHeader(e, 4, msg.Type); err != nil {
+		if err = encodeMsgHeader(encoder, 4, msg.Type); err != nil {
 			return err
 		}
-		if err = e.EncodeString(msg.InvocationID); err != nil {
+		if err = encoder.EncodeString(msg.InvocationID); err != nil {
 			return err
 		}
-		if err = e.Encode(msg.Item); err != nil {
+		if err = encoder.Encode(msg.Item); err != nil {
 			return err
 		}
 	case completionMessage:
@@ -209,10 +213,10 @@ func (m *messagePackHubProtocol) WriteMessage(message interface{}, writer io.Wri
 		if msg.Result != nil || msg.Error != "" {
 			msgLen = 5
 		}
-		if err = encodeMsgHeader(e, msgLen, msg.Type); err != nil {
+		if err = encodeMsgHeader(encoder, msgLen, msg.Type); err != nil {
 			return err
 		}
-		if err = e.EncodeString(msg.InvocationID); err != nil {
+		if err = encoder.EncodeString(msg.InvocationID); err != nil {
 			return err
 		}
 		var resultKind int8 = 2
@@ -221,38 +225,38 @@ func (m *messagePackHubProtocol) WriteMessage(message interface{}, writer io.Wri
 		} else if msg.Result != nil {
 			resultKind = 3
 		}
-		if err = e.EncodeInt8(resultKind); err != nil {
+		if err = encoder.EncodeInt8(resultKind); err != nil {
 			return err
 		}
 		switch resultKind {
 		case 1:
-			if err = e.EncodeString(msg.Error); err != nil {
+			if err = encoder.EncodeString(msg.Error); err != nil {
 				return err
 			}
 		case 3:
-			if err = e.Encode(msg.Result); err != nil {
+			if err = encoder.Encode(msg.Result); err != nil {
 				return err
 			}
 		}
 	case cancelInvocationMessage:
-		if err = encodeMsgHeader(e, 3, msg.Type); err != nil {
+		if err = encodeMsgHeader(encoder, 3, msg.Type); err != nil {
 			return err
 		}
-		if err = e.EncodeString(msg.InvocationID); err != nil {
+		if err = encoder.EncodeString(msg.InvocationID); err != nil {
 			return err
 		}
 	case hubMessage:
-		if err = e.EncodeInt8(int8(6)); err != nil {
+		if err = encoder.EncodeInt8(int8(6)); err != nil {
 			return err
 		}
 	case closeMessage:
-		if err = encodeMsgHeader(e, 3, msg.Type); err != nil {
+		if err = encodeMsgHeader(encoder, 3, msg.Type); err != nil {
 			return err
 		}
-		if err = e.EncodeString(msg.Error); err != nil {
+		if err = encoder.EncodeString(msg.Error); err != nil {
 			return err
 		}
-		if err = e.EncodeBool(msg.AllowReconnect); err != nil {
+		if err = encoder.EncodeBool(msg.AllowReconnect); err != nil {
 			return err
 		}
 	}
@@ -267,7 +271,8 @@ func encodeMsgHeader(e *msgpack.Encoder, msgLen int, msgType int) (err error) {
 	if err = e.EncodeInt8(int8(msgType)); err != nil {
 		return err
 	}
-	if err = e.EncodeMapLen(0); err != nil {
+	headers := make(map[string]interface{})
+	if err = e.EncodeMap(headers); err != nil {
 		return err
 	}
 	return nil
@@ -335,13 +340,19 @@ func (m *messagePackHubProtocol) UnmarshalArgument(src, dst interface{}) error {
 	case []uint:
 		copyFromUintSlice(s, dst)
 	default:
-		rDst := reflect.ValueOf(dst)
-		if rDst.Kind() != reflect.Ptr {
-			return fmt.Errorf("dst ist not a pointer but %T", dst)
+		b, err := msgpack.Marshal(src)
+		if err != nil {
+			return err
 		}
-		if reflect.TypeOf(src).AssignableTo(rDst.Elem().Type()) {
-			rDst.Elem().Set(reflect.ValueOf(src))
-		}
+		return msgpack.Unmarshal(b, dst)
+		//
+		//	rDst := reflect.ValueOf(dst)
+		//if rDst.Kind() != reflect.Ptr {
+		//	return fmt.Errorf("dst ist not a pointer but %T", dst)
+		//}
+		//if reflect.TypeOf(src).AssignableTo(rDst.Elem().Type()) {
+		//	rDst.Elem().Set(reflect.ValueOf(src))
+		//}
 	}
 	return nil
 }

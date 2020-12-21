@@ -16,79 +16,106 @@ import (
 )
 
 var _ = Describe("Protocol", func() {
-	buf := bytes.Buffer{}
-	Context("InvocationMessage jsonHubProtocol", func() {
-		p := jsonHubProtocol{}
-		p.setDebugLogger(log.NewLogfmtLogger(os.Stderr))
-		It("be equal after roundtrip", func() {
-			want := invocationMessage{
-				Type:         1,
-				Target:       "A",
-				InvocationID: "B",
-				Arguments:    make([]interface{}, 0),
-				StreamIds:    nil,
-			}
-			Expect(p.WriteMessage(want, &buf)).NotTo(HaveOccurred())
-			var remainBuf bytes.Buffer
-			got, err := p.ParseMessages(&buf, &remainBuf)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(len(got)).To(Equal(1))
-			Expect(got[0]).To(BeEquivalentTo(want))
-		})
-	})
-	Context("InvocationMessage messagePackHubProtocol", func() {
-		p := &messagePackHubProtocol{}
-		p.setDebugLogger(log.NewLogfmtLogger(os.Stderr))
-		It("be equal after roundtrip", func(done Done) {
-			want := invocationMessage{
-				Type:         1,
-				Target:       "A",
-				InvocationID: "B",
-				Arguments:    make([]interface{}, 0),
-				StreamIds:    nil,
-			}
-			err := p.WriteMessage(want, &buf)
-			Expect(err).NotTo(HaveOccurred())
-			var remainBuf bytes.Buffer
-			got, err := p.ParseMessages(&buf, &remainBuf)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(len(got)).To(Equal(1))
-			Expect(got[0]).To(BeEquivalentTo(want))
-			close(done)
-		})
-	})
 	for _, p := range []hubProtocol{
-		&jsonHubProtocol{},
+		//&jsonHubProtocol{},
 		&messagePackHubProtocol{},
 	} {
-		p.setDebugLogger(log.NewLogfmtLogger(os.Stderr))
-		Describe(fmt.Sprintf("%T: WriteMessage/ParseMessages roundtrip", p), func() {
-			Context("StreamItemMessage", func() {
-				It("be equal after roundtrip", func(done Done) {
-					for _, want := range []streamItemMessage{
-						//{Type: 2, InvocationID: "", Item: nil},
-						{Type: 2, InvocationID: "1", Item: "3"},
-						{Type: 2, InvocationID: "1", Item: 3},
-						{Type: 2, InvocationID: "1", Item: uint(3)},
-						{Type: 2, InvocationID: "1", Item: simpleStruct{AsInt: 3, AsString: "3"}},
-						{Type: 2, InvocationID: "1", Item: []int64{1, 2, 3}},
-						{Type: 2, InvocationID: "1", Item: map[string]int{"1": 4, "2": 5, "3": 6}},
-					} {
-						Expect(p.WriteMessage(want, &buf)).NotTo(HaveOccurred())
+		protocol := p
+		protocol.setDebugLogger(log.NewLogfmtLogger(os.Stderr))
+		Describe(fmt.Sprintf("%T: WriteMessage/ParseMessages roundtrip", protocol), func() {
+			Context("InvocationMessage", func() {
+				for _, a := range [][]interface{}{
+					make([]interface{}, 0),
+					{1, 2, 3},
+					{1, 0xffffff},
+					{-5, []int{1000, 2}, simpleStruct{AsInt: 3, AsString: "3"}},
+					{[]simpleStruct{
+						{AsInt: 3, AsString: "3"},
+						{AsInt: 40, AsString: "40"},
+					}},
+					{map[string]int{"1": 2, "2": 4, "3": 8}},
+					{map[int]simpleStruct{1: {AsInt: 1, AsString: "1"}, 2: {AsInt: 2, AsString: "2"}}},
+				} {
+					arguments := a
+					want := invocationMessage{
+						Type:         1,
+						Target:       "A",
+						InvocationID: "B",
+						Arguments:    arguments,
+						StreamIds:    []string{"C", "D"},
+					}
+					It(fmt.Sprintf("be equal after roundtrip with arguments %v", arguments), func() {
+						buf := bytes.Buffer{}
+						Expect(protocol.WriteMessage(want, &buf)).NotTo(HaveOccurred())
+						Expect(len(msg)).NotTo(Equal(0))
 						var remainBuf bytes.Buffer
-						got, err := p.ParseMessages(&buf, &remainBuf)
+						got, err := protocol.ParseMessages(&buf, &remainBuf)
+						Expect(err).NotTo(HaveOccurred())
+						Expect(len(got)).To(Equal(1))
+						gotMsg := got[0].(invocationMessage)
+						Expect(gotMsg.Target).To(Equal(want.Target))
+						Expect(gotMsg.InvocationID).To(Equal(want.InvocationID))
+						Expect(gotMsg.StreamIds).To(Equal(want.StreamIds))
+						Expect(len(gotMsg.Arguments)).To(Equal(len(want.Arguments)))
+						for i, gotArg := range gotMsg.Arguments {
+							// We can not directly compare gotArg and want.Arguments[i]
+							// because msgpack serializes numbers to the shortest possible type
+							t := reflect.TypeOf(want.Arguments[i])
+							value := reflect.New(t)
+							Expect(protocol.UnmarshalArgument(gotArg, value.Interface())).NotTo(HaveOccurred())
+							Expect(reflect.Indirect(value).Interface()).To(Equal(want.Arguments[i]))
+						}
+					})
+				}
+			})
+			Context("StreamItemMessage", func() {
+				for _, w := range []streamItemMessage{
+					{Type: 2, InvocationID: "1", Item: "3"},
+					//{Type: 2, InvocationID: "1", Item: 3},
+					//{Type: 2, InvocationID: "1", Item: uint(3)},
+					//{Type: 2, InvocationID: "1", Item: simpleStruct{AsInt: 3, AsString: "3"}},
+					//{Type: 2, InvocationID: "1", Item: []int64{1, 2, 3}},
+					//{Type: 2, InvocationID: "1", Item: []int{1, 2, 3}},
+					//{Type: 2, InvocationID: "1", Item: map[string]int{"1": 4, "2": 5, "3": 6}},
+				} {
+					want := w
+					It(fmt.Sprintf("should be equal after roundtrip of %#v", want), func(done Done) {
+						buf := bytes.Buffer{}
+						Expect(protocol.WriteMessage(want, &buf)).NotTo(HaveOccurred())
+						var remainBuf bytes.Buffer
+						got, err := protocol.ParseMessages(&buf, &remainBuf)
 						Expect(err).NotTo(HaveOccurred())
 						Expect(len(got)).To(Equal(1))
 						Expect(got[0]).To(BeAssignableToTypeOf(streamItemMessage{}))
 						gotMsg := got[0].(streamItemMessage)
 						Expect(gotMsg.InvocationID).To(Equal(want.InvocationID))
+						// We can not directly compare gotArg and want.Arguments[i]
+						// because msgpack serializes numbers to the shortest possible type
 						t := reflect.TypeOf(want.Item)
 						value := reflect.New(t)
-						_ = p.UnmarshalArgument(gotMsg.Item, value.Interface())
+						Expect(protocol.UnmarshalArgument(gotMsg.Item, value.Interface())).NotTo(HaveOccurred())
 						Expect(reflect.Indirect(value).Interface()).To(Equal(want.Item))
-					}
-					close(done)
-				})
+
+						close(done)
+					})
+				}
+			})
+			It("with nil item should be equal after roundtrip", func(done Done) {
+				buf := bytes.Buffer{}
+				want := streamItemMessage{Type: 2, InvocationID: "", Item: nil}
+				Expect(protocol.WriteMessage(want, &buf)).NotTo(HaveOccurred())
+				var remainBuf bytes.Buffer
+				got, err := protocol.ParseMessages(&buf, &remainBuf)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(len(got)).To(Equal(1))
+				Expect(got[0]).To(BeAssignableToTypeOf(streamItemMessage{}))
+				gotMsg := got[0].(streamItemMessage)
+				Expect(gotMsg.InvocationID).To(Equal(want.InvocationID))
+				// nil is marshaled to the word "null" (without quotation), which will be unmarshaled to nil
+				var v interface{}
+				Expect(protocol.UnmarshalArgument(gotMsg.Item, &v)).NotTo(HaveOccurred())
+				Expect(v).To(BeNil())
+				close(done)
 			})
 		})
 	}
@@ -100,18 +127,22 @@ func TestDevParse(t *testing.T) {
 	}
 }
 
-type simpleStruct struct {
-	AsInt    int
-	AsString string
+type simplestStruct struct {
+	AsInt int
 }
 
-//type parserHub struct {
-//	Hub
-//}
-//
-//func (p *parserHub) Parse(fileName string) []string {
-//	return nil
-//}
+type simpleStruct struct {
+	AsInt    int    `json:"AI"`
+	AsString string `json:"AS"`
+}
+
+type parserHub struct {
+	Hub
+}
+
+func (p *parserHub) Parse(fileName string) []string {
+	return nil
+}
 
 func devParse() error {
 	fSet := token.NewFileSet()
