@@ -51,13 +51,17 @@ func (j *jsonError) Error() string {
 }
 
 // UnmarshalArgument unmarshals a json.RawMessage depending of the specified value type into value
-func (j *jsonHubProtocol) UnmarshalArgument(argument interface{}, value interface{}) error {
-	if err := json.Unmarshal(argument.(json.RawMessage), value); err != nil {
-		return &jsonError{string(argument.(json.RawMessage)), err}
+func (j *jsonHubProtocol) UnmarshalArgument(src interface{}, dst interface{}) error {
+	rawSrc, ok := src.(json.RawMessage)
+	if !ok {
+		return fmt.Errorf("invalid source %#v for UnmarshalArgument", src)
+	}
+	if err := json.Unmarshal(rawSrc, dst); err != nil {
+		return &jsonError{string(rawSrc), err}
 	}
 	_ = j.dbg.Log(evt, "UnmarshalArgument",
-		"argument", string(argument.(json.RawMessage)),
-		"value", fmt.Sprintf("%v", reflect.ValueOf(value).Elem()))
+		"argument", string(rawSrc),
+		"value", fmt.Sprintf("%v", reflect.ValueOf(dst).Elem()))
 	return nil
 }
 

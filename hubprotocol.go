@@ -9,11 +9,11 @@ import (
 // ParseMessages() parses messages from an io.Reader and stores unparsed bytes in remainBuf.
 // If buf does not contain the whole message, it returns a nil message and complete false
 // WriteMessage writes a message to the specified writer
-// UnmarshalArgument() unmarshals a raw message depending of the specified value type into value
+// UnmarshalArgument() unmarshals a raw message depending of the specified value type into a destination value
 type hubProtocol interface {
 	ParseMessages(reader io.Reader, remainBuf *bytes.Buffer) ([]interface{}, error)
 	WriteMessage(message interface{}, writer io.Writer) error
-	UnmarshalArgument(argument interface{}, value interface{}) error
+	UnmarshalArgument(src interface{}, dst interface{}) error
 	setDebugLogger(dbg StructuredLogger)
 }
 

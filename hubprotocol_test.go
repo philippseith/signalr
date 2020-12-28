@@ -17,13 +17,13 @@ import (
 
 var _ = Describe("Protocol", func() {
 	for _, p := range []hubProtocol{
-		//&jsonHubProtocol{},
+		&jsonHubProtocol{},
 		&messagePackHubProtocol{},
 	} {
 		protocol := p
 		protocol.setDebugLogger(log.NewLogfmtLogger(os.Stderr))
 		Describe(fmt.Sprintf("%T: WriteMessage/ParseMessages roundtrip", protocol), func() {
-			FContext("InvocationMessage", func() {
+			Context("InvocationMessage", func() {
 				for _, a := range [][]interface{}{
 					make([]interface{}, 0),
 					{1, 2, 3},
@@ -69,15 +69,16 @@ var _ = Describe("Protocol", func() {
 					})
 				}
 			})
-			FContext("StreamItemMessage", func() {
+			Context("StreamItemMessage", func() {
 				for _, w := range []streamItemMessage{
 					{Type: 2, InvocationID: "1", Item: "3"},
-					{Type: 2, InvocationID: "1", Item: 3},
-					{Type: 2, InvocationID: "1", Item: uint(3)},
-					{Type: 2, InvocationID: "1", Item: simpleStruct{AsInt: 3, AsString: "3"}},
-					{Type: 2, InvocationID: "1", Item: []int64{1, 2, 3}},
-					{Type: 2, InvocationID: "1", Item: []int{1, 2, 3}},
-					{Type: 2, InvocationID: "1", Item: map[string]int{"1": 4, "2": 5, "3": 6}},
+					{Type: 2, InvocationID: "2", Item: 3},
+					{Type: 2, InvocationID: "3", Item: uint(3)},
+					{Type: 2, InvocationID: "4", Item: simpleStruct{AsInt: 3, AsString: "3"}},
+					{Type: 2, InvocationID: "5", Item: []int64{1, 2, 3}},
+					{Type: 2, InvocationID: "6", Item: []int{1, 2, 3}},
+					{Type: 2, InvocationID: "7", Item: map[string]int{"1": 4, "2": 5, "3": 6}},
+					{Type: 2, InvocationID: "9"},
 				} {
 					want := w
 					It(fmt.Sprintf("should be equal after roundtrip of %#v", want), func(done Done) {
@@ -90,33 +91,63 @@ var _ = Describe("Protocol", func() {
 						Expect(got[0]).To(BeAssignableToTypeOf(streamItemMessage{}))
 						gotMsg := got[0].(streamItemMessage)
 						Expect(gotMsg.InvocationID).To(Equal(want.InvocationID))
-						// We can not directly compare gotArg and want.Arguments[i]
-						// because msgpack serializes numbers to the shortest possible type
-						t := reflect.TypeOf(want.Item)
-						value := reflect.New(t)
-						Expect(protocol.UnmarshalArgument(gotMsg.Item, value.Interface())).NotTo(HaveOccurred())
-						Expect(reflect.Indirect(value).Interface()).To(Equal(want.Item))
-
+						if want.Item == nil {
+							var v interface{}
+							Expect(protocol.UnmarshalArgument(gotMsg.Item, &v)).NotTo(HaveOccurred())
+							Expect(v).To(BeNil())
+						} else {
+							// We can not directly compare gotArg and want.Arguments[i]
+							// because msgpack serializes numbers to the shortest possible type
+							t := reflect.TypeOf(want.Item)
+							value := reflect.New(t)
+							Expect(protocol.UnmarshalArgument(gotMsg.Item, value.Interface())).NotTo(HaveOccurred())
+							Expect(reflect.Indirect(value).Interface()).To(Equal(want.Item))
+						}
 						close(done)
 					})
 				}
 			})
-			It("StreamItemMessage with nil item should be equal after roundtrip", func(done Done) {
-				buf := bytes.Buffer{}
-				want := streamItemMessage{Type: 2, InvocationID: "", Item: nil}
-				Expect(protocol.WriteMessage(want, &buf)).NotTo(HaveOccurred())
-				var remainBuf bytes.Buffer
-				got, err := protocol.ParseMessages(&buf, &remainBuf)
-				Expect(err).NotTo(HaveOccurred())
-				Expect(len(got)).To(Equal(1))
-				Expect(got[0]).To(BeAssignableToTypeOf(streamItemMessage{}))
-				gotMsg := got[0].(streamItemMessage)
-				Expect(gotMsg.InvocationID).To(Equal(want.InvocationID))
-				// nil is marshaled to the word "null" (without quotation), which will be unmarshaled to nil
-				var v interface{}
-				Expect(protocol.UnmarshalArgument(gotMsg.Item, &v)).NotTo(HaveOccurred())
-				Expect(v).To(BeNil())
-				close(done)
+			Context("CompletionMessage", func() {
+				for _, w := range []completionMessage{
+					{Type: 3, InvocationID: "1", Result: "3"},
+					{Type: 3, InvocationID: "2", Result: 3},
+					{Type: 3, InvocationID: "3", Result: uint(3)},
+					{Type: 3, InvocationID: "4", Result: simpleStruct{AsInt: 3, AsString: "3"}},
+					{Type: 3, InvocationID: "5", Result: []int64{1, 2, 3}},
+					{Type: 3, InvocationID: "6", Result: []int{1, 2, 3}},
+					{Type: 3, InvocationID: "7", Result: map[string]int{"1": 4, "2": 5, "3": 6}},
+					{Type: 3, InvocationID: "8"},
+					{Type: 3, InvocationID: "9", Error: "Failed"},
+				} {
+					want := w
+					It(fmt.Sprintf("should be equal after roundtrip of %#v", want), func(done Done) {
+						buf := bytes.Buffer{}
+						Expect(protocol.WriteMessage(want, &buf)).NotTo(HaveOccurred())
+						var remainBuf bytes.Buffer
+						got, err := protocol.ParseMessages(&buf, &remainBuf)
+						Expect(err).NotTo(HaveOccurred())
+						Expect(len(got)).To(Equal(1))
+						Expect(got[0]).To(BeAssignableToTypeOf(completionMessage{}))
+						gotMsg := got[0].(completionMessage)
+						Expect(gotMsg.InvocationID).To(Equal(want.InvocationID))
+						if want.Result == nil {
+							// Important: In contrast to StreamItemMessage a nil Result is not transmitted
+							// So if a stream ends with a nil item,
+							// a sender can not send a completionMessage with nil result to transmit this!
+							Expect(gotMsg.Result).To(BeNil())
+							Expect(gotMsg.Error).To(Equal(want.Error))
+						} else {
+							// We can not directly compare gotArg and want.Arguments[i]
+							// because msgpack serializes numbers to the shortest possible type
+							t := reflect.TypeOf(want.Result)
+							value := reflect.New(t)
+							Expect(protocol.UnmarshalArgument(gotMsg.Result, value.Interface())).NotTo(HaveOccurred())
+							Expect(reflect.Indirect(value).Interface()).To(Equal(want.Result))
+							Expect(gotMsg.Error).To(Equal(want.Error))
+						}
+						close(done)
+					})
+				}
 			})
 		})
 	}
