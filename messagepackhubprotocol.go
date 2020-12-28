@@ -17,6 +17,7 @@ func (m *messagePackHubProtocol) ParseMessages(reader io.Reader, remainBuf *byte
 	buf := bytes.Buffer{}
 	_, _ = buf.ReadFrom(remainBuf)
 	decoder := msgpack.GetDecoder()
+	defer msgpack.PutDecoder(decoder)
 	decoder.Reset(&buf)
 	// Default map decoding expects all maps to have string keys
 	decoder.SetMapDecoder(func(decoder *msgpack.Decoder) (interface{}, error) {
@@ -31,7 +32,7 @@ func (m *messagePackHubProtocol) ParseMessages(reader io.Reader, remainBuf *byte
 			return nil, err
 		}
 		_, _ = buf.Write(p[:n])
-		msg, err := decoder.DecodeSlice()
+		message, err := m.decodeMessage(decoder)
 		if err != nil {
 			if errors.Is(err, io.EOF) {
 				// Could not decode because bytes are missing. We need to read additional content
@@ -43,17 +44,145 @@ func (m *messagePackHubProtocol) ParseMessages(reader io.Reader, remainBuf *byte
 		}
 		// Could decode. Store remaining buf content
 		_, _ = remainBuf.ReadFrom(&buf)
-		// Decode slice contents
-		msgType8, ok := msg[0].(int8)
-		if !ok {
-			return nil, fmt.Errorf("invalid message. Can not read message type %v", msg[0])
+		return []interface{}{message}, nil
+	}
+}
+
+func (m *messagePackHubProtocol) decodeMessage(decoder *msgpack.Decoder) (interface{}, error) {
+	msgLen, err := decoder.DecodeArrayLen()
+	if err != nil {
+		return nil, err
+	}
+	msgType8, err := decoder.DecodeInt8()
+	if err != nil {
+		return nil, err
+	}
+	// Ignore Header
+	_, err = decoder.DecodeMap()
+	if err != nil {
+		return nil, err
+	}
+	msgType := int(msgType8)
+	switch msgType {
+	case 1, 4:
+		if msgLen != 6 {
+			return nil, fmt.Errorf("invalid invocationMessage length %v", len(msg))
 		}
-		message, err := m.parseMessage(int(msgType8), msg)
+		invocationId, err := decoder.DecodeString()
 		if err != nil {
 			return nil, err
 		}
-		return []interface{}{message}, nil
+		target, err := decoder.DecodeString()
+		if err != nil {
+			return nil, err
+		}
+		invocationMessage := invocationMessage{
+			Type:         msgType,
+			InvocationID: invocationId,
+			Target:       target,
+		}
+		argLen, err := decoder.DecodeArrayLen()
+		if err != nil {
+			return nil, err
+		}
+		for i := 0; i < argLen; i++ {
+			argument, err := decoder.DecodeRaw()
+			if err != nil {
+				return nil, err
+			}
+			invocationMessage.Arguments = append(invocationMessage.Arguments, argument)
+		}
+		streamIdLen, err := decoder.DecodeArrayLen()
+		if err != nil {
+			return nil, err
+		}
+		for i := 0; i < streamIdLen; i++ {
+			streamId, err := decoder.DecodeString()
+			if err != nil {
+				return nil, err
+			}
+			invocationMessage.StreamIds = append(invocationMessage.StreamIds, streamId)
+		}
+		return invocationMessage, nil
+	case 2:
+		if msgLen != 4 {
+			return nil, fmt.Errorf("invalid streamItemMessage length %v", len(msg))
+		}
+		invocationId, err := decoder.DecodeString()
+		if err != nil {
+			return nil, err
+		}
+		var item msgpack.RawMessage
+		err = decoder.Decode(&item)
+		if err != nil {
+			return nil, err
+		}
+		return streamItemMessage{
+			Type:         2,
+			InvocationID: invocationId,
+			Item:         item,
+		}, nil
+		//case 3:
+		//	if msgLen < 5 {
+		//		return nil, fmt.Errorf("invalid completionMessage length %v", len(msg))
+		//	}
+		//	completionMessage := completionMessage{Type: 3}
+		//	if completionMessage.InvocationID, ok = msg[2].(string); !ok {
+		//		return nil, fmt.Errorf("invalid InvocationId %#v", msg[2])
+		//	}
+		//	resultKind, ok := msg[3].(int8)
+		//	if !ok {
+		//		return nil, fmt.Errorf("invalid resultKind %#v", msg[3])
+		//	}
+		//	switch resultKind {
+		//	case 1:
+		//		if msgLen < 5 {
+		//			return nil, fmt.Errorf("invalid completionMessage length %v", len(msg))
+		//		}
+		//		if completionMessage.Error, ok = msg[4].(string); !ok {
+		//			return nil, fmt.Errorf("invalid Error %#v", msg[4])
+		//		}
+		//	case 2:
+		//		// OK
+		//	case 3:
+		//		if msgLen < 5 {
+		//			return nil, fmt.Errorf("invalid completionMessage length %v", len(msg))
+		//		}
+		//		completionMessage.Result = msg[4]
+		//	default:
+		//		return nil, fmt.Errorf("invalid resultKind %v", resultKind)
+		//	}
+		//	return completionMessage, nil
+		//case 5:
+		//	if msgLen != 3 {
+		//		return nil, fmt.Errorf("invalid completionMessage length %v", len(msg))
+		//	}
+		//	cancelInvocationMessage := cancelInvocationMessage{Type: 5}
+		//	if cancelInvocationMessage.InvocationID, ok = msg[2].(string); !ok {
+		//		return nil, fmt.Errorf("invalid InvocationId %#v", msg[2])
+		//	}
+		//	return cancelInvocationMessage, nil
+		//case 6:
+		//	if msgLen != 1 {
+		//		return nil, fmt.Errorf("invalid pingMessage length %v", len(msg))
+		//	}
+		//	return hubMessage{Type: 6}, nil
+		//case 7:
+		//	if msgLen < 2 {
+		//		return nil, fmt.Errorf("invalid pingMessage length %v", len(msg))
+		//	}
+		//	closeMessage := closeMessage{Type: 7}
+		//	if closeMessage.Error, ok = msg[1].(string); !ok {
+		//		return nil, fmt.Errorf("invalid Error %#v", msg[2])
+		//	}
+		//	if msgLen > 2 {
+		//		if closeMessage.AllowReconnect, ok = msg[2].(bool); !ok {
+		//			return nil, fmt.Errorf("invalid AllowReconnect %#v", msg[2])
+		//		}
+		//	}
+		//	return closeMessage, nil
 	}
+	return msg, nil
 }
 
 func (m *messagePackHubProtocol) parseMessage(msgType int, msg []interface{}) (message interface{}, err error) {
@@ -288,6 +417,21 @@ func (m *messagePackHubProtocol) UnmarshalArgument(src, dst interface{}) error {
 	// If dst point towards an interface{} value, assigning is easy
 	if dstPtr, ok := dst.(*interface{}); ok {
 		*dstPtr = src
+		return nil
+	}
+	if rawSrc, ok := src.(msgpack.RawMessage); ok {
+		buf := bytes.Buffer{}
+		_, _ = buf.Write(rawSrc)
+		decoder := msgpack.GetDecoder()
+		defer msgpack.PutDecoder(decoder)
+		decoder.Reset(&buf)
+		// Default map decoding expects all maps to have string keys
+		decoder.SetMapDecoder(func(decoder *msgpack.Decoder) (interface{}, error) {
+			return decoder.DecodeUntypedMap()
+		})
+		if err := decoder.Decode(dst); err != nil {
+			return err
+		}
 		return nil
 	}
 	switch s := src.(type) {

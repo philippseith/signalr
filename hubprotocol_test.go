@@ -23,7 +23,7 @@ var _ = Describe("Protocol", func() {
 		protocol := p
 		protocol.setDebugLogger(log.NewLogfmtLogger(os.Stderr))
 		Describe(fmt.Sprintf("%T: WriteMessage/ParseMessages roundtrip", protocol), func() {
-			Context("InvocationMessage", func() {
+			FContext("InvocationMessage", func() {
 				for _, a := range [][]interface{}{
 					make([]interface{}, 0),
 					{1, 2, 3},
@@ -52,6 +52,7 @@ var _ = Describe("Protocol", func() {
 						got, err := protocol.ParseMessages(&buf, &remainBuf)
 						Expect(err).NotTo(HaveOccurred())
 						Expect(len(got)).To(Equal(1))
+						Expect(got[0]).To(BeAssignableToTypeOf(invocationMessage{}))
 						gotMsg := got[0].(invocationMessage)
 						Expect(gotMsg.Target).To(Equal(want.Target))
 						Expect(gotMsg.InvocationID).To(Equal(want.InvocationID))
@@ -68,15 +69,15 @@ var _ = Describe("Protocol", func() {
 					})
 				}
 			})
-			Context("StreamItemMessage", func() {
+			FContext("StreamItemMessage", func() {
 				for _, w := range []streamItemMessage{
 					{Type: 2, InvocationID: "1", Item: "3"},
-					//{Type: 2, InvocationID: "1", Item: 3},
-					//{Type: 2, InvocationID: "1", Item: uint(3)},
-					//{Type: 2, InvocationID: "1", Item: simpleStruct{AsInt: 3, AsString: "3"}},
-					//{Type: 2, InvocationID: "1", Item: []int64{1, 2, 3}},
-					//{Type: 2, InvocationID: "1", Item: []int{1, 2, 3}},
-					//{Type: 2, InvocationID: "1", Item: map[string]int{"1": 4, "2": 5, "3": 6}},
+					{Type: 2, InvocationID: "1", Item: 3},
+					{Type: 2, InvocationID: "1", Item: uint(3)},
+					{Type: 2, InvocationID: "1", Item: simpleStruct{AsInt: 3, AsString: "3"}},
+					{Type: 2, InvocationID: "1", Item: []int64{1, 2, 3}},
+					{Type: 2, InvocationID: "1", Item: []int{1, 2, 3}},
+					{Type: 2, InvocationID: "1", Item: map[string]int{"1": 4, "2": 5, "3": 6}},
 				} {
 					want := w
 					It(fmt.Sprintf("should be equal after roundtrip of %#v", want), func(done Done) {
@@ -100,7 +101,7 @@ var _ = Describe("Protocol", func() {
 					})
 				}
 			})
-			It("with nil item should be equal after roundtrip", func(done Done) {
+			It("StreamItemMessage with nil item should be equal after roundtrip", func(done Done) {
 				buf := bytes.Buffer{}
 				want := streamItemMessage{Type: 2, InvocationID: "", Item: nil}
 				Expect(protocol.WriteMessage(want, &buf)).NotTo(HaveOccurred())

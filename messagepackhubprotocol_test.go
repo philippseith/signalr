@@ -5,9 +5,10 @@ import (
 	"encoding/json"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	"reflect"
 )
 
-var _ = Describe("MessagePackHubProtocol", func() {
+var _ = FDescribe("MessagePackHubProtocol", func() {
 	protocol := messagePackHubProtocol{}
 	Context("ParseMessages", func() {
 		It("should encode/decode an InvocationMessage", func() {
@@ -28,7 +29,19 @@ var _ = Describe("MessagePackHubProtocol", func() {
 			Expect(remainBuf.Len()).To(Equal(0))
 			Expect(len(got)).To(Equal(1))
 			Expect(got[0]).To(BeAssignableToTypeOf(invocationMessage{}))
-			Expect(got[0].(invocationMessage)).To(Equal(message))
+			gotMsg := got[0].(invocationMessage)
+			Expect(gotMsg.Type).To(Equal(message.Type))
+			Expect(gotMsg.Target).To(Equal(message.Target))
+			Expect(gotMsg.InvocationID).To(Equal(message.InvocationID))
+			Expect(gotMsg.StreamIds).To(Equal(message.StreamIds))
+			for i, gotArg := range gotMsg.Arguments {
+				// We can not directly compare gotArg and want.Arguments[i]
+				// because msgpack serializes numbers to the shortest possible type
+				t := reflect.TypeOf(message.Arguments[i])
+				value := reflect.New(t)
+				Expect(protocol.UnmarshalArgument(gotArg, value.Interface())).NotTo(HaveOccurred())
+				Expect(reflect.Indirect(value).Interface()).To(Equal(message.Arguments[i]))
+			}
 		})
 	})
 	Context("UnmarshalArgument for numeric types", func() {
