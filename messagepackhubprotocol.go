@@ -300,6 +300,10 @@ func encodeMsgHeader(e *msgpack.Encoder, msgLen int, msgType int) (err error) {
 	return nil
 }
 
+func (m *messagePackHubProtocol) transferMode() TransferMode {
+	return BinaryTransferMode
+}
+
 func (m *messagePackHubProtocol) setDebugLogger(dbg StructuredLogger) {
 	m.dbg = log.WithPrefix(dbg, "ts", log.DefaultTimestampUTC, "protocol", "MSGP")
 }

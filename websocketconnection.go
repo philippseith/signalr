@@ -10,7 +10,8 @@ import (
 
 type webSocketConnection struct {
 	ConnectionBase
-	conn *websocket.Conn
+	conn         *websocket.Conn
+	transferMode TransferMode
 }
 
 func newWebSocketConnection(parentContext context.Context, requestContext context.Context, connectionID string, conn *websocket.Conn) *webSocketConnection {
@@ -35,7 +36,11 @@ func (w *webSocketConnection) Write(p []byte) (n int, err error) {
 		ctx, cancel = context.WithTimeout(w.ctx, w.Timeout())
 		defer cancel() // has no effect because timeoutCtx is either done or not used anymore after websocket returns. But it keeps lint quiet
 	}
-	err = w.conn.Write(ctx, websocket.MessageText, p)
+	messageType := websocket.MessageText
+	if w.transferMode == BinaryTransferMode {
+		messageType = websocket.MessageBinary
+	}
+	err = w.conn.Write(ctx, messageType, p)
 	if err != nil {
 		return 0, err
 	}
@@ -57,4 +62,12 @@ func (w *webSocketConnection) Read(p []byte) (n int, err error) {
 		return 0, err
 	}
 	return bytes.NewReader(data).Read(p)
+}
+
+func (w *webSocketConnection) TransferMode() TransferMode {
+	return w.transferMode
+}
+
+func (w *webSocketConnection) SetTransferMode(transferMode TransferMode) {
+	w.transferMode = transferMode
 }

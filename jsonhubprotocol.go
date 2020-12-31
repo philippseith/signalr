@@ -209,6 +209,10 @@ func (j *jsonHubProtocol) WriteMessage(message interface{}, writer io.Writer) er
 	return fmt.Errorf("%#v does not implement json.Marshaler", message)
 }
 
+func (j *jsonHubProtocol) transferMode() TransferMode {
+	return TextTransferMode
+}
+
 func (j *jsonHubProtocol) setDebugLogger(dbg StructuredLogger) {
 	j.dbg = log.WithPrefix(dbg, "ts", log.DefaultTimestampUTC, "protocol", "JSON")
 }
