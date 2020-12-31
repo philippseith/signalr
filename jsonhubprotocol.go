@@ -65,22 +65,21 @@ func (j *jsonHubProtocol) UnmarshalArgument(src interface{}, dst interface{}) er
 	return nil
 }
 
-// ReadMessage reads a JSON message from buf and returns the message if the buf contained one completely.
-// If buf does not contain the whole message, it returns a nil message and complete false
+// ParseMessages reads all messages from the reader and puts the remaining bytes into remainBuf
 func (j *jsonHubProtocol) ParseMessages(reader io.Reader, remainBuf *bytes.Buffer) (messages []interface{}, err error) {
-	texts, err := parseTextMessageFormat(reader, remainBuf)
+	frames, err := readJSONFrames(reader, remainBuf)
 	if err != nil {
 		return nil, err
 	}
 	message := hubMessage{}
 	messages = make([]interface{}, 0)
-	for _, text := range texts {
-		err = message.UnmarshalJSON(text)
-		_ = j.dbg.Log(evt, "read", msg, string(text))
+	for _, frame := range frames {
+		err = message.UnmarshalJSON(frame)
+		_ = j.dbg.Log(evt, "read", msg, string(frame))
 		if err != nil {
-			return nil, &jsonError{string(text), err}
+			return nil, &jsonError{string(frame), err}
 		}
-		typedMessage, err := j.parseMessage(message.Type, text)
+		typedMessage, err := j.parseMessage(message.Type, frame)
 		if err != nil {
 			return nil, err
 		}
@@ -155,29 +154,44 @@ func (j *jsonHubProtocol) parseMessage(messageType int, text []byte) (message in
 	}
 }
 
-func parseTextMessageFormat(reader io.Reader, remainBuf *bytes.Buffer) ([][]byte, error) {
+// readJSONFrames reads all complete frames (delimited by 0x1e) from the reader and puts the remaining bytes into remainBuf
+func readJSONFrames(reader io.Reader, remainBuf *bytes.Buffer) ([][]byte, error) {
 	p := make([]byte, 1<<15)
-	texts := make([][]byte, 0)
-	buf := bytes.Buffer{}
+	buf := &bytes.Buffer{}
+	_, _ = buf.ReadFrom(remainBuf)
+	// Try getting data until at least one frame is available
 	for {
-		_, _ = buf.ReadFrom(remainBuf)
 		n, err := reader.Read(p)
 		if err != nil {
 			return nil, err
 		}
 		_, _ = buf.Write(p[:n])
-		for {
-			text, err := buf.ReadBytes(0x1e)
-			if errors.Is(err, io.EOF) {
-				_, _ = remainBuf.Write(text)
-				if len(texts) > 0 {
-					return texts, nil
-				}
-				break
-			}
-			texts = append(texts, text[:len(text)-1])
+		frames, err := parseJSONFrames(buf)
+		if err != nil {
+			return nil, err
+		}
+		if len(frames) > 0 {
+			_, _ = remainBuf.ReadFrom(buf)
+			return frames, nil
 		}
 	}
+}
+
+func parseJSONFrames(buf *bytes.Buffer) ([][]byte, error) {
+	frames := make([][]byte, 0)
+	for {
+		frame, err := buf.ReadBytes(0x1e)
+		if errors.Is(err, io.EOF) {
+			// Restore incomplete frame in buffer
+			_, _ = buf.Write(frame)
+			break
+		}
+		if err != nil {
+			return nil, err
+		}
+		frames = append(frames, frame[:len(frame)-1])
+	}
+	return frames, nil
 }
 
 // WriteMessage writes a message as JSON to the specified writer
