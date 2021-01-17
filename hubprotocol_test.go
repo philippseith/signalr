@@ -239,22 +239,22 @@ func TestDevParse(t *testing.T) {
 	}
 }
 
-type simplestStruct struct {
-	AsInt int
-}
+//type simplestStruct struct {
+//	AsInt int
+//}
 
 type simpleStruct struct {
 	AsInt    int    `json:"AI"`
 	AsString string `json:"AS"`
 }
 
-type parserHub struct {
-	Hub
-}
-
-func (p *parserHub) Parse(fileName string) []string {
-	return nil
-}
+//type parserHub struct {
+//	Hub
+//}
+//
+//func (p *parserHub) Parse(fileName string) []string {
+//	return nil
+//}
 
 func devParse() error {
 	fSet := token.NewFileSet()

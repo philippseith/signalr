@@ -103,39 +103,6 @@ func (h *hubChanTimeoutError) Error() string {
 	return h.msg
 }
 
-func convertNumberToChannelType(chanElm interface{}, number float64) (chanVal reflect.Value, err error) {
-	switch chanElm.(type) {
-	case int:
-		return reflect.ValueOf(int(number)), nil
-	case int8:
-		return reflect.ValueOf(int8(number)), nil
-	case int16:
-		return reflect.ValueOf(int16(number)), nil
-	case int32:
-		return reflect.ValueOf(int32(number)), nil
-	case int64:
-		return reflect.ValueOf(int64(number)), nil
-	case uint:
-		return reflect.ValueOf(uint(number)), nil
-	case uint8:
-		return reflect.ValueOf(uint8(number)), nil
-	case uint16:
-		return reflect.ValueOf(uint16(number)), nil
-	case uint32:
-		return reflect.ValueOf(uint32(number)), nil
-	case uint64:
-		return reflect.ValueOf(uint64(number)), nil
-	case float32:
-		return reflect.ValueOf(float32(number)), nil
-	case float64:
-		return reflect.ValueOf(number), nil
-	case string:
-		return reflect.ValueOf(fmt.Sprint(number)), nil
-	default:
-		return reflect.Value{}, fmt.Errorf("can not convert %v to %v", number, reflect.TypeOf(chanElm))
-	}
-}
-
 func (c *streamClient) handlesInvocationID(invocationID string) bool {
 	c.mx.Lock()
 	defer c.mx.Unlock()
