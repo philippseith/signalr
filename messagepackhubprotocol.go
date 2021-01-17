@@ -249,6 +249,8 @@ func (m *messagePackHubProtocol) WriteMessage(message interface{}, writer io.Wri
 	// Encode message body
 	buf := &bytes.Buffer{}
 	encoder := msgpack.NewEncoder(buf)
+	// Ensure uppercase/lowercase mapping for struct member names
+	encoder.SetCustomStructTag("json")
 	switch msg := message.(type) {
 	case invocationMessage:
 		if err := encodeMsgHeader(encoder, 6, msg.Type); err != nil {
@@ -392,6 +394,8 @@ func (m *messagePackHubProtocol) UnmarshalArgument(src interface{}, dst interfac
 	decoder.SetMapDecoder(func(decoder *msgpack.Decoder) (interface{}, error) {
 		return decoder.DecodeUntypedMap()
 	})
+	// Ensure uppercase/lowercase mapping for struct member names
+	decoder.SetCustomStructTag("json")
 	if err := decoder.Decode(dst); err != nil {
 		return err
 	}
