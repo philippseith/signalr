@@ -17,7 +17,6 @@ type jsonHubProtocol struct {
 
 // Protocol specific messages for correct unmarshaling of arguments or results.
 // jsonInvocationMessage is only used in ParseMessages, not in WriteMessage
-//easyjson:json
 type jsonInvocationMessage struct {
 	Type         int               `json:"type"`
 	Target       string            `json:"target"`
@@ -26,14 +25,12 @@ type jsonInvocationMessage struct {
 	StreamIds    []string          `json:"streamIds,omitempty"`
 }
 
-//easyjson:json
 type jsonStreamItemMessage struct {
 	Type         int             `json:"type"`
 	InvocationID string          `json:"invocationId"`
 	Item         json.RawMessage `json:"item"`
 }
 
-//easyjson:json
 type jsonCompletionMessage struct {
 	Type         int             `json:"type"`
 	InvocationID string          `json:"invocationId"`
@@ -74,7 +71,7 @@ func (j *jsonHubProtocol) ParseMessages(reader io.Reader, remainBuf *bytes.Buffe
 	message := hubMessage{}
 	messages = make([]interface{}, 0)
 	for _, frame := range frames {
-		err = message.UnmarshalJSON(frame)
+		err = json.Unmarshal(frame, &message)
 		_ = j.dbg.Log(evt, "read", msg, string(frame))
 		if err != nil {
 			return nil, &jsonError{string(frame), err}
@@ -139,13 +136,13 @@ func (j *jsonHubProtocol) parseMessage(messageType int, text []byte) (message in
 		return completion, err
 	case 5:
 		invocation := cancelInvocationMessage{}
-		if err = invocation.UnmarshalJSON(text); err != nil {
+		if err = json.Unmarshal(text, &invocation); err != nil {
 			err = &jsonError{string(text), err}
 		}
 		return invocation, err
 	case 7:
 		cm := closeMessage{}
-		if err = cm.UnmarshalJSON(text); err != nil {
+		if err = json.Unmarshal(text, &cm); err != nil {
 			err = &jsonError{string(text), err}
 		}
 		return cm, err
@@ -197,17 +194,20 @@ func parseJSONFrames(buf *bytes.Buffer) ([][]byte, error) {
 
 // WriteMessage writes a message as JSON to the specified writer
 func (j *jsonHubProtocol) WriteMessage(message interface{}, writer io.Writer) error {
+	var b []byte
+	var err error
 	if marshaler, ok := message.(json.Marshaler); ok {
-		b, err := marshaler.MarshalJSON()
-		if err != nil {
-			return err
-		}
-		b = append(b, 0x1e)
-		_ = j.dbg.Log(evt, "write", msg, string(b))
-		_, err = writer.Write(b)
+		b, err = marshaler.MarshalJSON()
+	} else {
+		b, err = json.Marshal(message)
+	}
+	if err != nil {
 		return err
 	}
-	return fmt.Errorf("%#v does not implement json.Marshaler", message)
+	b = append(b, 0x1e)
+	_ = j.dbg.Log(evt, "write", msg, string(b))
+	_, err = writer.Write(b)
+	return err
 }
 
 func (j *jsonHubProtocol) transferMode() TransferMode {

@@ -210,6 +210,7 @@ var _ = Describe("Protocol", func() {
 					buf.Write(p)
 					up := make(chan struct{}, 1)
 					go func() {
+						defer GinkgoRecover()
 						up <- struct{}{}
 						got, err := protocol.ParseMessages(&buf, &remainBuf)
 						Expect(err).NotTo(HaveOccurred())
@@ -223,7 +224,7 @@ var _ = Describe("Protocol", func() {
 					}()
 					// Wait for the parse to be started
 					<-up
-					<-time.After(time.Millisecond * 100)
+					<-time.After(time.Millisecond * 200)
 					// Write the rest of the frame
 					_, err = buf.ReadFrom(writeBuf)
 					Expect(err).NotTo(HaveOccurred())
