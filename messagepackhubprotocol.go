@@ -14,41 +14,27 @@ type messagePackHubProtocol struct {
 }
 
 func (m *messagePackHubProtocol) ParseMessages(reader io.Reader, remainBuf *bytes.Buffer) ([]interface{}, error) {
-	buf := bytes.Buffer{}
-	_, _ = buf.ReadFrom(remainBuf)
-	decoder := msgpack.GetDecoder()
-	defer msgpack.PutDecoder(decoder)
-	decoder.Reset(&buf)
+	frames, err := m.readFrames(reader, remainBuf)
+	if err != nil {
+		return nil, err
+	}
+	messages := make([]interface{}, 0)
+	for _, frame := range frames {
+		message, err := m.parseMessage(bytes.NewBuffer(frame))
+		if err != nil {
+			return nil, err
+		}
+		messages = append(messages, message)
+	}
+	return messages, nil
+}
+
+func (m *messagePackHubProtocol) parseMessage(buf *bytes.Buffer) (interface{}, error) {
+	decoder := msgpack.NewDecoder(buf)
 	// Default map decoding expects all maps to have string keys
 	decoder.SetMapDecoder(func(decoder *msgpack.Decoder) (interface{}, error) {
 		return decoder.DecodeUntypedMap()
 	})
-	p := make([]byte, 1<<15)
-	notYetDecoded := make([]byte, 0)
-	for {
-		buf.Write(notYetDecoded)
-		n, err := reader.Read(p)
-		if err != nil {
-			return nil, err
-		}
-		_, _ = buf.Write(p[:n])
-		message, err := m.parseMessage(decoder)
-		if err != nil {
-			if errors.Is(err, io.EOF) {
-				// Could not decode because bytes are missing. We need to read additional content
-				notYetDecoded = append(notYetDecoded, p[:n]...)
-				continue
-			}
-			// Could not decode because it is garbage
-			return nil, err
-		}
-		// Could decode. Store remaining buf content
-		_, _ = remainBuf.ReadFrom(&buf)
-		return []interface{}{message}, nil
-	}
-}
-
-func (m *messagePackHubProtocol) parseMessage(decoder *msgpack.Decoder) (interface{}, error) {
 	msgLen, err := decoder.DecodeArrayLen()
 	if err != nil {
 		return nil, err
@@ -65,13 +51,16 @@ func (m *messagePackHubProtocol) parseMessage(decoder *msgpack.Decoder) (interfa
 	msgType := int(msgType8)
 	switch msgType {
 	case 1, 4:
-		if msgLen != 6 {
+		if msgLen < 5 {
 			return nil, fmt.Errorf("invalid invocationMessage length %v", msgLen)
 		}
-		invocationMessage := invocationMessage{Type: msgType}
-		invocationMessage.InvocationID, err = decoder.DecodeString()
+		invocationID, err := m.decodeInvocationID(decoder)
 		if err != nil {
 			return nil, err
+		}
+		invocationMessage := invocationMessage{
+			Type:         msgType,
+			InvocationID: invocationID,
 		}
 		invocationMessage.Target, err = decoder.DecodeString()
 		if err != nil {
@@ -88,16 +77,19 @@ func (m *messagePackHubProtocol) parseMessage(decoder *msgpack.Decoder) (interfa
 			}
 			invocationMessage.Arguments = append(invocationMessage.Arguments, argument)
 		}
-		streamIdLen, err := decoder.DecodeArrayLen()
-		if err != nil {
-			return nil, err
-		}
-		for i := 0; i < streamIdLen; i++ {
-			streamId, err := decoder.DecodeString()
+		// StreamIds seem to be optional
+		if msgLen == 6 {
+			streamIdLen, err := decoder.DecodeArrayLen()
 			if err != nil {
 				return nil, err
 			}
-			invocationMessage.StreamIds = append(invocationMessage.StreamIds, streamId)
+			for i := 0; i < streamIdLen; i++ {
+				streamId, err := decoder.DecodeString()
+				if err != nil {
+					return nil, err
+				}
+				invocationMessage.StreamIds = append(invocationMessage.StreamIds, streamId)
+			}
 		}
 		return invocationMessage, nil
 	case 2:
@@ -184,50 +176,120 @@ func (m *messagePackHubProtocol) parseMessage(decoder *msgpack.Decoder) (interfa
 	return msg, nil
 }
 
-func (m *messagePackHubProtocol) WriteMessage(message interface{}, writer io.Writer) (err error) {
-	var buf bytes.Buffer
-	encoder := msgpack.NewEncoder(&buf)
+func (m *messagePackHubProtocol) decodeInvocationID(decoder *msgpack.Decoder) (string, error) {
+	rawID, err := decoder.DecodeInterface()
+	if err != nil {
+		return "", err
+	}
+	// nil is ok
+	if rawID == nil {
+		return "", nil
+	}
+	// Otherwise it must be string
+	invocationID, ok := rawID.(string)
+	if !ok {
+		return "", fmt.Errorf("invalid InvocationID %#v", rawID)
+	}
+	return invocationID, nil
+}
+
+func (m *messagePackHubProtocol) readFrames(reader io.Reader, remainBuf *bytes.Buffer) ([][]byte, error) {
+	p := make([]byte, 1<<15)
+	buf := &bytes.Buffer{}
+	_, _ = buf.ReadFrom(remainBuf)
+	// Try getting data until at least one frame is available
+	for {
+		n, err := reader.Read(p)
+		// Some reader implementations return io.EOF additionally to n=0 if no data could be read
+		if err != nil && !errors.Is(err, io.EOF) {
+			return nil, err
+		}
+		_, _ = buf.Write(p[:n])
+		frames, err := m.parseFrames(buf)
+		if err != nil {
+			return nil, err
+		}
+		if len(frames) > 0 {
+			_, _ = remainBuf.ReadFrom(buf)
+			return frames, nil
+		}
+	}
+}
+
+func (m *messagePackHubProtocol) parseFrames(buf *bytes.Buffer) ([][]byte, error) {
+	frames := make([][]byte, 0)
+	for {
+		bufLenWithFrameLen := buf.Len()
+		decoder := msgpack.NewDecoder(buf)
+		frameLen, err := decoder.DecodeInt()
+		// Not enough data to read length info or not enough data to read body?
+		if errors.Is(err, io.EOF) || buf.Len() < frameLen {
+			// Restore bytes read while decoding in buffer
+			for buf.Len() < bufLenWithFrameLen {
+				_ = buf.UnreadByte()
+			}
+			break
+		}
+		if err != nil {
+			return nil, err
+		}
+		// Read complete frame
+		frame := make([]byte, frameLen)
+		_, err = buf.Read(frame)
+		if err != nil {
+			return nil, err
+		}
+		// Add frame to result
+		frames = append(frames, frame)
+	}
+	return frames, nil
+}
+
+func (m *messagePackHubProtocol) WriteMessage(message interface{}, writer io.Writer) error {
+	// Encode message body
+	buf := &bytes.Buffer{}
+	encoder := msgpack.NewEncoder(buf)
 	switch msg := message.(type) {
 	case invocationMessage:
-		if err = encodeMsgHeader(encoder, 6, msg.Type); err != nil {
+		if err := encodeMsgHeader(encoder, 6, msg.Type); err != nil {
 			return err
 		}
 		if msg.InvocationID == "" {
-			if err = encoder.EncodeNil(); err != nil {
+			if err := encoder.EncodeNil(); err != nil {
 				return err
 			}
 		} else {
-			if err = encoder.EncodeString(msg.InvocationID); err != nil {
+			if err := encoder.EncodeString(msg.InvocationID); err != nil {
 				return err
 			}
 		}
-		if err = encoder.EncodeString(msg.Target); err != nil {
+		if err := encoder.EncodeString(msg.Target); err != nil {
 			return err
 		}
-		if err = encoder.EncodeArrayLen(len(msg.Arguments)); err != nil {
+		if err := encoder.EncodeArrayLen(len(msg.Arguments)); err != nil {
 			return err
 		}
 		for _, arg := range msg.Arguments {
-			if err = encoder.Encode(arg); err != nil {
+			if err := encoder.Encode(arg); err != nil {
 				return err
 			}
 		}
-		if err = encoder.EncodeArrayLen(len(msg.StreamIds)); err != nil {
+		if err := encoder.EncodeArrayLen(len(msg.StreamIds)); err != nil {
 			return err
 		}
 		for _, id := range msg.StreamIds {
-			if err = encoder.EncodeString(id); err != nil {
+			if err := encoder.EncodeString(id); err != nil {
 				return err
 			}
 		}
 	case streamItemMessage:
-		if err = encodeMsgHeader(encoder, 4, msg.Type); err != nil {
+		if err := encodeMsgHeader(encoder, 4, msg.Type); err != nil {
 			return err
 		}
-		if err = encoder.EncodeString(msg.InvocationID); err != nil {
+		if err := encoder.EncodeString(msg.InvocationID); err != nil {
 			return err
 		}
-		if err = encoder.Encode(msg.Item); err != nil {
+		if err := encoder.Encode(msg.Item); err != nil {
 			return err
 		}
 	case completionMessage:
@@ -235,10 +297,10 @@ func (m *messagePackHubProtocol) WriteMessage(message interface{}, writer io.Wri
 		if msg.Result != nil || msg.Error != "" {
 			msgLen = 5
 		}
-		if err = encodeMsgHeader(encoder, msgLen, msg.Type); err != nil {
+		if err := encodeMsgHeader(encoder, msgLen, msg.Type); err != nil {
 			return err
 		}
-		if err = encoder.EncodeString(msg.InvocationID); err != nil {
+		if err := encoder.EncodeString(msg.InvocationID); err != nil {
 			return err
 		}
 		var resultKind int8 = 2
@@ -247,42 +309,50 @@ func (m *messagePackHubProtocol) WriteMessage(message interface{}, writer io.Wri
 		} else if msg.Result != nil {
 			resultKind = 3
 		}
-		if err = encoder.EncodeInt8(resultKind); err != nil {
+		if err := encoder.EncodeInt8(resultKind); err != nil {
 			return err
 		}
 		switch resultKind {
 		case 1:
-			if err = encoder.EncodeString(msg.Error); err != nil {
+			if err := encoder.EncodeString(msg.Error); err != nil {
 				return err
 			}
 		case 3:
-			if err = encoder.Encode(msg.Result); err != nil {
+			if err := encoder.Encode(msg.Result); err != nil {
 				return err
 			}
 		}
 	case cancelInvocationMessage:
-		if err = encodeMsgHeader(encoder, 3, msg.Type); err != nil {
+		if err := encodeMsgHeader(encoder, 3, msg.Type); err != nil {
 			return err
 		}
-		if err = encoder.EncodeString(msg.InvocationID); err != nil {
+		if err := encoder.EncodeString(msg.InvocationID); err != nil {
 			return err
 		}
 	case hubMessage:
-		if err = encoder.EncodeInt8(int8(6)); err != nil {
+		if err := encoder.EncodeInt8(int8(6)); err != nil {
 			return err
 		}
 	case closeMessage:
-		if err = encodeMsgHeader(encoder, 3, msg.Type); err != nil {
+		if err := encodeMsgHeader(encoder, 3, msg.Type); err != nil {
 			return err
 		}
-		if err = encoder.EncodeString(msg.Error); err != nil {
+		if err := encoder.EncodeString(msg.Error); err != nil {
 			return err
 		}
-		if err = encoder.EncodeBool(msg.AllowReconnect); err != nil {
+		if err := encoder.EncodeBool(msg.AllowReconnect); err != nil {
 			return err
 		}
 	}
-	_, err = buf.WriteTo(writer)
+	// Build frame with length information
+	frameBuf := &bytes.Buffer{}
+	frameEncoder := msgpack.NewEncoder(frameBuf)
+	if err := frameEncoder.EncodeInt(int64(buf.Len())); err != nil {
+		return err
+	}
+	_ = m.dbg.Log(evt, "Write", msg, fmt.Sprintf("%#v", message))
+	_, _ = frameBuf.ReadFrom(buf)
+	_, err := frameBuf.WriteTo(writer)
 	return err
 }
 
