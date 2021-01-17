@@ -2,13 +2,16 @@ package signalr
 
 import (
 	"bytes"
+	"github.com/go-kit/kit/log"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	"os"
 	"reflect"
 )
 
 var _ = Describe("MessagePackHubProtocol", func() {
 	protocol := messagePackHubProtocol{}
+	protocol.setDebugLogger(log.NewLogfmtLogger(os.Stderr))
 	Context("ParseMessages", func() {
 		It("should encode/decode an InvocationMessage", func() {
 			message := invocationMessage{
