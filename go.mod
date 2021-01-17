@@ -8,7 +8,6 @@ require (
 	github.com/go-logfmt/logfmt v0.4.0 // indirect
 	github.com/go-stack/stack v1.8.0 // indirect
 	github.com/google/uuid v1.1.1
-	github.com/mailru/easyjson v0.7.6
 	github.com/onsi/ginkgo v1.11.0
 	github.com/onsi/gomega v1.8.1
 	github.com/teivah/onecontext v0.0.0-20200513185103-40f981bfd775
