@@ -54,6 +54,10 @@ func (t *testingConnection) ConnectionID() string {
 	return t.connectionID
 }
 
+func (t *testingConnection) SetConnectionID(id string) {
+	t.connectionID = id
+}
+
 func (t *testingConnection) Read(b []byte) (n int, err error) {
 	if fr := t.FailRead(); fr != "" {
 		defer func() { t.SetFailRead("") }()
@@ -210,9 +214,14 @@ func receiveLoop(conn clientReceiver) func() {
 							errorHandler(err)
 						}
 					case 2:
-						var streamItemMessage streamItemMessage
-						if err = json.Unmarshal([]byte(message), &streamItemMessage); err == nil {
-							conn.ReceiveChan() <- streamItemMessage
+						var jsonStreamItemMessage jsonStreamItemMessage
+						if err = json.Unmarshal([]byte(message), &jsonStreamItemMessage); err == nil {
+
+							conn.ReceiveChan() <- streamItemMessage{
+								Type:         jsonStreamItemMessage.Type,
+								InvocationID: jsonStreamItemMessage.InvocationID,
+								Item:         jsonStreamItemMessage.Item,
+							}
 						} else {
 							errorHandler(err)
 						}

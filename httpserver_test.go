@@ -7,13 +7,12 @@ import (
 	"fmt"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
-	"github.com/mailru/easyjson/jwriter"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	"golang.org/x/net/websocket"
 	"io/ioutil"
 	"net"
 	"net/http"
+	"nhooyr.io/websocket"
 	"os"
 	"strings"
 	"time"
@@ -32,100 +31,110 @@ func (w *addHub) Echo(s string) string {
 }
 
 var _ = Describe("HTTP server", func() {
-	for _, transport := range []string{
-		"WebSockets",
-		"ServerSentEvents",
+	for _, transport := range [][]string{
+		{"WebSockets", "Text"},
+		{"WebSockets", "Binary"},
+		{"ServerSentEvents", "Text"},
 	} {
-		Context("A correct negotiation request is sent", func() {
-			It(fmt.Sprintf("should send a correct negotiation response with support for %v with text protocol", transport), func(done Done) {
-				// Start server
-				server, err := NewServer(context.TODO(), SimpleHubFactory(&addHub{}), HTTPTransports(transport))
-				Expect(err).NotTo(HaveOccurred())
-				router := server.ServeHTTP("/hub")
-				port := freePort()
-				go func() {
-					_ = http.ListenAndServe(fmt.Sprintf("127.0.0.1:%v", port), router)
-				}()
-				// Negotiate
-				negResp := negotiateWebSocketTestServer(port)
-				Expect(negResp["connectionId"]).NotTo(BeNil())
-				Expect(negResp["availableTransports"]).To(BeAssignableToTypeOf([]interface{}{}))
-				avt := negResp["availableTransports"].([]interface{})
-				Expect(len(avt)).To(BeNumerically(">", 0))
-				Expect(avt[0]).To(BeAssignableToTypeOf(map[string]interface{}{}))
-				avtVal := avt[0].(map[string]interface{})
-				Expect(avtVal["transport"]).To(Equal(transport))
-				Expect(avtVal["transferFormats"]).To(BeAssignableToTypeOf([]interface{}{}))
-				tf := avtVal["transferFormats"].([]interface{})
-				Expect(tf).To(ContainElement("Text"))
-				// TODO Expect(tf).To(ContainElement("Binary"))
-				close(done)
+		transport := transport
+		Context(fmt.Sprintf("%v %v", transport[0], transport[1]), func() {
+			Context("A correct negotiation request is sent", func() {
+				It(fmt.Sprintf("should send a correct negotiation response with support for %v with text protocol", transport), func(done Done) {
+					// Start server
+					server, err := NewServer(context.TODO(), SimpleHubFactory(&addHub{}), HTTPTransports(transport[0]))
+					Expect(err).NotTo(HaveOccurred())
+					router := http.NewServeMux()
+					server.MapHTTP(router, "/hub")
+					port := freePort()
+					go func() {
+						_ = http.ListenAndServe(fmt.Sprintf("127.0.0.1:%v", port), router)
+					}()
+					// Negotiate
+					negResp := negotiateWebSocketTestServer(port)
+					Expect(negResp["connectionId"]).NotTo(BeNil())
+					Expect(negResp["availableTransports"]).To(BeAssignableToTypeOf([]interface{}{}))
+					avt := negResp["availableTransports"].([]interface{})
+					Expect(len(avt)).To(BeNumerically(">", 0))
+					Expect(avt[0]).To(BeAssignableToTypeOf(map[string]interface{}{}))
+					avtVal := avt[0].(map[string]interface{})
+					Expect(avtVal["transport"]).To(Equal(transport[0]))
+					Expect(avtVal["transferFormats"]).To(BeAssignableToTypeOf([]interface{}{}))
+					tf := avtVal["transferFormats"].([]interface{})
+					Expect(tf).To(ContainElement("Text"))
+					if transport[0] == "WebSockets" {
+						Expect(tf).To(ContainElement("Binary"))
+					}
+					close(done)
+				}, 2.0)
 			})
-		})
 
-		Context("A invalid negotiation request is sent", func() {
-			It(fmt.Sprintf("should send a correct negotiation response with support for %v with text protocol", transport), func(done Done) {
-				// Start server
-				server, err := NewServer(context.TODO(), SimpleHubFactory(&addHub{}), HTTPTransports(transport))
-				Expect(err).NotTo(HaveOccurred())
-				router := server.ServeHTTP("/hub")
-				port := freePort()
-				go func() {
-					_ = http.ListenAndServe(fmt.Sprintf("127.0.0.1:%v", port), router)
-				}()
-				waitForPort(port)
-				// Negotiate the wrong way
-				resp, err := http.Get(fmt.Sprintf("http://127.0.0.1:%v/hub/negotiate", port))
-				Expect(err).To(BeNil())
-				Expect(resp).NotTo(BeNil())
-				Expect(resp.StatusCode).ToNot(Equal(200))
-				close(done)
+			Context("A invalid negotiation request is sent", func() {
+				It(fmt.Sprintf("should send a correct negotiation response with support for %v with text protocol", transport), func(done Done) {
+					// Start server
+					server, err := NewServer(context.TODO(), SimpleHubFactory(&addHub{}), HTTPTransports(transport[0]))
+					Expect(err).NotTo(HaveOccurred())
+					router := http.NewServeMux()
+					server.MapHTTP(router, "/hub")
+					port := freePort()
+					go func() {
+						_ = http.ListenAndServe(fmt.Sprintf("127.0.0.1:%v", port), router)
+					}()
+					waitForPort(port)
+					// Negotiate the wrong way
+					resp, err := http.Get(fmt.Sprintf("http://127.0.0.1:%v/hub/negotiate", port))
+					Expect(err).To(BeNil())
+					Expect(resp).NotTo(BeNil())
+					Expect(resp.StatusCode).ToNot(Equal(200))
+					close(done)
+				}, 2.0)
 			})
-		})
 
-		Context("Connection with client", func() {
-			It("should successfully handle an Invoke call", func(done Done) {
-				logger := &nonProtocolLogger{log.NewLogfmtLogger(os.Stderr)}
-				// Start server
-				server, err := NewServer(context.TODO(),
-					SimpleHubFactory(&addHub{}), HTTPTransports(transport),
-					Logger(logger, true))
-				Expect(err).NotTo(HaveOccurred())
-				router := server.ServeHTTP("/hub")
-				port := freePort()
-				go func() {
-					_ = http.ListenAndServe(fmt.Sprintf("127.0.0.1:%v", port), router)
-				}()
-				waitForPort(port)
-				client, err := NewHTTPClient(context.TODO(),
-					fmt.Sprintf("http://127.0.0.1:%v/hub", port),
-					Logger(logger, true))
-				Expect(err).NotTo(HaveOccurred())
-				Expect(client).NotTo(BeNil())
-				err = client.Start()
-				Expect(err).NotTo(HaveOccurred())
-				result := <-client.Invoke("Add2", 1)
-				Expect(result.Error).NotTo(HaveOccurred())
-				Expect(result.Value).To(Equal(float64(3)))
-				// Try second connection
-				client2, err := NewHTTPClient(context.TODO(),
-					fmt.Sprintf("http://127.0.0.1:%v/hub", port),
-					Logger(logger, true))
-				Expect(err).NotTo(HaveOccurred())
-				Expect(client2).NotTo(BeNil())
-				_ = client2.Start()
-				result = <-client2.Invoke("Add2", 2)
-				Expect(result.Error).NotTo(HaveOccurred())
-				Expect(result.Value).To(Equal(float64(4)))
-				// Huge message
-				hugo := strings.Repeat("#", 2500)
-				result = <-client.Invoke("Echo", hugo)
-				Expect(result.Error).NotTo(HaveOccurred())
-				s := result.Value.(string)
-				Expect(s).To(Equal(hugo))
-
-				close(done)
-			}, 100)
+			Context("Connection with client", func() {
+				It("should successfully handle an Invoke call", func(done Done) {
+					logger := &nonProtocolLogger{log.NewLogfmtLogger(os.Stderr)}
+					// Start server
+					server, err := NewServer(context.TODO(),
+						SimpleHubFactory(&addHub{}), HTTPTransports(transport[0]),
+						Logger(logger, true))
+					Expect(err).NotTo(HaveOccurred())
+					router := http.NewServeMux()
+					server.MapHTTP(router, "/hub")
+					port := freePort()
+					go func() {
+						_ = http.ListenAndServe(fmt.Sprintf("127.0.0.1:%v", port), router)
+					}()
+					waitForPort(port)
+					client, err := NewHTTPClient(context.TODO(),
+						fmt.Sprintf("http://127.0.0.1:%v/hub", port),
+						Logger(logger, true),
+						TransferFormat(transport[1]))
+					Expect(err).NotTo(HaveOccurred())
+					Expect(client).NotTo(BeNil())
+					err = client.Start()
+					Expect(err).NotTo(HaveOccurred())
+					result := <-client.Invoke("Add2", 1)
+					Expect(result.Error).NotTo(HaveOccurred())
+					Expect(result.Value).To(BeEquivalentTo(3))
+					// Try second connection
+					client2, err := NewHTTPClient(context.TODO(),
+						fmt.Sprintf("http://127.0.0.1:%v/hub", port),
+						Logger(logger, true),
+						TransferFormat(transport[1]))
+					Expect(err).NotTo(HaveOccurred())
+					Expect(client2).NotTo(BeNil())
+					_ = client2.Start()
+					result = <-client2.Invoke("Add2", 2)
+					Expect(result.Error).NotTo(HaveOccurred())
+					Expect(result.Value).To(BeEquivalentTo(4))
+					// Huge message
+					hugo := strings.Repeat("#", 2500)
+					result = <-client.Invoke("Echo", hugo)
+					Expect(result.Error).NotTo(HaveOccurred())
+					s := result.Value.(string)
+					Expect(s).To(Equal(hugo))
+					close(done)
+				}, 10.0)
+			})
 		})
 	}
 	Context("When no negotiation is send", func() {
@@ -133,7 +142,8 @@ var _ = Describe("HTTP server", func() {
 			// Start server
 			server, err := NewServer(context.TODO(), SimpleHubFactory(&addHub{}), HTTPTransports("WebSockets"))
 			Expect(err).NotTo(HaveOccurred())
-			router := server.ServeHTTP("/hub")
+			router := http.NewServeMux()
+			server.MapHTTP(router, "/hub")
 			port := freePort()
 			go func() {
 				_ = http.ListenAndServe(fmt.Sprintf("127.0.0.1:%v", port), router)
@@ -141,7 +151,7 @@ var _ = Describe("HTTP server", func() {
 			waitForPort(port)
 			handShakeAndCallWebSocketTestServer(port, "")
 			close(done)
-		})
+		}, 2.0)
 	})
 })
 
@@ -193,16 +203,16 @@ func negotiateWebSocketTestServer(port int) map[string]interface{} {
 func handShakeAndCallWebSocketTestServer(port int, connectionID string) {
 	waitForPort(port)
 	logger := log.NewLogfmtLogger(os.Stderr)
-	protocol := JSONHubProtocol{easyWriter: jwriter.Writer{}}
+	protocol := jsonHubProtocol{}
 	protocol.setDebugLogger(level.Debug(logger))
 	var urlParam string
 	if connectionID != "" {
 		urlParam = fmt.Sprintf("?id=%v", connectionID)
 	}
-	ws, err := websocket.Dial(fmt.Sprintf("ws://127.0.0.1:%v/hub%v", port, urlParam), "json", "http://127.0.0.1")
+	ws, _, err := websocket.Dial(context.Background(), fmt.Sprintf("ws://127.0.0.1:%v/hub%v", port, urlParam), nil)
 	Expect(err).To(BeNil())
 	defer func() {
-		_ = ws.Close()
+		_ = ws.Close(websocket.StatusNormalClosure, "")
 	}()
 	wsConn := newWebSocketConnection(context.TODO(), context.TODO(), connectionID, ws)
 	cliConn := newHubConnection(wsConn, &protocol, 1<<15, log.NewLogfmtLogger(os.Stderr))
@@ -210,18 +220,18 @@ func handShakeAndCallWebSocketTestServer(port int, connectionID string) {
 	_, _ = wsConn.Write(append([]byte(`{"type":1,"invocationId":"666","target":"add2","arguments":[1]}`), 30))
 	result := make(chan interface{})
 	go func() {
-		for {
-			if message, err := cliConn.Receive(); err == nil {
-				if completionMessage, ok := message.(completionMessage); ok {
-					result <- completionMessage.Result
-					return
-				}
+		for recvResult := range cliConn.Receive() {
+			if completionMessage, ok := recvResult.message.(completionMessage); ok {
+				result <- completionMessage.Result
+				return
 			}
 		}
 	}()
 	select {
 	case r := <-result:
-		Expect(r).To(Equal(3.0))
+		var f float64
+		Expect(protocol.UnmarshalArgument(r, &f)).NotTo(HaveOccurred())
+		Expect(f).To(Equal(3.0))
 	case <-time.After(1000 * time.Millisecond):
 		Fail("timed out")
 	}

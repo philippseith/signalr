@@ -1,8 +1,3 @@
-// Package signalr implements a SignalR server in go.
-// SignalR is an open-source library that simplifies adding real-time web functionality to apps.
-// Real-time web functionality enables server-side code to push content to clients instantly.
-// Historically it was tied to ASP.NET Core but the protocol is open and implementable in any language.
-// The server currently supports transport over http/WebSockets and TCP. The supported protocol encoding in JSON.
 package signalr
 
 import (
@@ -12,18 +7,25 @@ import (
 	"errors"
 	"fmt"
 	"github.com/go-kit/kit/log"
-	"github.com/mailru/easyjson/jwriter"
 	"net/http"
 	"os"
 	"reflect"
 	"runtime/debug"
 )
 
-// Server is a SignalR server for one type of hub
+// Server is a SignalR server for one type of hub.
+//
+// 	MapHTTP(mux *http.ServeMux, path string)
+// maps the servers hub to an path on an http.ServeMux.
+//
+// 	Serve(conn Connection)
+// serves the hub of the server on one connection.
+// The same server might serve different connections in parallel. Serve does not return until the connection is closed
+// or the servers context is canceled.
 type Server interface {
 	Party
-	ServeHTTP(path string) *http.ServeMux
-	ServeConnection(conn Connection)
+	MapHTTP(mux *http.ServeMux, path string)
+	Serve(conn Connection)
 	availableTransports() []string
 }
 
@@ -70,17 +72,17 @@ func NewServer(ctx context.Context, options ...func(Party) error) (Server, error
 	return server, nil
 }
 
-// MapHub maps the hub to a path and returns the http.ServerMux which handles it
-func (s *server) ServeHTTP(path string) *http.ServeMux {
+// MapHTTP maps the servers hub to an path in an http.ServeMux
+func (s *server) MapHTTP(mux *http.ServeMux, path string) {
 	httpMux := newHTTPMux(s)
-	mux := http.NewServeMux()
 	mux.HandleFunc(fmt.Sprintf("%s/negotiate", path), httpMux.negotiate)
 	mux.Handle(path, httpMux)
-	return mux
 }
 
-// ServeConnection serves one connection. The same server might serve different connections in parallel
-func (s *server) ServeConnection(conn Connection) {
+// Serve serves the hub of the server on one connection.
+// The same server might serve different connections in parallel. Serve does not return until the connection is closed
+// or the servers context is canceled.
+func (s *server) Serve(conn Connection) {
 	if protocol, err := s.processHandshake(conn); err != nil {
 		info, _ := s.prefixLoggers("")
 		_ = info.Log(evt, "processHandshake", "connectionId", conn.ConnectionID(), "error", err, react, "do not connect")
@@ -155,9 +157,9 @@ func (s *server) newConnectionHubContext(hubConn hubConnection) HubContext {
 	}
 }
 
-func (s *server) processHandshake(conn Connection) (HubProtocol, error) {
+func (s *server) processHandshake(conn Connection) (hubProtocol, error) {
 	var err error
-	var protocol HubProtocol
+	var protocol hubProtocol
 	var ok bool
 	const handshakeResponse = "{}\u001e"
 	const errorHandshakeResponse = "{\"error\":\"%s\"}\u001e"
@@ -165,50 +167,38 @@ func (s *server) processHandshake(conn Connection) (HubProtocol, error) {
 
 	defer conn.SetTimeout(0)
 	conn.SetTimeout(s._handshakeTimeout)
-
-	var buf bytes.Buffer
-	data := make([]byte, 1<<12)
-	for {
-		var n int
-		if n, err = conn.Read(data); err != nil {
-			break
+	var remainBuf bytes.Buffer
+	rawHandshake, err := readJSONFrames(conn, &remainBuf)
+	if err != nil {
+		return nil, err
+	}
+	_ = dbg.Log(evt, "handshake received", "msg", string(rawHandshake[0]))
+	request := handshakeRequest{}
+	if err = json.Unmarshal(rawHandshake[0], &request); err != nil {
+		// Malformed handshake
+		return nil, err
+	}
+	if protocol, ok = protocolMap[request.Protocol]; ok {
+		// Send the handshake response
+		if _, err = conn.Write([]byte(handshakeResponse)); err != nil {
+			_ = dbg.Log(evt, "handshake sent", "error", err)
 		} else {
-			buf.Write(data[:n])
-			var rawHandshake []byte
-			if rawHandshake, err = parseTextMessageFormat(&buf); err != nil {
-				// Partial message, read more data
-				buf.Write(data[:n])
-			} else {
-				_ = dbg.Log(evt, "handshake received", "msg", string(rawHandshake))
-				request := handshakeRequest{}
-				if err = json.Unmarshal(rawHandshake, &request); err != nil {
-					// Malformed handshake
-					break
-				}
-				if protocol, ok = protocolMap[request.Protocol]; ok {
-					// Send the handshake response
-					if _, err = conn.Write([]byte(handshakeResponse)); err != nil {
-						_ = dbg.Log(evt, "handshake sent", "error", err)
-					} else {
-						_ = dbg.Log(evt, "handshake sent", "msg", handshakeResponse)
-					}
-				} else {
-					err = fmt.Errorf("protocol %v not supported", request.Protocol)
-					_ = info.Log(evt, "protocol requested", "error", err)
-					if _, respErr := conn.Write([]byte(fmt.Sprintf(errorHandshakeResponse, err))); respErr != nil {
-						_ = dbg.Log(evt, "handshake sent", "error", respErr)
-						err = respErr
-					}
-				}
-				break
-			}
+			_ = dbg.Log(evt, "handshake sent", "msg", handshakeResponse)
+		}
+	} else {
+		err = fmt.Errorf("protocol %v not supported", request.Protocol)
+		_ = info.Log(evt, "protocol requested", "error", err)
+		if _, respErr := conn.Write([]byte(fmt.Sprintf(errorHandshakeResponse, err))); respErr != nil {
+			_ = dbg.Log(evt, "handshake sent", "error", respErr)
+			err = respErr
 		}
 	}
 	return protocol, err
 }
 
-var protocolMap = map[string]HubProtocol{
-	"json": &JSONHubProtocol{easyWriter: jwriter.Writer{}},
+var protocolMap = map[string]hubProtocol{
+	"json":        &jsonHubProtocol{},
+	"messagepack": &messagePackHubProtocol{},
 }
 
 // const for logging

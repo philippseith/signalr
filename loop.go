@@ -3,10 +3,10 @@ package signalr
 import (
 	"errors"
 	"fmt"
-	"github.com/rotisserie/eris"
 	"reflect"
 	"runtime/debug"
 	"strings"
+	"sync/atomic"
 	"time"
 )
 
@@ -14,35 +14,34 @@ type loop struct {
 	party        Party
 	info         StructuredLogger
 	dbg          StructuredLogger
-	protocol     HubProtocol
+	protocol     hubProtocol
 	hubConn      hubConnection
 	invokeClient *invokeClient
 	streamer     *streamer
 	streamClient *streamClient
+	lastID       uint64
 }
 
-func newLoop(p Party, conn Connection, protocol HubProtocol) *loop {
-	protocol = reflect.New(reflect.ValueOf(protocol).Elem().Type()).Interface().(HubProtocol)
+func newLoop(p Party, conn Connection, protocol hubProtocol) *loop {
+	protocol = reflect.New(reflect.ValueOf(protocol).Elem().Type()).Interface().(hubProtocol)
 	_, dbg := p.loggers()
 	protocol.setDebugLogger(dbg)
 	pInfo, pDbg := p.prefixLoggers(conn.ConnectionID())
+	conn.SetTimeout(p.timeout())
 	hubConn := newHubConnection(conn, protocol, p.maximumReceiveMessageSize(), pInfo)
 	return &loop{
 		party:        p,
 		protocol:     protocol,
 		hubConn:      hubConn,
-		invokeClient: newInvokeClient(p.chanReceiveTimeout()),
-		streamer:     newStreamer(hubConn, pInfo),
-		streamClient: newStreamClient(p.chanReceiveTimeout(), p.streamBufferCapacity()),
+		invokeClient: newInvokeClient(protocol, p.chanReceiveTimeout()),
+		streamer:     &streamer{conn: hubConn},
+		streamClient: newStreamClient(protocol, p.chanReceiveTimeout(), p.streamBufferCapacity()),
 		info:         pInfo,
 		dbg:          pDbg,
 	}
 }
 
-type loopEvent struct {
-	message interface{}
-	err     error
-}
+var closeMessageError = errors.New("CloseMessage received")
 
 // Run runs the loop. After the startup sequence is done, this is signaled over the started channel.
 // Callers should pass a channel with buffer size 1 to allow the loop to run without waiting for the caller.
@@ -52,17 +51,16 @@ func (l *loop) Run(started chan struct{}) {
 	close(started)
 	// Process messages
 	var err error
+	ch := make(chan receiveResult, 1)
+	go func() {
+		for result := range l.hubConn.Receive() {
+			ch <- result
+			// The loop ends when the chan returned by hubConn.Receive() is closed.
+			// This happens when hubConn.Abort is called at the end to Run()
+		}
+	}()
 msgLoop:
 	for {
-		ch := make(chan loopEvent, 1)
-		go func() {
-			message, err := l.receive()
-			ch <- loopEvent{
-				message: message,
-				err:     err,
-			}
-			close(ch)
-		}()
 	pingLoop:
 		for {
 			select {
@@ -82,12 +80,14 @@ msgLoop:
 					case closeMessage:
 						_ = l.dbg.Log(evt, msgRecv, msg, fmtMsg(message))
 						// Bogus error to break the msgLoop
-						err = errors.New("")
+						err = closeMessageError
 					case hubMessage:
 						// Mostly ping
 						err = l.handleOtherMessage(message)
 						// No default case necessary, because the protocol would return either a hubMessage or an error
 					}
+				} else {
+					_ = l.info.Log(evt, msgRecv, "error", err, msg, fmtMsg(evt.message), react, "close connection")
 				}
 				break pingLoop
 			case <-time.After(l.party.keepAliveInterval()):
@@ -100,7 +100,10 @@ msgLoop:
 				err = fmt.Errorf("client timeout interval elapsed (%v)", l.party.timeout())
 				break pingLoop
 			case <-l.hubConn.Context().Done():
-				err = eris.Wrap(l.hubConn.Context().Err(), "hubConnection canceled")
+				err = fmt.Errorf("breaking loop. hubConnection canceled: %w", l.hubConn.Context().Err())
+				break pingLoop
+			case <-l.party.context().Done():
+				err = fmt.Errorf("breaking loop. Party canceled: %w", l.party.context().Err())
 				break pingLoop
 			}
 		}
@@ -109,16 +112,62 @@ msgLoop:
 		}
 	}
 	l.party.onDisconnected(l.hubConn)
-	_ = l.hubConn.Close(fmt.Sprintf("%v", err), l.party.allowReconnect())
+	// Don't send CloseMessage if we received a CloseMessage
+	if err != closeMessageError {
+		_ = l.hubConn.Close(fmt.Sprintf("%v", err), l.party.allowReconnect())
+	}
 	_ = l.dbg.Log(evt, "message loop ended")
 	l.invokeClient.cancelAllInvokes()
+	l.hubConn.Abort()
 }
 
-func (l *loop) receive() (message interface{}, err error) {
-	if message, err = l.hubConn.Receive(); err != nil {
-		_ = l.info.Log(evt, msgRecv, "error", err, msg, fmtMsg(message), react, "close connection")
+func (l *loop) PullStream(method, id string, arguments ...interface{}) <-chan InvokeResult {
+	_, errChan := l.invokeClient.newInvocation(id)
+	upChan := l.streamClient.newUpstreamChannel(id)
+	ch := newInvokeResultChan(upChan, errChan)
+	if err := l.hubConn.SendStreamInvocation(id, method, arguments, nil); err != nil {
+		// When we get an error here, the loop is closed and the errChan might be already closed
+		// We create a new one to deliver our error
+		ch, _ = createResultChansWithError(err)
+		l.streamClient.deleteUpstreamChannel(id)
+		l.invokeClient.deleteInvocation(id)
 	}
-	return message, err
+	return ch
+}
+
+func (l *loop) PushStreams(method, id string, arguments ...interface{}) <-chan error {
+	_, errChan := l.invokeClient.newInvocation(id)
+	invokeArgs := make([]interface{}, 0)
+	reflectedChannels := make([]reflect.Value, 0)
+	streamIds := make([]string, 0)
+	// Parse arguments for channels and other kind of arguments
+	for _, arg := range arguments {
+		if reflect.TypeOf(arg).Kind() == reflect.Chan {
+			reflectedChannels = append(reflectedChannels, reflect.ValueOf(arg))
+			streamIds = append(streamIds, l.GetNewID())
+		} else {
+			invokeArgs = append(invokeArgs, arg)
+		}
+	}
+	// Tell the server we are streaming now
+	if err := l.hubConn.SendStreamInvocation(l.GetNewID(), method, invokeArgs, streamIds); err != nil {
+		// When we get an error here, the loop is closed and the errChan might be already closed
+		// We create a new one to deliver our error
+		_, errChan = createResultChansWithError(err)
+		l.invokeClient.deleteInvocation(id)
+		return errChan
+	}
+	// Start streaming on all channels
+	for i, reflectedChannel := range reflectedChannels {
+		l.streamer.Start(streamIds[i], reflectedChannel)
+	}
+	return errChan
+}
+
+// GetNewID returns a new, connection-unique id for invocations and streams
+func (l *loop) GetNewID() string {
+	atomic.AddUint64(&l.lastID, 1)
+	return fmt.Sprint(l.lastID)
 }
 
 func (l *loop) handleInvocationMessage(invocation invocationMessage) {
@@ -275,7 +324,7 @@ func (l *loop) recoverInvocationPanic(invocation invocationMessage) {
 }
 
 func buildMethodArguments(method reflect.Value, invocation invocationMessage,
-	streamClient *streamClient, protocol HubProtocol) (arguments []reflect.Value, clientStreaming bool, err error) {
+	streamClient *streamClient, protocol hubProtocol) (arguments []reflect.Value, clientStreaming bool, err error) {
 	if len(invocation.StreamIds)+len(invocation.Arguments) != method.Type().NumIn() {
 		return nil, false, fmt.Errorf("parameter mismatch calling method %v", invocation.Target)
 	}

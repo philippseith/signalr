@@ -16,16 +16,16 @@ func TestSignalR(t *testing.T) {
 	RunSpecs(t, "SignalR Suite")
 }
 
-func connect(hubProto HubInterface) *testingConnection {
+func connect(hubProto HubInterface) (Server, *testingConnection) {
 	server, err := NewServer(context.TODO(), SimpleHubFactory(hubProto),
-		Logger(log.NewLogfmtLogger(os.Stderr), false),
+		Logger(log.NewLogfmtLogger(os.Stderr), true),
 		ChanReceiveTimeout(200*time.Millisecond),
 		StreamBufferCapacity(5))
 	if err != nil {
 		Fail(err.Error())
-		return nil
+		return nil, nil
 	}
 	conn := newTestingConnectionForServer()
-	go server.ServeConnection(conn)
-	return conn
+	go server.Serve(conn)
+	return server, conn
 }

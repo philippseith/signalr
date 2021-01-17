@@ -6,25 +6,39 @@ import (
 	"errors"
 	"fmt"
 	"github.com/go-kit/kit/log"
-	"github.com/mailru/easyjson"
-	"github.com/mailru/easyjson/jwriter"
 	"io"
 	"reflect"
 )
 
-// JSONHubProtocol is the JSON based SignalR protocol
-type JSONHubProtocol struct {
-	dbg        log.Logger
-	easyWriter jwriter.Writer
+// jsonHubProtocol is the JSON based SignalR protocol
+type jsonHubProtocol struct {
+	dbg log.Logger
 }
 
-// Protocol specific message for correct unmarshaling of Arguments
+// Protocol specific messages for correct unmarshaling of arguments or results.
+// jsonInvocationMessage is only used in ParseMessages, not in WriteMessage
+//easyjson:json
 type jsonInvocationMessage struct {
 	Type         int               `json:"type"`
 	Target       string            `json:"target"`
 	InvocationID string            `json:"invocationId"`
 	Arguments    []json.RawMessage `json:"arguments"`
 	StreamIds    []string          `json:"streamIds,omitempty"`
+}
+
+//easyjson:json
+type jsonStreamItemMessage struct {
+	Type         int             `json:"type"`
+	InvocationID string          `json:"invocationId"`
+	Item         json.RawMessage `json:"item"`
+}
+
+//easyjson:json
+type jsonCompletionMessage struct {
+	Type         int             `json:"type"`
+	InvocationID string          `json:"invocationId"`
+	Result       json.RawMessage `json:"result,omitempty"`
+	Error        string          `json:"error,omitempty"`
 }
 
 type jsonError struct {
@@ -37,105 +51,169 @@ func (j *jsonError) Error() string {
 }
 
 // UnmarshalArgument unmarshals a json.RawMessage depending of the specified value type into value
-func (j *JSONHubProtocol) UnmarshalArgument(argument interface{}, value interface{}) error {
-	if err := json.Unmarshal(argument.(json.RawMessage), value); err != nil {
-		return &jsonError{string(argument.(json.RawMessage)), err}
+func (j *jsonHubProtocol) UnmarshalArgument(src interface{}, dst interface{}) error {
+	rawSrc, ok := src.(json.RawMessage)
+	if !ok {
+		return fmt.Errorf("invalid source %#v for UnmarshalArgument", src)
+	}
+	if err := json.Unmarshal(rawSrc, dst); err != nil {
+		return &jsonError{string(rawSrc), err}
 	}
 	_ = j.dbg.Log(evt, "UnmarshalArgument",
-		"argument", string(argument.(json.RawMessage)),
-		"value", fmt.Sprintf("%v", reflect.ValueOf(value).Elem()))
+		"argument", string(rawSrc),
+		"value", fmt.Sprintf("%v", reflect.ValueOf(dst).Elem()))
 	return nil
 }
 
-// ReadMessage reads a JSON message from buf and returns the message if the buf contained one completely.
-// If buf does not contain the whole message, it returns a nil message and complete false
-func (j *JSONHubProtocol) ReadMessage(buf *bytes.Buffer) (m interface{}, complete bool, err error) {
-	data, err := parseTextMessageFormat(buf)
-	switch {
-	case errors.Is(err, io.EOF):
-		return nil, false, err
-		// Other errors never happen, because parseTextMessageFormat will only return err
-		// from bytes.Buffer.ReadBytes() which is always io.EOF or nil
-	}
-
-	message := hubMessage{}
-	err = message.UnmarshalJSON(data)
-	_ = j.dbg.Log(evt, "read", msg, string(data))
+// ParseMessages reads all messages from the reader and puts the remaining bytes into remainBuf
+func (j *jsonHubProtocol) ParseMessages(reader io.Reader, remainBuf *bytes.Buffer) (messages []interface{}, err error) {
+	frames, err := readJSONFrames(reader, remainBuf)
 	if err != nil {
-		return nil, true, &jsonError{string(data), err}
+		return nil, err
 	}
+	message := hubMessage{}
+	messages = make([]interface{}, 0)
+	for _, frame := range frames {
+		err = message.UnmarshalJSON(frame)
+		_ = j.dbg.Log(evt, "read", msg, string(frame))
+		if err != nil {
+			return nil, &jsonError{string(frame), err}
+		}
+		typedMessage, err := j.parseMessage(message.Type, frame)
+		if err != nil {
+			return nil, err
+		}
+		// No specific type (aka Ping), use hubMessage
+		if typedMessage == nil {
+			typedMessage = message
+		}
+		messages = append(messages, typedMessage)
+	}
+	return messages, nil
+}
 
-	switch message.Type {
+func (j *jsonHubProtocol) parseMessage(messageType int, text []byte) (message interface{}, err error) {
+	switch messageType {
 	case 1, 4:
 		jsonInvocation := jsonInvocationMessage{}
-		if err = jsonInvocation.UnmarshalJSON(data); err != nil {
-			err = &jsonError{string(data), err}
+		if err = json.Unmarshal(text, &jsonInvocation); err != nil {
+			err = &jsonError{string(text), err}
 		}
 		arguments := make([]interface{}, len(jsonInvocation.Arguments))
 		for i, a := range jsonInvocation.Arguments {
 			arguments[i] = a
 		}
-		invocation := invocationMessage{
+		return invocationMessage{
 			Type:         jsonInvocation.Type,
 			Target:       jsonInvocation.Target,
 			InvocationID: jsonInvocation.InvocationID,
 			Arguments:    arguments,
 			StreamIds:    jsonInvocation.StreamIds,
-		}
-		return invocation, true, err
+		}, err
 	case 2:
-		streamItem := streamItemMessage{}
-		if err = streamItem.UnmarshalJSON(data); err != nil {
-			err = &jsonError{string(data), err}
+		jsonStreamItem := jsonStreamItemMessage{}
+		if err = json.Unmarshal(text, &jsonStreamItem); err != nil {
+			err = &jsonError{string(text), err}
 		}
-		return streamItem, true, err
+		return streamItemMessage{
+			Type:         jsonStreamItem.Type,
+			InvocationID: jsonStreamItem.InvocationID,
+			Item:         jsonStreamItem.Item,
+		}, err
 	case 3:
-		completion := completionMessage{}
-		if err = completion.UnmarshalJSON(data); err != nil {
-			err = &jsonError{string(data), err}
+		jsonCompletion := jsonCompletionMessage{}
+		if err = json.Unmarshal(text, &jsonCompletion); err != nil {
+			err = &jsonError{string(text), err}
 		}
-		return completion, true, err
+		completion := completionMessage{
+			Type:         jsonCompletion.Type,
+			InvocationID: jsonCompletion.InvocationID,
+			Error:        jsonCompletion.Error,
+		}
+		// Only assign Result when non nil. setting interface{} Result to (json.RawMessage)(nil)
+		// will produce a value which can not compared to nil even if it is pointing towards nil!
+		// See https://www.calhoun.io/when-nil-isnt-equal-to-nil/ for explanation
+		if jsonCompletion.Result != nil {
+			completion.Result = jsonCompletion.Result
+		}
+		return completion, err
 	case 5:
 		invocation := cancelInvocationMessage{}
-		if err = invocation.UnmarshalJSON(data); err != nil {
-			err = &jsonError{string(data), err}
+		if err = invocation.UnmarshalJSON(text); err != nil {
+			err = &jsonError{string(text), err}
 		}
-		return invocation, true, err
+		return invocation, err
 	case 7:
 		cm := closeMessage{}
-		if err = cm.UnmarshalJSON(data); err != nil {
-			err = &jsonError{string(data), err}
+		if err = cm.UnmarshalJSON(text); err != nil {
+			err = &jsonError{string(text), err}
 		}
-		return cm, true, err
+		return cm, err
 	default:
-		return message, true, nil
+		return nil, nil
 	}
 }
 
-func parseTextMessageFormat(buf *bytes.Buffer) ([]byte, error) {
-	// 30 = ASCII record separator
-	data, err := buf.ReadBytes(30)
-
-	if err != nil {
-		return data, err
+// readJSONFrames reads all complete frames (delimited by 0x1e) from the reader and puts the remaining bytes into remainBuf
+func readJSONFrames(reader io.Reader, remainBuf *bytes.Buffer) ([][]byte, error) {
+	p := make([]byte, 1<<15)
+	buf := &bytes.Buffer{}
+	_, _ = buf.ReadFrom(remainBuf)
+	// Try getting data until at least one frame is available
+	for {
+		n, err := reader.Read(p)
+		// Some reader implementations return io.EOF additionally to n=0 if no data could be read
+		if err != nil && !errors.Is(err, io.EOF) {
+			return nil, err
+		}
+		_, _ = buf.Write(p[:n])
+		frames, err := parseJSONFrames(buf)
+		if err != nil {
+			return nil, err
+		}
+		if len(frames) > 0 {
+			_, _ = remainBuf.ReadFrom(buf)
+			return frames, nil
+		}
 	}
-	// Remove the delimiter
-	return data[0 : len(data)-1], err
+}
+
+func parseJSONFrames(buf *bytes.Buffer) ([][]byte, error) {
+	frames := make([][]byte, 0)
+	for {
+		frame, err := buf.ReadBytes(0x1e)
+		if errors.Is(err, io.EOF) {
+			// Restore incomplete frame in buffer
+			_, _ = buf.Write(frame)
+			break
+		}
+		if err != nil {
+			return nil, err
+		}
+		frames = append(frames, frame[:len(frame)-1])
+	}
+	return frames, nil
 }
 
 // WriteMessage writes a message as JSON to the specified writer
-func (j *JSONHubProtocol) WriteMessage(message interface{}, writer io.Writer) error {
-	if em, ok := message.(easyjson.Marshaler); ok {
-		em.MarshalEasyJSON(&j.easyWriter)
-		j.easyWriter.RawByte(30)
-		b := j.easyWriter.Buffer.BuildBytes()
+func (j *jsonHubProtocol) WriteMessage(message interface{}, writer io.Writer) error {
+	if marshaler, ok := message.(json.Marshaler); ok {
+		b, err := marshaler.MarshalJSON()
+		if err != nil {
+			return err
+		}
+		b = append(b, 0x1e)
 		_ = j.dbg.Log(evt, "write", msg, string(b))
-		_, err := writer.Write(b)
+		_, err = writer.Write(b)
 		return err
 	}
-	return fmt.Errorf("%#v does not implement easyjson.Marshaler", message)
+	return fmt.Errorf("%#v does not implement json.Marshaler", message)
 }
 
-func (j *JSONHubProtocol) setDebugLogger(dbg StructuredLogger) {
+func (j *jsonHubProtocol) transferMode() TransferMode {
+	return TextTransferMode
+}
+
+func (j *jsonHubProtocol) setDebugLogger(dbg StructuredLogger) {
 	j.dbg = log.WithPrefix(dbg, "ts", log.DefaultTimestampUTC, "protocol", "JSON")
 }

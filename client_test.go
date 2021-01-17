@@ -10,6 +10,7 @@ import (
 	"io"
 	"os"
 	"strings"
+	"sync/atomic"
 	"time"
 )
 
@@ -17,7 +18,7 @@ type pipeConnection struct {
 	reader  io.Reader
 	writer  io.Writer
 	timeout time.Duration
-	fail    error
+	fail    atomic.Value
 }
 
 func (pc *pipeConnection) Context() context.Context {
@@ -25,15 +26,15 @@ func (pc *pipeConnection) Context() context.Context {
 }
 
 func (pc *pipeConnection) Read(p []byte) (n int, err error) {
-	if pc.fail != nil {
-		return 0, pc.fail
+	if err, ok := pc.fail.Load().(error); ok {
+		return 0, err
 	}
 	return pc.reader.Read(p)
 }
 
 func (pc *pipeConnection) Write(p []byte) (n int, err error) {
-	if pc.fail != nil {
-		return 0, pc.fail
+	if err, ok := pc.fail.Load().(error); ok {
+		return 0, err
 	}
 	return pc.writer.Write(p)
 }
@@ -41,6 +42,8 @@ func (pc *pipeConnection) Write(p []byte) (n int, err error) {
 func (pc *pipeConnection) ConnectionID() string {
 	return "X"
 }
+
+func (pc *pipeConnection) SetConnectionID(id string) {}
 
 func (pc *pipeConnection) SetTimeout(timeout time.Duration) {
 	pc.timeout = timeout
@@ -103,14 +106,15 @@ func (s *simpleHub) ReceiveStream(arg string, ch <-chan int) {
 }
 
 type simpleReceiver struct {
-	result string
+	result atomic.Value
 }
 
 func (s *simpleReceiver) OnCallback(result string) {
-	s.result = result
+	s.result.Store(result)
 }
 
 var _ = Describe("Client", func() {
+	formatOption := TransferFormat("Text")
 	Context("Start", func() {
 		It("should connect to the server", func(done Done) {
 			// Create a simple server
@@ -123,9 +127,9 @@ var _ = Describe("Client", func() {
 			// Create both ends of the connection
 			cliConn, srvConn := newClientServerConnections()
 			// Start the server
-			go server.ServeConnection(srvConn)
+			go server.Serve(srvConn)
 			// Create the Client
-			clientConn, err := NewClient(context.TODO(), cliConn)
+			clientConn, err := NewClient(context.TODO(), cliConn, formatOption)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(clientConn).NotTo(BeNil())
 			// Start it
@@ -150,11 +154,10 @@ var _ = Describe("Client", func() {
 			// Create both ends of the connection
 			cliConn, srvConn = newClientServerConnections()
 			// Start the server
-			go server.ServeConnection(srvConn)
+			go server.Serve(srvConn)
 			// Create the Client
-			client, _ = NewClient(context.TODO(), cliConn)
+			client, _ = NewClient(context.TODO(), cliConn, Receiver(simpleReceiver{}), formatOption)
 			// Start it
-			client.SetReceiver(simpleReceiver{})
 			_ = client.Start()
 			close(done)
 		}, 2.0)
@@ -183,7 +186,7 @@ var _ = Describe("Client", func() {
 			close(done)
 		}, 2.0)
 		It("should return an error when the connection fails", func(done Done) {
-			cliConn.fail = errors.New("fail")
+			cliConn.fail.Store(errors.New("fail"))
 			r := <-client.Invoke("InvokeMe", "A", 1)
 			Expect(r.Error).To(HaveOccurred())
 			close(done)
@@ -193,7 +196,7 @@ var _ = Describe("Client", func() {
 		var cliConn *pipeConnection
 		var srvConn *pipeConnection
 		var client Client
-		var receiver *simpleReceiver
+		receiver := &simpleReceiver{}
 		var server Server
 		BeforeEach(func(done Done) {
 			server, _ = NewServer(context.TODO(), SimpleHubFactory(&simpleHub{}),
@@ -203,12 +206,10 @@ var _ = Describe("Client", func() {
 			// Create both ends of the connection
 			cliConn, srvConn = newClientServerConnections()
 			// Start the server
-			go server.ServeConnection(srvConn)
+			go server.Serve(srvConn)
 			// Create the Client
-			client, _ = NewClient(context.TODO(), cliConn)
+			client, _ = NewClient(context.TODO(), cliConn, Receiver(receiver), formatOption)
 			// Start it
-			receiver = &simpleReceiver{}
-			client.SetReceiver(receiver)
 			_ = client.Start()
 			close(done)
 		}, 2.0)
@@ -219,14 +220,16 @@ var _ = Describe("Client", func() {
 		}, 2.0)
 
 		It("should invoke a server method and get the result via callback", func(done Done) {
-			receiver.result = ""
+			receiver.result.Store("x")
 			errCh := client.Send("Callback", "low")
 			ch := make(chan string, 1)
 			go func() {
 				for {
-					if receiver.result != "" {
-						ch <- receiver.result
-						break
+					if result, ok := receiver.result.Load().(string); ok {
+						if result != "x" {
+							ch <- result
+							break
+						}
 					}
 				}
 			}()
@@ -239,14 +242,16 @@ var _ = Describe("Client", func() {
 			close(done)
 		}, 2.0)
 		It("should invoke a server method and return the error when arguments don't match", func(done Done) {
-			receiver.result = ""
+			receiver.result.Store("x")
 			errCh := client.Send("Callback", 1)
 			ch := make(chan string, 1)
 			go func() {
 				for {
-					if receiver.result != "" {
-						ch <- receiver.result
-						break
+					if result, ok := receiver.result.Load().(string); ok {
+						if result != "x" {
+							ch <- result
+							break
+						}
 					}
 				}
 			}()
@@ -257,11 +262,11 @@ var _ = Describe("Client", func() {
 				Expect(err).To(HaveOccurred())
 			}
 			// Stop the above go func
-			receiver.result = "Stop"
+			receiver.result.Store("Stop")
 			close(done)
 		}, 2.0)
 		It("should return an error when the connection fails", func(done Done) {
-			cliConn.fail = errors.New("fail")
+			cliConn.fail.Store(errors.New("fail"))
 			err := <-client.Send("Callback", 1)
 			Expect(err).To(HaveOccurred())
 			close(done)
@@ -274,18 +279,17 @@ var _ = Describe("Client", func() {
 		var server Server
 		BeforeEach(func(done Done) {
 			server, _ = NewServer(context.TODO(), SimpleHubFactory(&simpleHub{}),
-				Logger(log.NewLogfmtLogger(os.Stderr), false),
+				Logger(log.NewLogfmtLogger(os.Stderr), true),
 				ChanReceiveTimeout(200*time.Millisecond),
 				StreamBufferCapacity(5))
 			// Create both ends of the connection
 			cliConn, srvConn = newClientServerConnections()
 			// Start the server
-			go server.ServeConnection(srvConn)
+			go server.Serve(srvConn)
 			// Create the Client
-			client, _ = NewClient(context.TODO(), cliConn)
-			// Start it
 			receiver := &simpleReceiver{}
-			client.SetReceiver(receiver)
+			client, _ = NewClient(context.TODO(), cliConn, Receiver(receiver), formatOption)
+			// Start it
 			_ = client.Start()
 			close(done)
 		}, 2.0)
@@ -327,34 +331,19 @@ var _ = Describe("Client", func() {
 			close(done)
 		}, 2.0)
 		It("should return an error when the connection fails", func(done Done) {
-			cliConn.fail = errors.New("fail")
+			cliConn.fail.Store(errors.New("fail"))
 			r := <-client.PullStream("ReadStream")
 			Expect(r.Error).To(HaveOccurred())
 			close(done)
 		}, 2.0)
 	})
-	Context("GetConnectionID", func() {
-		It("should return distinct IDs", func(done Done) {
-			c, _ := NewClient(context.TODO(), nil)
-			cc := c.(*client)
-			ids := make(map[string]string)
-			for i := 1; i < 10000; i++ {
-				id := cc.GetNewID()
-				_, ok := ids[id]
-				Expect(ok).To(BeFalse())
-				ids[id] = id
-			}
-			close(done)
-		})
-	})
 	Context("PushStreams", func() {
 		var cliConn *pipeConnection
 		var srvConn *pipeConnection
 		var client Client
-		var hub *simpleHub
 		var server Server
+		hub := &simpleHub{}
 		BeforeEach(func(done Done) {
-			hub = &simpleHub{}
 			hub.receiveStreamDone = make(chan struct{}, 1)
 			server, _ = NewServer(context.TODO(), HubFactory(func() HubInterface { return hub }),
 				Logger(log.NewLogfmtLogger(os.Stderr), false),
@@ -363,12 +352,11 @@ var _ = Describe("Client", func() {
 			// Create both ends of the connection
 			cliConn, srvConn = newClientServerConnections()
 			// Start the server
-			go server.ServeConnection(srvConn)
+			go server.Serve(srvConn)
 			// Create the Client
-			client, _ = NewClient(context.TODO(), cliConn)
-			// Start it
 			receiver := &simpleReceiver{}
-			client.SetReceiver(receiver)
+			client, _ = NewClient(context.TODO(), cliConn, Receiver(receiver), formatOption)
+			// Start it
 			_ = client.Start()
 			close(done)
 		}, 2.0)
@@ -393,7 +381,7 @@ var _ = Describe("Client", func() {
 		})
 
 		It("should return an error when the connection fails", func(done Done) {
-			cliConn.fail = errors.New("fail")
+			cliConn.fail.Store(errors.New("fail"))
 			ch := make(chan int, 1)
 			err := <-client.PushStreams("ReceiveStream", "test", ch)
 			Expect(err).To(HaveOccurred())

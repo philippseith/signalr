@@ -11,7 +11,7 @@ import (
 )
 
 type clientSSEConnection struct {
-	baseConnection
+	ConnectionBase
 	reqURL    string
 	sseReader io.Reader
 	sseWriter io.Writer
@@ -27,7 +27,7 @@ func newClientSSEConnection(parentContext context.Context, address string, conne
 	q.Set("id", connectionID)
 	reqUrl.RawQuery = q.Encode()
 	c := clientSSEConnection{
-		baseConnection: baseConnection{
+		ConnectionBase: ConnectionBase{
 			ctx:          parentContext,
 			connectionID: connectionID,
 		},
@@ -44,6 +44,11 @@ func newClientSSEConnection(parentContext context.Context, address string, conne
 			}
 			lines := strings.Split(string(p[:n]), "\n")
 			for _, line := range lines {
+				line = strings.Trim(line, "\r\t ")
+				// Ignore everything but data
+				if strings.Index(line, "data:") != 0 {
+					continue
+				}
 				json := strings.Replace(strings.Trim(line, "\r"), "data:", "", 1)
 				// Spec says: If it starts with Space, remove it
 				if len(json) > 0 && json[0] == ' ' {

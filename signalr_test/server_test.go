@@ -41,29 +41,33 @@ func TestMain(m *testing.M) {
 }
 
 func TestServerWebSockets(t *testing.T) {
-	testServer(t, "WebSockets")
+	testServer(t, "^e2e", signalr.HTTPTransports("WebSockets"))
+}
+
+func TestServerMessagePack(t *testing.T) {
+	testServer(t, "^MessagePack", signalr.HTTPTransports("WebSockets"))
 }
 
 func TestServerSSE(t *testing.T) {
-	testServer(t, "ServerSentEvents")
+	testServer(t, "^e2e", signalr.HTTPTransports("ServerSentEvents"))
 }
 
-func testServer(t *testing.T, connection string) {
+func testServer(t *testing.T, testNamePattern string, transports func(signalr.Party) error) {
 	serverIsUp := make(chan struct{}, 1)
 	quitServer := make(chan struct{}, 1)
 	serverIsDown := make(chan struct{}, 1)
 	go func() {
-		runServer(t, serverIsUp, quitServer, []string{connection})
+		runServer(t, serverIsUp, quitServer, transports)
 		serverIsDown <- struct{}{}
 	}()
 	<-serverIsUp
-	runJest(t, quitServer)
+	runJest(t, testNamePattern, quitServer)
 	<-serverIsDown
 }
 
-func runJest(t *testing.T, quitServer chan struct{}) {
+func runJest(t *testing.T, testNamePattern string, quitServer chan struct{}) {
 	defer func() { quitServer <- struct{}{} }()
-	var jest = exec.Command(filepath.FromSlash("node_modules/.bin/jest"))
+	var jest = exec.Command(filepath.FromSlash("node_modules/.bin/jest"), fmt.Sprintf("--testNamePattern=%v", testNamePattern))
 	stdout, err := jest.StdoutPipe()
 	if err != nil {
 		t.Error(err)
@@ -86,14 +90,16 @@ func runJest(t *testing.T, quitServer chan struct{}) {
 	}
 }
 
-func runServer(t *testing.T, serverIsUp chan struct{}, quitServer chan struct{}, transports []string) {
+func runServer(t *testing.T, serverIsUp chan struct{}, quitServer chan struct{}, transports func(signalr.Party) error) {
 	// Install a handler to cancel the server
 	doneQuit := make(chan struct{}, 1)
-	sRServer, _ := signalr.NewServer(context.TODO(), signalr.SimpleHubFactory(&hub{}),
+	ctx, cancelSignalRServer := context.WithCancel(context.Background())
+	sRServer, _ := signalr.NewServer(ctx, signalr.SimpleHubFactory(&hub{}),
 		signalr.KeepAliveInterval(2*time.Second),
-		signalr.HTTPTransports(transports...),
+		transports,
 		signalr.Logger(log.NewLogfmtLogger(os.Stderr), true))
-	router := sRServer.ServeHTTP("/hub")
+	router := http.NewServeMux()
+	sRServer.MapHTTP(router, "/hub")
 
 	server := &http.Server{
 		Addr:         "127.0.0.1:5001",
@@ -105,6 +111,9 @@ func runServer(t *testing.T, serverIsUp chan struct{}, quitServer chan struct{},
 	// wait for someone triggering quitServer
 	go func() {
 		<-quitServer
+		// Cancel the signalR server and all its connections
+		cancelSignalRServer()
+		// Now shutdown the http server
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		// If it does not Shutdown during 10s, try to end it by canceling the context
 		defer cancel()
@@ -128,7 +137,11 @@ type hub struct {
 }
 
 func (h *hub) Ping() string {
-	return "Pong"
+	return "Pong!"
+}
+
+func (h *hub) Touch() {
+	h.Clients().Caller().Send("touched")
 }
 
 func (h *hub) TriumphantTriple(club string) []string {
