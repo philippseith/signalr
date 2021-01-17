@@ -62,8 +62,8 @@ func (c *clientStreamHub) UploadHang(upload <-chan int) {
 func (c *clientStreamHub) UploadParamTypes(
 	u1 <-chan int8, u2 <-chan int16, u3 <-chan int32, u4 <-chan int64,
 	u5 <-chan uint, u6 <-chan uint8, u7 <-chan uint16, u8 <-chan uint32, u9 <-chan uint64,
-	u10 <-chan float32,
-	u11 <-chan string) {
+	u10 <-chan float32, u11 <-chan float64,
+	u12 <-chan string) {
 	for count := 0; count < 12; {
 		select {
 		case <-u1:
@@ -87,7 +87,9 @@ func (c *clientStreamHub) UploadParamTypes(
 		case <-u10:
 			count++
 		case <-u11:
-			count++ // will be called twice
+			count++
+		case <-u12:
+			count++
 		case <-time.After(100 * time.Millisecond):
 			clientStreamingInvocationQueue <- "timed out"
 			return
@@ -195,8 +197,8 @@ var _ = Describe("ClientStreaming", func() {
 				Expect(<-clientStreamingInvocationQueue).To(Equal("UploadInt()"))
 				conn.ClientSend(`{"type":2,"invocationId":"abc","item":"ShouldBeInt"}`)
 				message := <-conn.received
-					Expect(message).To(BeAssignableToTypeOf(closeMessage{}))
-					Expect(message.(closeMessage).Error).NotTo(BeNil())
+				Expect(message).To(BeAssignableToTypeOf(closeMessage{}))
+				Expect(message.(closeMessage).Error).NotTo(BeNil())
 				close(done)
 			}, 2.0)
 		})
@@ -223,10 +225,10 @@ var _ = Describe("ClientStreaming", func() {
 				}
 				sent := time.Now()
 				message := <-conn.received
-					Expect(message).To(BeAssignableToTypeOf(completionMessage{}))
-					Expect(message.(completionMessage).Error).NotTo(BeNil())
-					// ChanReceiveTimeout 200 ms should be over
-					Expect(time.Now().UnixNano()).To(BeNumerically(">", sent.Add(200*time.Millisecond).UnixNano()))
+				Expect(message).To(BeAssignableToTypeOf(completionMessage{}))
+				Expect(message.(completionMessage).Error).NotTo(BeNil())
+				// ChanReceiveTimeout 200 ms should be over
+				Expect(time.Now().UnixNano()).To(BeNumerically(">", sent.Add(200*time.Millisecond).UnixNano()))
 				close(done)
 			})
 		})
@@ -285,9 +287,9 @@ var _ = Describe("ClientStreaming", func() {
 			It("should end the connection with an error", func(done Done) {
 				conn.ClientSend(fmt.Sprintf(`{"type":1,"invocationId":"upstream","target":"uploadstreamsmoke","arguments":[%v],"streamIds":["123","456","789"]}`, 5))
 				message := <-conn.received
-					Expect(message).To(BeAssignableToTypeOf(completionMessage{}))
-					completionMessage := message.(completionMessage)
-					Expect(completionMessage.Error).NotTo(BeNil())
+				Expect(message).To(BeAssignableToTypeOf(completionMessage{}))
+				completionMessage := message.(completionMessage)
+				Expect(completionMessage.Error).NotTo(BeNil())
 				close(done)
 			}, 2.0)
 		})
@@ -295,9 +297,9 @@ var _ = Describe("ClientStreaming", func() {
 			It("should end the connection with an error", func(done Done) {
 				conn.ClientSend(fmt.Sprintf(`{"type":1,"invocationId":"upstream","target":"uploadstreamsmoke","arguments":[%v],"streamIds":["123"]}`, 5))
 				message := <-conn.received
-					Expect(message).To(BeAssignableToTypeOf(completionMessage{}))
-					completionMessage := message.(completionMessage)
-					Expect(completionMessage.Error).NotTo(BeNil())
+				Expect(message).To(BeAssignableToTypeOf(completionMessage{}))
+				completionMessage := message.(completionMessage)
+				Expect(completionMessage.Error).NotTo(BeNil())
 				close(done)
 			}, 2.0)
 		})
@@ -359,7 +361,7 @@ var _ = Describe("ClientStreaming", func() {
 		})
 		Context("When a func is invoked by the client with all number types of channels", func() {
 			It("should receive values on all of these types", func(done Done) {
-				conn.ClientSend(`{"type":1,"invocationId":"UPT","target":"uploadparamtypes","streamIds":["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11"]}`)
+				conn.ClientSend(`{"type":1,"invocationId":"UPT","target":"uploadparamtypes","streamIds":["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12"]}`)
 				conn.ClientSend(`{"type":2,"invocationId":"1","item":1}`)
 				conn.ClientSend(`{"type":2,"invocationId":"2","item":1}`)
 				conn.ClientSend(`{"type":2,"invocationId":"3","item":1}`)
@@ -371,9 +373,9 @@ var _ = Describe("ClientStreaming", func() {
 				conn.ClientSend(`{"type":2,"invocationId":"9","item":1}`)
 				conn.ClientSend(`{"type":2,"invocationId":"10","item":1.1}`)
 				conn.ClientSend(`{"type":2,"invocationId":"11","item":2.1}`)
-				conn.ClientSend(`{"type":2,"invocationId":"11","item":"Some String"}`)
+				conn.ClientSend(`{"type":2,"invocationId":"12","item":"Some String"}`)
 				r := <-clientStreamingInvocationQueue
-					Expect(r).To(Equal("UPT finished"))
+				Expect(r).To(Equal("UPT finished"))
 				close(done)
 			})
 		})
@@ -420,8 +422,8 @@ var _ = Describe("ClientStreaming", func() {
 				// Send invalid stream item message with missing id and item
 				conn.ClientSend(`{"type":2}`)
 				message := <-conn.received
-					Expect(message).To(BeAssignableToTypeOf(closeMessage{}))
-					Expect(message.(closeMessage).Error).NotTo(BeNil())
+				Expect(message).To(BeAssignableToTypeOf(closeMessage{}))
+				Expect(message.(closeMessage).Error).NotTo(BeNil())
 				close(done)
 			}, 2.0)
 		})
@@ -442,8 +444,8 @@ var _ = Describe("ClientStreaming", func() {
 				// Send invalid stream item message with missing item
 				conn.ClientSend(`{"type":2,"InvocationId":"iii"}`)
 				message := <-conn.received
-					Expect(message).To(BeAssignableToTypeOf(closeMessage{}))
-					Expect(message.(closeMessage).Error).NotTo(BeNil())
+				Expect(message).To(BeAssignableToTypeOf(closeMessage{}))
+				Expect(message.(closeMessage).Error).NotTo(BeNil())
 				close(done)
 			}, 2.0)
 		})
@@ -464,8 +466,8 @@ var _ = Describe("ClientStreaming", func() {
 				// Send invalid stream item message
 				conn.ClientSend(`{"type":2,"invocationId":"ff1","item":[42]}`)
 				message := <-conn.received
-					Expect(message).To(BeAssignableToTypeOf(closeMessage{}))
-					Expect(message.(closeMessage).Error).NotTo(BeNil())
+				Expect(message).To(BeAssignableToTypeOf(closeMessage{}))
+				Expect(message.(closeMessage).Error).NotTo(BeNil())
 				close(done)
 			}, 2.0)
 		})
@@ -486,8 +488,8 @@ var _ = Describe("ClientStreaming", func() {
 				// Send invalid stream item message with invalid invocation id
 				conn.ClientSend(`{"type":2,"invocationId":1}`)
 				message := <-conn.received
-					Expect(message).To(BeAssignableToTypeOf(closeMessage{}))
-					Expect(message.(closeMessage).Error).NotTo(BeNil())
+				Expect(message).To(BeAssignableToTypeOf(closeMessage{}))
+				Expect(message.(closeMessage).Error).NotTo(BeNil())
 				close(done)
 			}, 2.0)
 		})
@@ -511,8 +513,8 @@ var _ = Describe("ClientStreaming", func() {
 				// Send invalid completion message with missing id
 				conn.ClientSend(`{"type":3}`)
 				message := <-conn.received
-					Expect(message).To(BeAssignableToTypeOf(closeMessage{}))
-					Expect(message.(closeMessage).Error).NotTo(BeNil())
+				Expect(message).To(BeAssignableToTypeOf(closeMessage{}))
+				Expect(message.(closeMessage).Error).NotTo(BeNil())
 				close(done)
 			}, 2.0)
 		})
@@ -524,8 +526,8 @@ var _ = Describe("ClientStreaming", func() {
 				// Send invalid completion message with unknown id
 				conn.ClientSend(`{"type":3,"invocationId":"qqq"}`)
 				message := <-conn.received
-					Expect(message).To(BeAssignableToTypeOf(closeMessage{}))
-					Expect(message.(closeMessage).Error).NotTo(BeNil())
+				Expect(message).To(BeAssignableToTypeOf(closeMessage{}))
+				Expect(message.(closeMessage).Error).NotTo(BeNil())
 				close(done)
 			}, 2.0)
 		})
@@ -545,8 +547,8 @@ var _ = Describe("ClientStreaming", func() {
 				conn.ClientSend(`{"type":1,"invocationId":"UPA","target":"uploadarray","streamIds":["aaa"]}`)
 				conn.ClientSend(`{"type":3,"invocationId":1}`)
 				message := <-conn.received
-					Expect(message).To(BeAssignableToTypeOf(closeMessage{}))
-					Expect(message.(closeMessage).Error).NotTo(BeNil())
+				Expect(message).To(BeAssignableToTypeOf(closeMessage{}))
+				Expect(message.(closeMessage).Error).NotTo(BeNil())
 				close(done)
 			}, 2.0)
 		})
@@ -561,8 +563,8 @@ var _ = Describe("ClientStreaming", func() {
 				// Send completion message with result
 				conn.ClientSend(`{"type":3,"invocationId":"fff","result":1}`)
 				message := <-conn.received
-					Expect(message).To(BeAssignableToTypeOf(closeMessage{}))
-					Expect(message.(closeMessage).Error).NotTo(BeNil())
+				Expect(message).To(BeAssignableToTypeOf(closeMessage{}))
+				Expect(message.(closeMessage).Error).NotTo(BeNil())
 				close(done)
 			})
 		})
@@ -574,8 +576,8 @@ var _ = Describe("ClientStreaming", func() {
 				// Send stream item
 				conn.ClientSend(`{"type":2,"invocationId":"eee","item":1}`)
 				message := <-conn.received
-					Expect(message).To(BeAssignableToTypeOf(closeMessage{}))
-					Expect(message.(closeMessage).Error).NotTo(BeNil())
+				Expect(message).To(BeAssignableToTypeOf(closeMessage{}))
+				Expect(message.(closeMessage).Error).NotTo(BeNil())
 				close(done)
 			})
 		})

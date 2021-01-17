@@ -7,13 +7,14 @@ import (
 	"time"
 )
 
-func newStreamClient(chanReceiveTimeout time.Duration, streamBufferCapacity uint) *streamClient {
+func newStreamClient(protocol hubProtocol, chanReceiveTimeout time.Duration, streamBufferCapacity uint) *streamClient {
 	return &streamClient{
 		mx:                   sync.Mutex{},
 		upstreamChannels:     make(map[string]reflect.Value),
 		runningStreams:       make(map[string]bool),
 		chanReceiveTimeout:   chanReceiveTimeout,
 		streamBufferCapacity: streamBufferCapacity,
+		protocol:             protocol,
 	}
 }
 
@@ -23,6 +24,7 @@ type streamClient struct {
 	runningStreams       map[string]bool
 	chanReceiveTimeout   time.Duration
 	streamBufferCapacity uint
+	protocol             hubProtocol
 }
 
 func (c *streamClient) buildChannelArgument(invocation invocationMessage, argType reflect.Type, chanCount int) (arg reflect.Value, canClientStreaming bool, err error) {
@@ -64,46 +66,12 @@ func (c *streamClient) receiveStreamItem(streamItem streamItemMessage) error {
 	if upChan, ok := c.upstreamChannels[streamItem.InvocationID]; ok {
 		// Mark stream as running to detect illegal completion with result on this id
 		c.runningStreams[streamItem.InvocationID] = true
-		// Hack(?) for missing channel type information when the Protocol decodes StreamItem.Item
-		// Protocol specific, as only json has this inexact number type. Messagepack might cause different problems
-		chanElm := reflect.Indirect(reflect.New(upChan.Type().Elem())).Interface()
-		f, isFloat := streamItem.Item.(float64)
-		if isFloat {
-			// This type of solution is constrained to basic types, e.g. chan MyInt is not supported
-			chanVal, err := convertNumberToChannelType(chanElm, f)
-			if err != nil {
-				return err
-			}
-			return c.sendChanValSave(upChan, chanVal)
+		chanVal := reflect.New(upChan.Type().Elem())
+		err := c.protocol.UnmarshalArgument(streamItem.Item, chanVal.Interface())
+		if err != nil {
+			return err
 		}
-		// Are stream item and channel type both slices/arrays?
-		switch reflect.TypeOf(streamItem.Item).Kind() {
-		case reflect.Slice, reflect.Array:
-			switch reflect.TypeOf(chanElm).Kind() {
-			case reflect.Slice:
-				if sis, ok := streamItem.Item.([]interface{}); ok {
-					chanElmElmType := upChan.Type().Elem().Elem() // The type of the array elements in the channel
-					chanElm = reflect.Indirect(reflect.New(chanElmElmType)).Interface()
-					chanVals := make([]reflect.Value, len(sis))
-					for i, si := range sis {
-						if f, ok := si.(float64); ok {
-							chanVal, err := convertNumberToChannelType(chanElm, f)
-							if err != nil {
-								return err
-							}
-							chanVals[i] = chanVal
-						}
-					}
-					chanSlice := reflect.Indirect(reflect.New(reflect.SliceOf(chanElmElmType)))
-					chanSlice = reflect.Append(chanSlice, chanVals...)
-					return c.sendChanValSave(upChan, chanSlice)
-				}
-			default:
-				return fmt.Errorf("stream item of kind %v paired with channel of type %v", reflect.TypeOf(streamItem.Item).Kind(), reflect.TypeOf(chanElm))
-			}
-		default:
-			return c.sendChanValSave(upChan, reflect.ValueOf(streamItem.Item))
-		}
+		return c.sendChanValSave(upChan, chanVal.Elem())
 	}
 	return fmt.Errorf(`unknown stream id "%v"`, streamItem.InvocationID)
 }
@@ -133,39 +101,6 @@ type hubChanTimeoutError struct {
 
 func (h *hubChanTimeoutError) Error() string {
 	return h.msg
-}
-
-func convertNumberToChannelType(chanElm interface{}, number float64) (chanVal reflect.Value, err error) {
-	switch chanElm.(type) {
-	case int:
-		return reflect.ValueOf(int(number)), nil
-	case int8:
-		return reflect.ValueOf(int8(number)), nil
-	case int16:
-		return reflect.ValueOf(int16(number)), nil
-	case int32:
-		return reflect.ValueOf(int32(number)), nil
-	case int64:
-		return reflect.ValueOf(int64(number)), nil
-	case uint:
-		return reflect.ValueOf(uint(number)), nil
-	case uint8:
-		return reflect.ValueOf(uint8(number)), nil
-	case uint16:
-		return reflect.ValueOf(uint16(number)), nil
-	case uint32:
-		return reflect.ValueOf(uint32(number)), nil
-	case uint64:
-		return reflect.ValueOf(uint64(number)), nil
-	case float32:
-		return reflect.ValueOf(float32(number)), nil
-	case float64:
-		return reflect.ValueOf(number), nil
-	case string:
-		return reflect.ValueOf(fmt.Sprint(number)), nil
-	default:
-		return reflect.Value{}, fmt.Errorf("can not convert %v to %v", number, reflect.TypeOf(chanElm))
-	}
 }
 
 func (c *streamClient) handlesInvocationID(invocationID string) bool {

@@ -132,7 +132,7 @@ var _ = Describe("HubContext", func() {
 				Fail("timed out")
 			}
 			close(didIt)
-		}, 4.0)
+		}, 5.0)
 	})
 
 	Context("Clients().Caller()", func() {

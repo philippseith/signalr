@@ -9,4 +9,14 @@
     <filePath value="$PROJECT_DIR$" />
     <method v="2" />
   </configuration>
+  <configuration default="false" name="go test signalr_test" type="GoTestRunConfiguration" factoryName="Go Test" nameIsGenerated="true">
+    <module name="signalr" />
+    <working_directory value="$PROJECT_DIR$/signalr_test" />
+    <framework value="gotest" />
+    <kind value="DIRECTORY" />
+    <package value="github.com/philippseith/signalr" />
+    <directory value="$PROJECT_DIR$/signalr_test" />
+    <filePath value="$PROJECT_DIR$" />
+    <method v="2" />
+  </configuration>
 </component>

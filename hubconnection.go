@@ -43,6 +43,9 @@ func newHubConnection(connection Connection, protocol hubProtocol, maximumReceiv
 		items:                     &sync.Map{},
 		info:                      info,
 	}
+	if connectionWithTransferMode, ok := connection.(ConnectionWithTransferMode); ok {
+		connectionWithTransferMode.SetTransferMode(protocol.transferMode())
+	}
 	return c
 }
 

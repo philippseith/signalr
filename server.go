@@ -168,7 +168,7 @@ func (s *server) processHandshake(conn Connection) (hubProtocol, error) {
 	defer conn.SetTimeout(0)
 	conn.SetTimeout(s._handshakeTimeout)
 	var remainBuf bytes.Buffer
-	rawHandshake, err := parseTextMessageFormat(conn, &remainBuf)
+	rawHandshake, err := readJSONFrames(conn, &remainBuf)
 	if err != nil {
 		return nil, err
 	}

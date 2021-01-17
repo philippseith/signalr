@@ -33,8 +33,8 @@ Supported method signatures
 
 The SignalR protocol constrains the signature of hub or receiver methods that can be used over SignalR.
 All methods with serializable types as parameters and return types are supported.
-Methods with multiple serializable return values are supported.
-Methods which return single sending channel (<-chan) are used to initiate callee side streaming.
+Methods with multiple return values are not generally supported, but returning one or no value and an optional error is supported.
+Methods which return a single sending channel (<-chan), and optionally an error, are used to initiate callee side streaming.
 The caller will receive the contents of the channel as stream.
 When the returned channel is closed, the stream will be completed.
 Methods with one or multiple receiving channels (chan<-) as parameters are used as receivers for caller side streaming.

@@ -18,7 +18,7 @@ func TestSignalR(t *testing.T) {
 
 func connect(hubProto HubInterface) (Server, *testingConnection) {
 	server, err := NewServer(context.TODO(), SimpleHubFactory(hubProto),
-		Logger(log.NewLogfmtLogger(os.Stderr), false),
+		Logger(log.NewLogfmtLogger(os.Stderr), true),
 		ChanReceiveTimeout(200*time.Millisecond),
 		StreamBufferCapacity(5))
 	if err != nil {

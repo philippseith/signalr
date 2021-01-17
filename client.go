@@ -186,7 +186,7 @@ func (c *client) processHandshake() (hubProtocol, error) {
 	}
 	_ = dbg.Log(evt, "handshake sent", "msg", request)
 	var remainBuf bytes.Buffer
-	rawHandshake, err := parseTextMessageFormat(c.conn, &remainBuf)
+	rawHandshake, err := readJSONFrames(c.conn, &remainBuf)
 	if err != nil {
 		return nil, err
 	}

@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-// Connection describes a connection between signalR client and Server
+// Connection describes a connection between signalR client and server
 type Connection interface {
 	io.Reader
 	io.Writer
@@ -15,4 +15,19 @@ type Connection interface {
 	SetConnectionID(id string)
 	Timeout() time.Duration
 	SetTimeout(duration time.Duration)
+}
+
+type TransferMode int
+
+// MessageType constants.
+const (
+	// TextTransferMode is for UTF-8 encoded text messages like JSON.
+	TextTransferMode TransferMode = iota + 1
+	// BinaryTransferMode is for binary messages like MessagePack.
+	BinaryTransferMode
+)
+
+type ConnectionWithTransferMode interface {
+	TransferMode() TransferMode
+	SetTransferMode(transferMode TransferMode)
 }
