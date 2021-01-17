@@ -332,7 +332,8 @@ var _ = Describe("Invocation", func() {
 		})
 	})
 
-	Describe("Panic in invoked func", func() {var server Server
+	Describe("Panic in invoked func", func() {
+		var server Server
 		var conn *testingConnection
 		BeforeEach(func(done Done) {
 			server, conn = connect(&invocationHub{})

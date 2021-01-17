@@ -176,7 +176,7 @@ var _ = Describe("ClientStreaming", func() {
 					}
 				}
 				close(done)
-			}, 20000.0)
+			}, 2.0)
 		})
 	})
 
