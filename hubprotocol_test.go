@@ -13,6 +13,7 @@ import (
 	"os"
 	"reflect"
 	"testing"
+	"time"
 )
 
 var _ = Describe("Protocol", func() {
@@ -148,6 +149,85 @@ var _ = Describe("Protocol", func() {
 						close(done)
 					})
 				}
+			})
+			Context("Multiple messages", func() {
+				It("should parse multiple messages sent in one step", func(done Done) {
+					buf := bytes.Buffer{}
+					streamItem := streamItemMessage{Type: 2, InvocationID: "2", Item: "A"}
+					completion := completionMessage{Type: 3, InvocationID: "2", Result: "B"}
+					Expect(protocol.WriteMessage(streamItem, &buf)).NotTo(HaveOccurred())
+					Expect(protocol.WriteMessage(completion, &buf)).NotTo(HaveOccurred())
+					var remainBuf bytes.Buffer
+					got, err := protocol.ParseMessages(&buf, &remainBuf)
+					Expect(err).NotTo(HaveOccurred())
+					Expect(len(got)).To(Equal(2))
+					Expect(got[0]).To(BeAssignableToTypeOf(streamItemMessage{}))
+					gotStreamItem := got[0].(streamItemMessage)
+					var item string
+					Expect(protocol.UnmarshalArgument(gotStreamItem.Item, &item)).NotTo(HaveOccurred())
+					Expect(item).To(Equal(streamItem.Item))
+					Expect(got[1]).To(BeAssignableToTypeOf(completionMessage{}))
+					gotCompletion := got[1].(completionMessage)
+					var result string
+					Expect(protocol.UnmarshalArgument(gotCompletion.Result, &result)).NotTo(HaveOccurred())
+					Expect(result).To(Equal(completion.Result))
+					close(done)
+				})
+				It("should parse multiple messages sent in one step, even if garbage follows", func(done Done) {
+					buf := bytes.Buffer{}
+					streamItem := streamItemMessage{Type: 2, InvocationID: "2", Item: "A"}
+					completion := completionMessage{Type: 3, InvocationID: "2", Result: "B"}
+					Expect(protocol.WriteMessage(streamItem, &buf)).NotTo(HaveOccurred())
+					Expect(protocol.WriteMessage(completion, &buf)).NotTo(HaveOccurred())
+					buf.WriteString("Some Garbage")
+					var remainBuf bytes.Buffer
+					got, err := protocol.ParseMessages(&buf, &remainBuf)
+					Expect(err).NotTo(HaveOccurred())
+					Expect(len(got)).To(Equal(2))
+					Expect(got[0]).To(BeAssignableToTypeOf(streamItemMessage{}))
+					gotStreamItem := got[0].(streamItemMessage)
+					var item string
+					Expect(protocol.UnmarshalArgument(gotStreamItem.Item, &item)).NotTo(HaveOccurred())
+					Expect(item).To(Equal(streamItem.Item))
+					Expect(got[1]).To(BeAssignableToTypeOf(completionMessage{}))
+					gotCompletion := got[1].(completionMessage)
+					var result string
+					Expect(protocol.UnmarshalArgument(gotCompletion.Result, &result)).NotTo(HaveOccurred())
+					Expect(result).To(Equal(completion.Result))
+					close(done)
+				})
+			})
+			Context("Partial messages", func() {
+				It("should parse a message sent in two steps", func(done Done) {
+					writeBuf := &bytes.Buffer{}
+					streamItem := streamItemMessage{Type: 2, InvocationID: "2", Item: "A"}
+					Expect(protocol.WriteMessage(streamItem, writeBuf)).NotTo(HaveOccurred())
+					p := make([]byte, writeBuf.Len()-2)
+					_, err := writeBuf.Read(p)
+					Expect(err).NotTo(HaveOccurred())
+					var buf, remainBuf bytes.Buffer
+					// Store incomplete frame
+					buf.Write(p)
+					up := make(chan struct{}, 1)
+					go func() {
+						up <- struct{}{}
+						got, err := protocol.ParseMessages(&buf, &remainBuf)
+						Expect(err).NotTo(HaveOccurred())
+						Expect(len(got)).To(Equal(1))
+						Expect(got[0]).To(BeAssignableToTypeOf(streamItemMessage{}))
+						gotStreamItem := got[0].(streamItemMessage)
+						var item string
+						Expect(protocol.UnmarshalArgument(gotStreamItem.Item, &item)).NotTo(HaveOccurred())
+						Expect(item).To(Equal(streamItem.Item))
+						close(done)
+					}()
+					// Wait for the parse to be started
+					<-up
+					<-time.After(time.Millisecond * 100)
+					// Write the rest of the frame
+					_, err = buf.ReadFrom(writeBuf)
+					Expect(err).NotTo(HaveOccurred())
+				}, 2.0)
 			})
 		})
 	}
