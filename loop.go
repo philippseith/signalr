@@ -11,6 +11,7 @@ import (
 )
 
 type loop struct {
+	lastID       uint64 // Used with atomic: Must be first in struct to ensure 64bit alignment on 32bit architectures
 	party        Party
 	info         StructuredLogger
 	dbg          StructuredLogger
@@ -19,7 +20,6 @@ type loop struct {
 	invokeClient *invokeClient
 	streamer     *streamer
 	streamClient *streamClient
-	lastID       uint64
 }
 
 func newLoop(p Party, conn Connection, protocol hubProtocol) *loop {
