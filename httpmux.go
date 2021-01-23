@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"nhooyr.io/websocket"
+	"strconv"
 	"strings"
 	"sync"
 )
@@ -87,7 +88,7 @@ func (h *httpMux) handleServerSentEvent(writer http.ResponseWriter, request *htt
 	c, ok := h.connectionMap[connectionID]
 	h.mx.Unlock()
 	if ok {
-		if c == nil {
+		if _, ok := c.(*negotiateConnection); ok {
 			// Connection is negotiated but not initiated
 			// We compose http and send it over sse
 			writer.Header().Set("Content-Type", "text/event-stream")
@@ -97,7 +98,7 @@ func (h *httpMux) handleServerSentEvent(writer http.ResponseWriter, request *htt
 			// End this Server Sent Event (yes, your response now is one and the client will wait for this initial event to end)
 			_, _ = fmt.Fprint(writer, ":\r\n\r\n")
 			writer.(http.Flusher).Flush()
-			if sseConn, err := newServerSSEConnection(h.server.context(), request.Context(), connectionID, writer); err != nil {
+			if sseConn, err := newServerSSEConnection(h.server.context(), request.Context(), c.ConnectionID(), writer); err != nil {
 				writer.WriteHeader(500) // Internal server error
 			} else {
 				h.serveConnection(sseConn)
@@ -117,21 +118,23 @@ func (h *httpMux) handleWebsocket(writer http.ResponseWriter, request *http.Requ
 		writer.WriteHeader(400) // Bad request
 		return
 	}
-	connectionID := request.URL.Query().Get("id")
-	if connectionID == "" {
+	connectionMapKey := request.URL.Query().Get("id")
+	if connectionMapKey == "" {
 		// Support websocket connection without negotiate
-		connectionID = newConnectionID()
+		connectionMapKey = newConnectionID()
 		h.mx.Lock()
-		h.connectionMap[connectionID] = nil
+		h.connectionMap[connectionMapKey] = &negotiateConnection{
+			ConnectionBase{connectionID: connectionMapKey},
+		}
 		h.mx.Unlock()
 	}
 	h.mx.Lock()
-	c, ok := h.connectionMap[connectionID]
+	c, ok := h.connectionMap[connectionMapKey]
 	h.mx.Unlock()
 	if ok {
-		if c == nil {
+		if _, ok := c.(*negotiateConnection); ok {
 			// Connection is negotiated but not initiated
-			h.serveConnection(newWebSocketConnection(h.server.context(), request.Context(), connectionID, websocketConn))
+			h.serveConnection(newWebSocketConnection(h.server.context(), request.Context(), c.ConnectionID(), websocketConn))
 		} else {
 			// Already initiated
 			_ = websocketConn.Close(409, "Bad request")
@@ -147,8 +150,20 @@ func (h *httpMux) negotiate(w http.ResponseWriter, req *http.Request) {
 		w.WriteHeader(400)
 	} else {
 		connectionID := newConnectionID()
+		connectionMapKey := connectionID
+		negotiateVersion, err := strconv.Atoi(req.Header.Get("negotiateVersion"))
+		if err != nil {
+			negotiateVersion = 0
+		}
+		connectionToken := ""
+		if negotiateVersion == 1 {
+			connectionToken = newConnectionID()
+			connectionMapKey = connectionToken
+		}
 		h.mx.Lock()
-		h.connectionMap[connectionID] = nil
+		h.connectionMap[connectionMapKey] = &negotiateConnection{
+			ConnectionBase{connectionID: connectionID},
+		}
 		h.mx.Unlock()
 		var availableTransports []availableTransport
 		for _, transport := range h.server.availableTransports() {
@@ -168,7 +183,9 @@ func (h *httpMux) negotiate(w http.ResponseWriter, req *http.Request) {
 			}
 		}
 		response := negotiateResponse{
+			ConnectionToken:     connectionToken,
 			ConnectionID:        connectionID,
+			NegotiateVersion:    fmt.Sprint(negotiateVersion),
 			AvailableTransports: availableTransports,
 		}
 		_ = json.NewEncoder(w).Encode(response) // Can't imagine an error when encoding
@@ -188,4 +205,16 @@ func newConnectionID() string {
 	_, _ = rand.Read(bytes)
 	// Important: Use URLEncoding. StdEncoding contains "/" which will be randomly part of the connectionID and cause parsing problems
 	return base64.URLEncoding.EncodeToString(bytes)
+}
+
+type negotiateConnection struct {
+	ConnectionBase
+}
+
+func (n *negotiateConnection) Read([]byte) (int, error) {
+	return 0, nil
+}
+
+func (n *negotiateConnection) Write([]byte) (int, error) {
+	return 0, nil
 }

@@ -6,7 +6,9 @@ type availableTransport struct {
 }
 
 type negotiateResponse struct {
+	ConnectionToken     string               `json:"connectionToken,omitempty"`
 	ConnectionID        string               `json:"connectionId"`
+	NegotiateVersion    string               `json:"negotiateVersion,omitempty"`
 	AvailableTransports []availableTransport `json:"availableTransports"`
 }
 
