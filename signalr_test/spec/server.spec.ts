@@ -98,7 +98,7 @@ function runE2E(protocol: signalR.IHubProtocol) {
         await connection.send("uploadStream", from([2, 0, 7]));
         expect(await receive).toEqual([2, 0, 7])
     })
-    it("should receive subsequent sends without await]", async() => {
+    it("should receive subsequent sends without await", async() => {
         let or: (value?: unknown) => void;
         const p = new Promise((r, rj) => {
             or = r;
