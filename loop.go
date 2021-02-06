@@ -357,12 +357,14 @@ func buildMethodArguments(method reflect.Value, invocation invocationMessage,
 
 func getMethod(target interface{}, name string) (reflect.Value, bool) {
 	hubType := reflect.TypeOf(target)
-	hubValue := reflect.ValueOf(target)
-	name = strings.ToLower(name)
-	for i := 0; i < hubType.NumMethod(); i++ {
-		// Search in public methods
-		if m := hubType.Method(i); strings.ToLower(m.Name) == name {
-			return hubValue.Method(i), true
+	if hubType != nil {
+		hubValue := reflect.ValueOf(target)
+		name = strings.ToLower(name)
+		for i := 0; i < hubType.NumMethod(); i++ {
+			// Search in public methods
+			if m := hubType.Method(i); strings.ToLower(m.Name) == name {
+				return hubValue.Method(i), true
+			}
 		}
 	}
 	return reflect.Value{}, false

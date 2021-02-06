@@ -40,6 +40,10 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
+func TestServerSmoke(t *testing.T) {
+	testServer(t, "^smoke", signalr.HTTPTransports("WebSockets"))
+}
+
 func TestServerWebSockets(t *testing.T) {
 	testServer(t, "^e2e", signalr.HTTPTransports("WebSockets"))
 }

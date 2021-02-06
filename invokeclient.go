@@ -96,8 +96,12 @@ func (i *invokeClient) receiveCompletionItem(completion completionMessage) error
 			done := make(chan struct{})
 			go func() {
 				ir.resultChan <- result
-				ir.resultChan <- result
-				done <- struct{}{}
+				if completion.Error != "" {
+					ir.errChan <- errors.New(completion.Error)
+				} else {
+					ir.errChan <- nil
+				}
+				close(done)
 			}()
 			select {
 			case <-done:
