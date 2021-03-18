@@ -2,10 +2,12 @@ package main
 
 import (
 	"context"
+	_ "embed"
 	"fmt"
 	kitlog "github.com/go-kit/kit/log"
 	"github.com/philippseith/signalr"
 	"github.com/philippseith/signalr/chatsample/middleware"
+	"github.com/philippseith/signalr/chatsample/public"
 	"log"
 	"net/http"
 	"os"
@@ -125,8 +127,9 @@ func runHTTPServer(address string, hub signalr.HubInterface) {
 		signalr.Logger(kitlog.NewLogfmtLogger(os.Stderr), true))
 	router := http.NewServeMux()
 	server.MapHTTP(router, "/chat")
-	router.Handle("/", http.FileServer(http.Dir("./public")))
 
+	fmt.Printf("Serving public content from the embedded filesystem\n")
+	router.Handle("/", http.FileServer(http.FS(public.FS)))
 	fmt.Printf("Listening for websocket connections on http://%s\n", address)
 	if err := http.ListenAndServe(address, middleware.LogRequests(router)); err != nil {
 		log.Fatal("ListenAndServe:", err)
