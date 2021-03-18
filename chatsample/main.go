@@ -5,6 +5,7 @@ import (
 	"fmt"
 	kitlog "github.com/go-kit/kit/log"
 	"github.com/philippseith/signalr"
+	"github.com/philippseith/signalr/chatsample/middleware"
 	"log"
 	"net/http"
 	"os"
@@ -126,8 +127,8 @@ func runHTTPServer(address string, hub signalr.HubInterface) {
 	server.MapHTTP(router, "/chat")
 	router.Handle("/", http.FileServer(http.Dir("./public")))
 
-	fmt.Printf("Listening for websocket connections on %s\n", address)
-	if err := http.ListenAndServe(address, router); err != nil {
+	fmt.Printf("Listening for websocket connections on http://%s\n", address)
+	if err := http.ListenAndServe(address, middleware.LogRequests(router)); err != nil {
 		log.Fatal("ListenAndServe:", err)
 	}
 }
