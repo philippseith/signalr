@@ -13,9 +13,16 @@ that supports io.Reader and io.Writer.
 
 Client
 
-A Client can be used in client side code to access server methods. From an existing connection, it is created with NewClient().
+A Client can be used in client side code to access server methods. From an existing connection, it can be created with NewClient().
+  // NewClient with raw TCP connection and MessagePack encoding
+  conn, err := net.Dial("tcp", "example.com:6502")
+  client := NewClient(ctx, NewNetConnection(conn), TransferFormat("Binary), Receiver(receiver))
+  client.Start()
 A special case is NewHTTPClient(), which creates a Client from a server address and negotiates with the server
 which kind of connection (Websockets, Server-Sent Events) will be used.
+  // NewHTTPClient with JSON encoding
+  client := NewHTTPClient(ctx, "http://example.com", TransferFormat("Text"), Receiver(receiver))
+  client.Start()
 The object which will receive server callbacks is passed to NewClient() / NewHTTPClient() by using the Receiver option.
 After calling client.Start(), the client is ready to call server methods or to receive callbacks.
 
@@ -24,22 +31,42 @@ Server
 A Server provides the public methods of a server side class over signalr to the client.
 Such a server side class is called a hub and must implement HubInterface.
 It is reasonable to derive your hubs from the Hub struct type, which already implements HubInterface.
+Servers for arbitrary connection types can be created with NewServer().
+  // Typical server with log level debug to Stderr
+  server, err := NewServer(ctx, SimpleHubFactory(hub), Logger(log.NewLogfmtLogger(os.Stderr), true))
 To serve a connection, call server.Serve(connection) in a goroutine. Serve ends when the connection is closed or the
 servers context is canceled.
+  // Serving over TCP, accepting client who use MessagePack or JSON
+  conn, err := net.Dial("tcp", "example.com:6502")
+  go server.Serve(NewNetConnection(conn))
 To server a HTTP connection, use server.MapHTTP(), which connects the server with a path in an http.ServeMux.
-The server then automatically negotiates, which kind of connection (Websockets, Server-Sent Events) will be used.
+The server then automatically negotiates which kind of connection (Websockets, Server-Sent Events) will be used.
+  // a chat server
+  router := http.NewServeMux()
+  server.MapHTTP(router, "/chat")
+  router.Handle("/", http.FileServer(http.Dir("./public")))
+  http.ListenAndServe(address, router)
 
 Supported method signatures
 
 The SignalR protocol constrains the signature of hub or receiver methods that can be used over SignalR.
 All methods with serializable types as parameters and return types are supported.
 Methods with multiple return values are not generally supported, but returning one or no value and an optional error is supported.
+  // Simple signatures for hub/receiver methods
+  func (mh *MathHub) Divide(a, b float64) (float64, error) // error on division by zero
+  func (ah *AlgoHub) Sort(values []string) []string
+  func (ah *AlgoHub) FindKey(value []string, dict map[int][]string) (int, error) // error on not found
+  func (receiver *View) DisplayServerValue(value interface{}) // will work for every serializable value
 Methods which return a single sending channel (<-chan), and optionally an error, are used to initiate callee side streaming.
 The caller will receive the contents of the channel as stream.
 When the returned channel is closed, the stream will be completed.
+  // Streaming methods
+  func (n *Netflix) Stream(show string, season, episode int) (<-chan []byte, error) // error on password shared
 Methods with one or multiple receiving channels (chan<-) as parameters are used as receivers for caller side streaming.
 The caller invokes this method and pushes one or multiple streams to the callee. The method should end when all channels
 are closed. A channel is closed by the server when the assigned stream is completed.
+  // Caller side streaming
+  func (mh *MathHub) MultiplyAndSum(a, b chan<- float64) float64
 In most cases, the caller will be the client and the callee the server. But the vice versa case is also possible.
 */
 package signalr
