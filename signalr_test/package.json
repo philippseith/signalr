@@ -12,7 +12,7 @@
 	"dependencies": {
 		"@aspnet/signalr": "^1.1.4",
 		"@microsoft/signalr": "^5.0.0",
-		"@microsoft/signalr-protocol-msgpack": "^5.0.1",
+		"@microsoft/signalr-protocol-msgpack": "^5.0.3",
 		"@types/jest": "^26.0.20",
 		"@types/node": "^12.20.4",
 		"jest": "^26.6.3",
