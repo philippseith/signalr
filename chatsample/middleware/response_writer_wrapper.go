@@ -13,7 +13,6 @@ type responseWriterWrapper struct {
 	http.ResponseWriter
 	status       int
 	wroteHeader  bool
-	bytesWritten []byte
 }
 
 // Status provides access to the wrapped http.ResponseWriter's status
@@ -27,6 +26,8 @@ func (rw *responseWriterWrapper) Header() http.Header {
 	return rw.ResponseWriter.Header()
 }
 
+// WriteHeader intercepts the written status code and caches it
+// so that we can access it later
 func (rw *responseWriterWrapper) WriteHeader(code int) {
 	if rw.wroteHeader {
 		return
@@ -39,3 +40,9 @@ func (rw *responseWriterWrapper) WriteHeader(code int) {
 	return
 }
 
+// Flush implements http.Flusher
+func (rw *responseWriterWrapper) Flush() {
+	if flusher, ok := rw.ResponseWriter.(http.Flusher); ok {
+		flusher.Flush()
+	}
+}
