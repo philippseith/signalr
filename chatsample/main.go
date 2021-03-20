@@ -124,6 +124,11 @@ func runHTTPServer(address string, hub signalr.HubInterface) {
 		signalr.Logger(kitlog.NewLogfmtLogger(os.Stderr), true))
 	router := http.NewServeMux()
 	server.MapHTTP(router, "/chat")
+	// if you are using a different mux you can wrap your signalr.Server in a
+	// signalr.HttpMux and bind it to your router explicitly:
+	// serverMux := signalr.NewHTTPMux(server)
+	// router.HandleFunc("/chat/negotiate", serverMux.Negotiate)
+	// router.Handle("/chat'", serverMux)
 	router.Handle("/", http.FileServer(http.Dir("./public")))
 
 	fmt.Printf("Listening for websocket connections on %s\n", address)

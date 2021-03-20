@@ -74,8 +74,8 @@ func NewServer(ctx context.Context, options ...func(Party) error) (Server, error
 
 // MapHTTP maps the servers hub to an path in an http.ServeMux
 func (s *server) MapHTTP(mux *http.ServeMux, path string) {
-	httpMux := newHTTPMux(s)
-	mux.HandleFunc(fmt.Sprintf("%s/negotiate", path), httpMux.negotiate)
+	httpMux := NewHTTPMux(s)
+	mux.HandleFunc(fmt.Sprintf("%s/negotiate", path), httpMux.Negotiate)
 	mux.Handle(path, httpMux)
 }
 

@@ -12,20 +12,25 @@ import (
 	"sync"
 )
 
-type httpMux struct {
+// HttpMux exposes an http.Handler implementation which knows how to
+// handle signalr protocol requests (e.g. requests from the signalr
+// client library)
+type HttpMux struct {
 	mx            sync.Mutex
 	connectionMap map[string]Connection
 	server        Server
 }
 
-func newHTTPMux(server Server) *httpMux {
-	return &httpMux{
+// NewHTTPMux creates a new HttpMux bound to the given Server
+func NewHTTPMux(server Server) *HttpMux {
+	return &HttpMux{
 		connectionMap: make(map[string]Connection),
 		server:        server,
 	}
 }
 
-func (h *httpMux) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
+// ServeHTTP implements http.Handler
+func (h *HttpMux) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 	switch request.Method {
 	case "POST":
 		h.handlePost(writer, request)
@@ -36,7 +41,7 @@ func (h *httpMux) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 	}
 }
 
-func (h *httpMux) handlePost(writer http.ResponseWriter, request *http.Request) {
+func (h *HttpMux) handlePost(writer http.ResponseWriter, request *http.Request) {
 	connectionID := request.URL.Query().Get("id")
 	if connectionID == "" {
 		writer.WriteHeader(400) // Bad request
@@ -60,7 +65,7 @@ func (h *httpMux) handlePost(writer http.ResponseWriter, request *http.Request) 
 	}
 }
 
-func (h *httpMux) handleGet(writer http.ResponseWriter, request *http.Request) {
+func (h *HttpMux) handleGet(writer http.ResponseWriter, request *http.Request) {
 	upgrade := false
 	for _, connHead := range strings.Split(request.Header.Get("Connection"), ",") {
 		if strings.ToLower(strings.TrimSpace(connHead)) == "upgrade" {
@@ -78,7 +83,7 @@ func (h *httpMux) handleGet(writer http.ResponseWriter, request *http.Request) {
 	}
 }
 
-func (h *httpMux) handleServerSentEvent(writer http.ResponseWriter, request *http.Request) {
+func (h *HttpMux) handleServerSentEvent(writer http.ResponseWriter, request *http.Request) {
 	connectionID := request.URL.Query().Get("id")
 	if connectionID == "" {
 		writer.WriteHeader(400) // Bad request
@@ -112,7 +117,7 @@ func (h *httpMux) handleServerSentEvent(writer http.ResponseWriter, request *htt
 	}
 }
 
-func (h *httpMux) handleWebsocket(writer http.ResponseWriter, request *http.Request) {
+func (h *HttpMux) handleWebsocket(writer http.ResponseWriter, request *http.Request) {
 	websocketConn, err := websocket.Accept(writer, request, nil)
 	if err != nil {
 		writer.WriteHeader(400) // Bad request
@@ -145,7 +150,8 @@ func (h *httpMux) handleWebsocket(writer http.ResponseWriter, request *http.Requ
 	}
 }
 
-func (h *httpMux) negotiate(w http.ResponseWriter, req *http.Request) {
+// Negotiate is an http.HandleFunc which knows how to initiate a signalr connection
+func (h *HttpMux) Negotiate(w http.ResponseWriter, req *http.Request) {
 	if req.Method != "POST" {
 		w.WriteHeader(400)
 	} else {
@@ -192,7 +198,7 @@ func (h *httpMux) negotiate(w http.ResponseWriter, req *http.Request) {
 	}
 }
 
-func (h *httpMux) serveConnection(c Connection) {
+func (h *HttpMux) serveConnection(c Connection) {
 	h.mx.Lock()
 	h.connectionMap[c.ConnectionID()] = c
 	h.mx.Unlock()
