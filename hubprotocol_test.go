@@ -4,14 +4,12 @@ import (
 	"bytes"
 	"fmt"
 	"github.com/dave/jennifer/jen"
-	"github.com/go-kit/kit/log"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"go/ast"
 	"go/parser"
 	"go/token"
 	"io"
-	"os"
 	"reflect"
 	"testing"
 	"time"
@@ -23,7 +21,7 @@ var _ = Describe("Protocol", func() {
 		&messagePackHubProtocol{},
 	} {
 		protocol := p
-		protocol.setDebugLogger(log.NewLogfmtLogger(os.Stderr))
+		protocol.setDebugLogger(testLogger())
 		Describe(fmt.Sprintf("%T: WriteMessage/ParseMessages roundtrip", protocol), func() {
 			Context("InvocationMessage", func() {
 				for _, a := range [][]interface{}{

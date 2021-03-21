@@ -12,7 +12,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/go-kit/kit/log"
 	"github.com/philippseith/signalr"
 )
 
@@ -101,7 +100,7 @@ func runServer(t *testing.T, serverIsUp chan struct{}, quitServer chan struct{},
 	sRServer, _ := signalr.NewServer(ctx, signalr.SimpleHubFactory(&hub{}),
 		signalr.KeepAliveInterval(2*time.Second),
 		transports,
-		signalr.Logger(log.NewLogfmtLogger(os.Stderr), true))
+		testLoggerOption())
 	router := http.NewServeMux()
 	sRServer.MapHTTP(router, "/hub")
 
