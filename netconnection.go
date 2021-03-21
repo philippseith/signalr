@@ -1,6 +1,7 @@
-package main
+package signalr
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/base64"
 	"net"
@@ -8,13 +9,23 @@ import (
 )
 
 type netConnection struct {
+	ctx          context.Context
 	timeout      time.Duration
 	conn         net.Conn
 	connectionID string
 }
 
-func newNetConnection(conn net.Conn) *netConnection {
-	return &netConnection{connectionID: getConnectionID(), conn: conn}
+func NewNetConnection(ctx context.Context, conn net.Conn) *netConnection {
+	netConn := &netConnection{
+		ctx:          ctx,
+		connectionID: getConnectionID(),
+		conn:         conn,
+	}
+	go func() {
+		<-ctx.Done()
+		_ = conn.Close()
+	}()
+	return netConn
 }
 
 func (nc *netConnection) SetTimeout(timeout time.Duration) {
@@ -27,6 +38,14 @@ func (nc *netConnection) Timeout() time.Duration {
 
 func (nc *netConnection) ConnectionID() string {
 	return nc.connectionID
+}
+
+func (nc *netConnection) SetConnectionID(id string) {
+	nc.connectionID = id
+}
+
+func (nc *netConnection) Context() context.Context {
+	return nc.ctx
 }
 
 func (nc *netConnection) Write(p []byte) (n int, err error) {
