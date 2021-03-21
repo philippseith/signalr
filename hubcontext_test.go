@@ -118,11 +118,21 @@ var _ = Describe("HubContext", func() {
 			}(conns, callCount, done)
 			go func(conns []*testingConnection, callCount chan int, done chan bool) {
 				msg := <-conns[1].received
-				expectInvocation(msg, callCount, done, 3)
+				if _, ok := msg.(completionMessage); ok {
+					msg = <-conns[1].received
+					expectInvocation(msg, callCount, done, 3)
+				} else {
+					expectInvocation(msg, callCount, done, 3)
+				}
 			}(conns, callCount, done)
 			go func(conns []*testingConnection, callCount chan int, done chan bool) {
 				msg := <-conns[2].received
-				expectInvocation(msg, callCount, done, 3)
+				if _, ok := msg.(completionMessage); ok {
+					msg = <-conns[2].received
+					expectInvocation(msg, callCount, done, 3)
+				} else {
+					expectInvocation(msg, callCount, done, 3)
+				}
 			}(conns, callCount, done)
 			Expect(<-hubContextInvocationQueue).To(Equal("CallAll()"))
 			select {
