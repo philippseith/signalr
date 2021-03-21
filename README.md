@@ -93,11 +93,12 @@ func runHTTPServer() {
     hub := AppHub{}
 	
     // build a signalr.Server using your hub
-    server, _ := signalr.NewServer(context.TODO(), signalr.SimpleHubFactory(hub))
-    
-    // configure global signalr options
-    signalr.KeepAliveInterval(2*time.Second),
-    signalr.Logger(kitlog.NewLogfmtLogger(os.Stderr), true))
+    // and any server options you may need
+    server, _ := signalr.NewServer(context.TODO(),
+        signalr.SimpleHubFactory(hub)
+        signalr.KeepAliveInterval(2*time.Second),
+        signalr.Logger(kitlog.NewLogfmtLogger(os.Stderr), true))
+    )
     
     // create a new http.ServerMux to handle your app's http requests
     router := http.NewServeMux()
