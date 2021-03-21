@@ -90,7 +90,7 @@ func connectMany() (Server, []*testingConnection) {
 	return server, conns
 }
 
-var _ = FDescribe("HubContext", func() {
+var _ = Describe("HubContext", func() {
 	var server Server
 	var conns []*testingConnection
 	BeforeEach(func() {
