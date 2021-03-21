@@ -204,14 +204,16 @@ func (m *messagePackHubProtocol) readFrames(reader io.Reader, remainBuf *bytes.B
 		if err != nil && !errors.Is(err, io.EOF) {
 			return nil, err
 		}
-		_, _ = buf.Write(p[:n])
-		frames, err := m.parseFrames(buf)
-		if err != nil {
-			return nil, err
-		}
-		if len(frames) > 0 {
-			_, _ = remainBuf.ReadFrom(buf)
-			return frames, nil
+		if n > 0 {
+			_, _ = buf.Write(p[:n])
+			frames, err := m.parseFrames(buf)
+			if err != nil {
+				return nil, err
+			}
+			if len(frames) > 0 {
+				_, _ = remainBuf.ReadFrom(buf)
+				return frames, nil
+			}
 		}
 	}
 }

@@ -163,14 +163,16 @@ func readJSONFrames(reader io.Reader, remainBuf *bytes.Buffer) ([][]byte, error)
 		if err != nil && !errors.Is(err, io.EOF) {
 			return nil, err
 		}
-		_, _ = buf.Write(p[:n])
-		frames, err := parseJSONFrames(buf)
-		if err != nil {
-			return nil, err
-		}
-		if len(frames) > 0 {
-			_, _ = remainBuf.ReadFrom(buf)
-			return frames, nil
+		if n > 0 {
+			_, _ = buf.Write(p[:n])
+			frames, err := parseJSONFrames(buf)
+			if err != nil {
+				return nil, err
+			}
+			if len(frames) > 0 {
+				_, _ = remainBuf.ReadFrom(buf)
+				return frames, nil
+			}
 		}
 	}
 }
