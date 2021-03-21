@@ -24,7 +24,7 @@ import (
 // or the servers context is canceled.
 type Server interface {
 	Party
-	MapHTTP(mux *http.ServeMux, path string)
+	MapHTTP(mux MappableRouter, path string)
 	Serve(conn Connection)
 	availableTransports() []string
 }
@@ -72,8 +72,17 @@ func NewServer(ctx context.Context, options ...func(Party) error) (Server, error
 	return server, nil
 }
 
+// MappableRouter encapsulates the methods used by server.MapHTTP to configure the
+// handlers required by the signalr protocol. this abstraction removes the explicit
+// binding to http.ServerMux and allows use of any mux which implements those basic
+// Handle and HandleFunc methods.
+type MappableRouter interface {
+	HandleFunc(string, func(w http.ResponseWriter, r *http.Request))
+	Handle(string, http.Handler)
+}
+
 // MapHTTP maps the servers hub to an path in an http.ServeMux
-func (s *server) MapHTTP(mux *http.ServeMux, path string) {
+func (s *server) MapHTTP(mux MappableRouter, path string) {
 	httpMux := newHTTPMux(s)
 	mux.HandleFunc(fmt.Sprintf("%s/negotiate", path), httpMux.negotiate)
 	mux.Handle(path, httpMux)
