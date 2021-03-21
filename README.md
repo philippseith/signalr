@@ -129,9 +129,9 @@ func runHTTPServer() {
 
 #### Grab copies of the signalr scripts
 
-Microsft has published the client-side libraries as a node package with embedded typescript annotations: `@microsoft/signalr`.
+Microsoft has published the client-side libraries as a node package with embedded typescript annotations: `@microsoft/signalr`.
 
-You can install `@microsft/signalr` through any node package manager:
+You can install `@microsoft/signalr` through any node package manager:
 
 | package manager | command |
 | --------------- | ------- |
