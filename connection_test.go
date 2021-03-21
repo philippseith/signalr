@@ -106,7 +106,7 @@ var _ = Describe("Handshake", func() {
 	var server Server
 	var conn *testingConnection
 	BeforeEach(func(done Done) {
-		server, _ = NewServer(context.TODO(), SimpleHubFactory(&handshakeHub{}))
+		server, _ = NewServer(context.TODO(), SimpleHubFactory(&handshakeHub{}), testLoggerOption())
 		conn = newTestingConnection()
 		go server.Serve(conn)
 		close(done)
@@ -206,7 +206,7 @@ var _ = Describe("Handshake", func() {
 	})
 	Context("When the handshake connection is initiated, but the client does not send a handshake request within the handshake timeout ", func() {
 		It("should not be connected", func(done Done) {
-			server, _ := NewServer(context.TODO(), SimpleHubFactory(&handshakeHub{}), HandshakeTimeout(time.Millisecond*100))
+			server, _ := NewServer(context.TODO(), SimpleHubFactory(&handshakeHub{}), HandshakeTimeout(time.Millisecond*100), testLoggerOption())
 			conn := newTestingConnection()
 			go server.Serve(conn)
 			time.Sleep(time.Millisecond * 200)

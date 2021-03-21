@@ -108,3 +108,5 @@ dist
 /.vscode
 /cover.out
 /coverage.txt
+
+/testLogConf.json

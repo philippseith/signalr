@@ -3,11 +3,9 @@ package signalr
 import (
 	"context"
 	"fmt"
-	"os"
 	"strings"
 	"time"
 
-	"github.com/go-kit/kit/log"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
@@ -75,7 +73,7 @@ var hubContextInvocationQueue = make(chan string, 10)
 
 func connectMany() (Server, []*testingConnection) {
 	server, err := NewServer(context.TODO(), SimpleHubFactory(&contextHub{}),
-		Logger(log.NewLogfmtLogger(os.Stderr), false))
+		testLoggerOption())
 	if err != nil {
 		Fail(err.Error())
 		return nil, nil
@@ -362,7 +360,7 @@ var _ = Describe("HubContext", func() {
 var _ = Describe("Abort()", func() {
 	It("should abort the connection of the current caller", func(done Done) {
 		server, err := NewServer(context.TODO(), SimpleHubFactory(&contextHub{}),
-			Logger(log.NewLogfmtLogger(os.Stderr), false),
+			testLoggerOption(),
 			ChanReceiveTimeout(200*time.Millisecond),
 			StreamBufferCapacity(5))
 		Expect(err).NotTo(HaveOccurred())

@@ -25,6 +25,7 @@ Protocol encoding in JSON is fully supported, and there is MessagePack support f
     - [Client side](#client-side)
         - [Grab copies of the signalr scripts](#grab-copies-of-the-signalr-scripts)
         - [Use a HubConnection to connect to your server Hub](#use-a-hubconnection-to-connect-to-your-server-hub)
+- [Debugging](#debugging)
 
 ## Install
 
@@ -224,3 +225,16 @@ How you format your client UI is going to depend on your application use case bu
 </body>
 </html>
 ```
+
+### Debugging
+
+Server, Client and the protocol implementations are able to log most of their operations. The logging option is disabled
+by default in all tests. To configure logging, create a `testLogConf.json` file with this content
+```json
+{
+  "Enabled": false,
+  "Debug": false
+}
+```
+- If `Enabled` is set to `true`, the logging will be enabled. The tests will log to `os.Stderr`
+- If `Debug` ist set to `true`, the logging will be more detailed.

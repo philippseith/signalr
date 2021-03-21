@@ -4,11 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/go-kit/kit/log"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"io"
-	"os"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -43,7 +41,7 @@ func (pc *pipeConnection) ConnectionID() string {
 	return "X"
 }
 
-func (pc *pipeConnection) SetConnectionID(id string) {}
+func (pc *pipeConnection) SetConnectionID(string) {}
 
 func (pc *pipeConnection) SetTimeout(timeout time.Duration) {
 	pc.timeout = timeout
@@ -119,7 +117,7 @@ var _ = Describe("Client", func() {
 		It("should connect to the server", func(done Done) {
 			// Create a simple server
 			server, err := NewServer(context.TODO(), SimpleHubFactory(&simpleHub{}),
-				Logger(log.NewLogfmtLogger(os.Stderr), false),
+				testLoggerOption(),
 				ChanReceiveTimeout(200*time.Millisecond),
 				StreamBufferCapacity(5))
 			Expect(err).NotTo(HaveOccurred())
@@ -129,7 +127,7 @@ var _ = Describe("Client", func() {
 			// Start the server
 			go server.Serve(srvConn)
 			// Create the Client
-			clientConn, err := NewClient(context.TODO(), cliConn, formatOption)
+			clientConn, err := NewClient(context.TODO(), cliConn, testLoggerOption(), formatOption)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(clientConn).NotTo(BeNil())
 			// Start it
@@ -148,7 +146,7 @@ var _ = Describe("Client", func() {
 		var server Server
 		BeforeEach(func(done Done) {
 			server, _ = NewServer(context.TODO(), SimpleHubFactory(&simpleHub{}),
-				Logger(log.NewLogfmtLogger(os.Stderr), false),
+				testLoggerOption(),
 				ChanReceiveTimeout(200*time.Millisecond),
 				StreamBufferCapacity(5))
 			// Create both ends of the connection
@@ -156,7 +154,7 @@ var _ = Describe("Client", func() {
 			// Start the server
 			go server.Serve(srvConn)
 			// Create the Client
-			client, _ = NewClient(context.TODO(), cliConn, Receiver(simpleReceiver{}), formatOption)
+			client, _ = NewClient(context.TODO(), cliConn, Receiver(simpleReceiver{}), testLoggerOption(), formatOption)
 			// Start it
 			_ = client.Start()
 			close(done)
@@ -200,7 +198,7 @@ var _ = Describe("Client", func() {
 		var server Server
 		BeforeEach(func(done Done) {
 			server, _ = NewServer(context.TODO(), SimpleHubFactory(&simpleHub{}),
-				Logger(log.NewLogfmtLogger(os.Stderr), false),
+				testLoggerOption(),
 				ChanReceiveTimeout(200*time.Millisecond),
 				StreamBufferCapacity(5))
 			// Create both ends of the connection
@@ -208,7 +206,7 @@ var _ = Describe("Client", func() {
 			// Start the server
 			go server.Serve(srvConn)
 			// Create the Client
-			client, _ = NewClient(context.TODO(), cliConn, Receiver(receiver), formatOption)
+			client, _ = NewClient(context.TODO(), cliConn, Receiver(receiver), testLoggerOption(), formatOption)
 			// Start it
 			_ = client.Start()
 			close(done)
@@ -279,7 +277,7 @@ var _ = Describe("Client", func() {
 		var server Server
 		BeforeEach(func(done Done) {
 			server, _ = NewServer(context.TODO(), SimpleHubFactory(&simpleHub{}),
-				Logger(log.NewLogfmtLogger(os.Stderr), true),
+				testLoggerOption(),
 				ChanReceiveTimeout(200*time.Millisecond),
 				StreamBufferCapacity(5))
 			// Create both ends of the connection
@@ -288,7 +286,7 @@ var _ = Describe("Client", func() {
 			go server.Serve(srvConn)
 			// Create the Client
 			receiver := &simpleReceiver{}
-			client, _ = NewClient(context.TODO(), cliConn, Receiver(receiver), formatOption)
+			client, _ = NewClient(context.TODO(), cliConn, Receiver(receiver), testLoggerOption(), formatOption)
 			// Start it
 			_ = client.Start()
 			close(done)
@@ -346,7 +344,7 @@ var _ = Describe("Client", func() {
 		BeforeEach(func(done Done) {
 			hub.receiveStreamDone = make(chan struct{}, 1)
 			server, _ = NewServer(context.TODO(), HubFactory(func() HubInterface { return hub }),
-				Logger(log.NewLogfmtLogger(os.Stderr), false),
+				testLoggerOption(),
 				ChanReceiveTimeout(200*time.Millisecond),
 				StreamBufferCapacity(5))
 			// Create both ends of the connection
@@ -355,7 +353,7 @@ var _ = Describe("Client", func() {
 			go server.Serve(srvConn)
 			// Create the Client
 			receiver := &simpleReceiver{}
-			client, _ = NewClient(context.TODO(), cliConn, Receiver(receiver), formatOption)
+			client, _ = NewClient(context.TODO(), cliConn, Receiver(receiver), testLoggerOption(), formatOption)
 			// Start it
 			_ = client.Start()
 			close(done)
