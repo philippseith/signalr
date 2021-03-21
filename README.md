@@ -128,9 +128,16 @@ func runHTTPServer() {
 
 #### Grab copies of the signalr scripts
 
-Microsoft recommends using the [LibMan](https://docs.microsoft.com/en-us/aspnet/core/client-side/libman/libman-cli) tool to download the signalr files, but all you need is a local copy of `signalr.js`.
+Microsft has published the client-side libraries as a node package with embedded typescript annotations: `@microsoft/signalr`.
 
-You can download the version we are using in our `chatsample` from [here](https://raw.githubusercontent.com/philippseith/signalr/master/chatsample/public/js/signalr.js) (the minified version is [here](https://raw.githubusercontent.com/philippseith/signalr/master/chatsample/public/js/signalr.min.js))
+You can install `@microsft/signalr` through any node package manager:
+
+| package manager | command |
+| --------------- | ------- |
+| [npm](https://www.npmjs.com/) | `npm install @microsoft/signalr@latest` |
+| [yarn](https://yarnpkg.com/) | `yarn add @microsoft/signalr@latest` |
+| [LibMan](https://docs.microsoft.com/en-us/aspnet/core/client-side/libman/libman-cli)| `libman install @microsoft/signalr@latest -p unpkg -d wwwroot/js/signalr --files dist/browser/signalr.js --files dist/browser/signalr.min.js --files dist/browser/signalr.map.js` |
+| none | you can download the version we are using in our `chatsample` from [here](https://raw.githubusercontent.com/philippseith/signalr/master/chatsample/public/js/signalr.js) (the minified version is [here](https://raw.githubusercontent.com/philippseith/signalr/master/chatsample/public/js/signalr.min.js))|
 
 #### Use a HubConnection to connect to your server Hub
 
