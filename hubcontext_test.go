@@ -90,16 +90,14 @@ func connectMany() (Server, []*testingConnection) {
 	return server, conns
 }
 
-var _ = Describe("HubContext", func() {
+var _ = FDescribe("HubContext", func() {
 	var server Server
 	var conns []*testingConnection
-	BeforeEach(func(done Done) {
+	BeforeEach(func() {
 		server, conns = connectMany()
-		close(done)
 	})
-	AfterEach(func(done Done) {
+	AfterEach(func() {
 		server.cancel()
-		close(done)
 	})
 	Context("Clients().All()", func() {
 		It("should invoke all clients", func(didIt Done) {
@@ -143,6 +141,19 @@ var _ = Describe("HubContext", func() {
 			}
 			close(didIt)
 		}, 5.0)
+	})
+})
+
+var _ = Describe("HubContext", func() {
+	var server Server
+	var conns []*testingConnection
+	BeforeEach(func(done Done) {
+		server, conns = connectMany()
+		close(done)
+	})
+	AfterEach(func(done Done) {
+		server.cancel()
+		close(done)
 	})
 
 	Context("Clients().Caller()", func() {
@@ -380,7 +391,7 @@ var _ = Describe("Abort()", func() {
 })
 
 func expectInvocation(msg interface{}, callCount chan int, done chan bool, doneCount int) {
-	Expect(msg).To(BeAssignableToTypeOf(invocationMessage{}))
+	Expect(msg).To(BeAssignableToTypeOf(invocationMessage{}), fmt.Sprintf("Expected invocationMessage, got %T %#v", msg, msg))
 	Expect(strings.ToLower(msg.(invocationMessage).Target)).To(Equal("clientfunc"))
 	d := <-callCount
 	d++
