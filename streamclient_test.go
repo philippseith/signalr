@@ -2,10 +2,11 @@ package signalr
 
 import (
 	"fmt"
-	. "github.com/onsi/ginkgo"
-	. "github.com/onsi/gomega"
 	"strings"
 	"time"
+
+	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/gomega"
 )
 
 var clientStreamingInvocationQueue = make(chan string, 20)
@@ -237,13 +238,11 @@ var _ = Describe("ClientStreaming", func() {
 	Describe("Stream invocation with wrong streamId", func() {
 		var server Server
 		var conn *testingConnection
-		BeforeEach(func(done Done) {
+		BeforeEach(func() {
 			server, conn = connect(&clientStreamHub{})
-			close(done)
 		})
-		AfterEach(func(done Done) {
+		AfterEach(func() {
 			server.cancel()
-			close(done)
 		})
 		Context("When invoked by the client with streamIds", func() {
 			It("should be invoked on the server, and receive stream items until the caller sends a completion. Unknown streamIds should be ignored", func(done Done) {
@@ -261,7 +260,7 @@ var _ = Describe("ClientStreaming", func() {
 					select {
 					case <-clientStreamingInvocationQueue:
 						break loop
-					case <-time.After(100 * time.Millisecond):
+					case <-time.After(500 * time.Millisecond):
 						Fail("timed out")
 					}
 				}
@@ -498,13 +497,11 @@ var _ = Describe("ClientStreaming", func() {
 	Describe("Client sending invalid completion", func() {
 		var server Server
 		var conn *testingConnection
-		BeforeEach(func(done Done) {
+		BeforeEach(func() {
 			server, conn = connect(&clientStreamHub{})
-			close(done)
 		})
-		AfterEach(func(done Done) {
+		AfterEach(func() {
 			server.cancel()
-			close(done)
 		})
 		Context("When an invalid completion message with missing id is sent", func() {
 			It("should end the connection with an error", func(done Done) {

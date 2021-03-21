@@ -5,17 +5,18 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
+	"net"
+	"net/http"
+	"os"
+	"strings"
+	"time"
+
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	"io/ioutil"
-	"net"
-	"net/http"
 	"nhooyr.io/websocket"
-	"os"
-	"strings"
-	"time"
 )
 
 type addHub struct {
@@ -151,7 +152,7 @@ var _ = Describe("HTTP server", func() {
 			waitForPort(port)
 			handShakeAndCallWebSocketTestServer(port, "")
 			close(done)
-		}, 2.0)
+		}, 5.0)
 	})
 })
 
