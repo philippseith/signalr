@@ -10,6 +10,7 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"io"
 	"os"
 	"reflect"
 	"testing"
@@ -199,20 +200,22 @@ var _ = Describe("Protocol", func() {
 			})
 			Context("Partial messages", func() {
 				It("should parse a message sent in two steps", func(done Done) {
-					writeBuf := &bytes.Buffer{}
+					messageBuf := &bytes.Buffer{}
 					streamItem := streamItemMessage{Type: 2, InvocationID: "2", Item: "A"}
-					Expect(protocol.WriteMessage(streamItem, writeBuf)).NotTo(HaveOccurred())
-					p := make([]byte, writeBuf.Len()-2)
-					_, err := writeBuf.Read(p)
-					Expect(err).NotTo(HaveOccurred())
-					var buf, remainBuf bytes.Buffer
+					Expect(protocol.WriteMessage(streamItem, messageBuf)).NotTo(HaveOccurred())
+					reader, writer := io.Pipe()
+					var remainBuf bytes.Buffer
 					// Store incomplete frame
-					buf.Write(p)
+					go func() {
+						defer GinkgoRecover()
+						_, err := writer.Write(messageBuf.Bytes()[:messageBuf.Len()-2])
+						Expect(err).NotTo(HaveOccurred())
+					}()
 					up := make(chan struct{}, 1)
 					go func() {
 						defer GinkgoRecover()
 						up <- struct{}{}
-						got, err := protocol.ParseMessages(&buf, &remainBuf)
+						got, err := protocol.ParseMessages(reader, &remainBuf)
 						Expect(err).NotTo(HaveOccurred())
 						Expect(len(got)).To(Equal(1))
 						Expect(got[0]).To(BeAssignableToTypeOf(streamItemMessage{}))
@@ -222,11 +225,12 @@ var _ = Describe("Protocol", func() {
 						Expect(item).To(Equal(streamItem.Item))
 						close(done)
 					}()
-					// Wait for the parse to be started
+					// Wait for parse to be started
 					<-up
+					// Let parse hang a while
 					<-time.After(time.Millisecond * 200)
 					// Write the rest of the frame
-					_, err = buf.ReadFrom(writeBuf)
+					_, err := writer.Write(messageBuf.Bytes()[messageBuf.Len()-2:])
 					Expect(err).NotTo(HaveOccurred())
 				}, 2.0)
 			})
