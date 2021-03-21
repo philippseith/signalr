@@ -3,12 +3,13 @@ package signalr
 import (
 	"context"
 	"fmt"
-	"github.com/go-kit/kit/log"
-	. "github.com/onsi/ginkgo"
-	. "github.com/onsi/gomega"
 	"os"
 	"strings"
 	"time"
+
+	"github.com/go-kit/kit/log"
+	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/gomega"
 )
 
 type contextHub struct {
@@ -93,13 +94,11 @@ func connectMany() (Server, []*testingConnection) {
 var _ = Describe("HubContext", func() {
 	var server Server
 	var conns []*testingConnection
-	BeforeEach(func(done Done) {
+	BeforeEach(func() {
 		server, conns = connectMany()
-		close(done)
 	})
-	AfterEach(func(done Done) {
+	AfterEach(func() {
 		server.cancel()
-		close(done)
 	})
 	Context("Clients().All()", func() {
 		It("should invoke all clients", func(didIt Done) {
@@ -108,6 +107,7 @@ var _ = Describe("HubContext", func() {
 			callCount <- 0
 			done := make(chan bool)
 			go func(conns []*testingConnection, callCount chan int, done chan bool) {
+				defer GinkgoRecover()
 				msg := <-conns[0].received
 				if _, ok := msg.(completionMessage); ok {
 					msg = <-conns[0].received
@@ -117,6 +117,7 @@ var _ = Describe("HubContext", func() {
 				}
 			}(conns, callCount, done)
 			go func(conns []*testingConnection, callCount chan int, done chan bool) {
+				defer GinkgoRecover()
 				msg := <-conns[1].received
 				if _, ok := msg.(completionMessage); ok {
 					msg = <-conns[1].received
@@ -126,6 +127,7 @@ var _ = Describe("HubContext", func() {
 				}
 			}(conns, callCount, done)
 			go func(conns []*testingConnection, callCount chan int, done chan bool) {
+				defer GinkgoRecover()
 				msg := <-conns[2].received
 				if _, ok := msg.(completionMessage); ok {
 					msg = <-conns[2].received
@@ -144,6 +146,19 @@ var _ = Describe("HubContext", func() {
 			close(didIt)
 		}, 5.0)
 	})
+})
+
+var _ = Describe("HubContext", func() {
+	var server Server
+	var conns []*testingConnection
+	BeforeEach(func(done Done) {
+		server, conns = connectMany()
+		close(done)
+	})
+	AfterEach(func(done Done) {
+		server.cancel()
+		close(done)
+	})
 
 	Context("Clients().Caller()", func() {
 		It("should invoke only the caller", func(didIt Done) {
@@ -152,6 +167,7 @@ var _ = Describe("HubContext", func() {
 			callCount := make(chan int, 1)
 			callCount <- 0
 			go func(conns []*testingConnection, done chan bool) {
+				defer GinkgoRecover()
 				msg := <-conns[0].received
 				if _, ok := msg.(completionMessage); ok {
 					msg = <-conns[0].received
@@ -207,6 +223,7 @@ var _ = Describe("HubContext", func() {
 				}
 			}(conns)
 			go func(conns []*testingConnection, done chan bool) {
+				defer GinkgoRecover()
 				msg := <-conns[2].received
 				Expect(msg).To(BeAssignableToTypeOf(invocationMessage{}))
 				Expect(strings.ToLower(msg.(invocationMessage).Target)).To(Equal("clientfunc"))
@@ -233,6 +250,7 @@ var _ = Describe("HubContext", func() {
 			callCount <- 0
 			done := make(chan bool)
 			go func(conns []*testingConnection) {
+				defer GinkgoRecover()
 				msg := <-conns[0].received
 				if _, ok := msg.(completionMessage); ok {
 					msg = <-conns[0].received
@@ -246,10 +264,12 @@ var _ = Describe("HubContext", func() {
 				}
 			}(conns)
 			go func(conns []*testingConnection) {
+				defer GinkgoRecover()
 				msg := <-conns[1].received
 				expectInvocation(msg, callCount, done, 2)
 			}(conns)
 			go func(conns []*testingConnection, done chan bool) {
+				defer GinkgoRecover()
 				msg := <-conns[2].received
 				expectInvocation(msg, callCount, done, 2)
 			}(conns, done)
@@ -278,6 +298,7 @@ var _ = Describe("HubContext", func() {
 			callCount <- 0
 			done := make(chan bool)
 			go func(conns []*testingConnection) {
+				defer GinkgoRecover()
 				msg := <-conns[0].received
 				if _, ok := msg.(completionMessage); ok {
 					msg = <-conns[0].received
@@ -291,10 +312,12 @@ var _ = Describe("HubContext", func() {
 				}
 			}(conns)
 			go func(conns []*testingConnection) {
+				defer GinkgoRecover()
 				msg := <-conns[1].received
 				expectInvocation(msg, callCount, done, 1)
 			}(conns)
 			go func(conns []*testingConnection, done chan bool) {
+				defer GinkgoRecover()
 				msg := <-conns[2].received
 				if _, ok := msg.(completionMessage); ok {
 					Fail(fmt.Sprintf("wrong client received %v", msg))
@@ -380,7 +403,7 @@ var _ = Describe("Abort()", func() {
 })
 
 func expectInvocation(msg interface{}, callCount chan int, done chan bool, doneCount int) {
-	Expect(msg).To(BeAssignableToTypeOf(invocationMessage{}))
+	Expect(msg).To(BeAssignableToTypeOf(invocationMessage{}), fmt.Sprintf("Expected invocationMessage, got %T %#v", msg, msg))
 	Expect(strings.ToLower(msg.(invocationMessage).Target)).To(Equal("clientfunc"))
 	d := <-callCount
 	d++
