@@ -229,12 +229,12 @@ How you format your client UI is going to depend on your application use case bu
 ### Debugging
 
 Server, Client and the protocol implementations are able to log most of their operations. The logging option is disabled
-by default in all tests. To configure logging, create a `testLogConf.json` file with this content
+by default in all tests. To configure logging, edit the `testLogConf.json` file:
 ```json
 {
   "Enabled": false,
   "Debug": false
 }
 ```
-- If `Enabled` is set to `true`, the logging will be enabled. The tests will log to `os.Stderr`
+- If `Enabled` is set to `true`, the logging will be enabled. The tests will log to `os.Stderr`.
 - If `Debug` ist set to `true`, the logging will be more detailed.
