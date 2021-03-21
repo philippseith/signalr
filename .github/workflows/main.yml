@@ -34,7 +34,7 @@ jobs:
   test:
     name: Test
     runs-on: ubuntu-latest
-    needs: [npminstall]
+    #needs: [npminstall]
     steps:
       - name: Set up Go
         uses: actions/setup-go@v1
