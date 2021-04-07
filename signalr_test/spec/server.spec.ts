@@ -116,7 +116,7 @@ function runE2E(protocol: signalR.IHubProtocol) {
     })
 }
 
-describe("e2e test with microsoft/signalr client", () => {
+describe("JSON e2e test with microsoft/signalr client", () => {
     runE2E(new signalR.JsonHubProtocol());
 })
 

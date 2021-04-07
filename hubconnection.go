@@ -88,17 +88,24 @@ func (c *defaultHubConnection) Abort() {
 
 func (c *defaultHubConnection) Receive() <-chan receiveResult {
 	recvChan := make(chan receiveResult, 20)
+	// Prepare cleanup
+	done := make(chan struct{}, 2)
+	go func(recvChan chan receiveResult, done chan struct{}) {
+		<-done
+		<-done
+		close(done)
+		close(recvChan)
+	}(recvChan, done)
 	// the pipe connects the goroutine which reads from the connection and the goroutine which parses the read data
 	reader, writer := io.Pipe()
 	p := make([]byte, c.maximumReceiveMessageSize)
-	go func(ctx context.Context, connection io.Reader, writer io.Writer, recvChan chan receiveResult) {
+	go func(ctx context.Context, connection io.Reader, writer io.Writer, recvChan chan<- receiveResult, done chan<- struct{}) {
 		for {
 			if ctx.Err() != nil {
 				break
 			}
 			n, err := connection.Read(p)
-			if err != nil &&
-				ctx.Err() == nil { // if ctx.Err != nil, recvChan is closed and we shouldn't push to it
+			if err != nil {
 				recvChan <- receiveResult{err: err}
 			}
 			if ctx.Err() != nil {
@@ -106,32 +113,35 @@ func (c *defaultHubConnection) Receive() <-chan receiveResult {
 			}
 			if n > 0 {
 				_, err = writer.Write(p[:n])
-				if err != nil &&
-					ctx.Err() == nil { // if ctx.Err != nil, recvChan is closed and we shouldn't push to it
+				if err != nil {
 					recvChan <- receiveResult{err: err}
 				}
 			}
 		}
-	}(c.ctx, c.connection, writer, recvChan)
+		// The pipe reader is done
+		done <- struct{}{}
+	}(c.ctx, c.connection, writer, recvChan, done)
 	// parse
-	go func(ctx context.Context, reader io.Reader, recvChan chan receiveResult) {
+	go func(ctx context.Context, reader io.Reader, recvChan chan<- receiveResult, done chan<- struct{}) {
 		remainBuf := bytes.Buffer{}
 		for {
 			if ctx.Err() != nil {
-				close(recvChan)
 				break
 			}
 			messages, err := c.protocol.ParseMessages(reader, &remainBuf)
-			if err != nil && ctx.Err() == nil { // if ctx.Err != nil, recvChan is closed and we shouldn't push to it
+			if err != nil {
 				recvChan <- receiveResult{err: err}
-			}
-			for _, message := range messages {
-				if ctx.Err() == nil { // if ctx.Err != nil, recvChan is closed and we shouldn't push to it
-					recvChan <- receiveResult{message: message}
+			} else {
+				for _, message := range messages {
+					if ctx.Err() == nil {
+						recvChan <- receiveResult{message: message}
+					}
 				}
 			}
 		}
-	}(c.ctx, reader, recvChan)
+		// The parser is done
+		done <- struct{}{}
+	}(c.ctx, reader, recvChan, done)
 	return recvChan
 }
 
