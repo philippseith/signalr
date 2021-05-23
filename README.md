@@ -32,7 +32,7 @@ Protocol encoding in JSON is fully supported, and there is MessagePack support f
 With a [correctly configured](https://golang.org/doc/install#testing) Go toolchain:
 
 ```sh
-go get -u github.com/philippeseith/signalr
+go get -u github.com/philippseith/signalr
 ```
 
 ## Getting Started
