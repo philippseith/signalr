@@ -188,6 +188,8 @@ func (h *httpMux) negotiate(w http.ResponseWriter, req *http.Request) {
 			NegotiateVersion:    negotiateVersion,
 			AvailableTransports: availableTransports,
 		}
+
+		w.WriteHeader(200)
 		_ = json.NewEncoder(w).Encode(response) // Can't imagine an error when encoding
 	}
 }
