@@ -22,10 +22,15 @@ import (
 // serves the hub of the server on one connection.
 // The same server might serve different connections in parallel. Serve does not return until the connection is closed
 // or the servers context is canceled.
+//
+// HubClients()
+// allows to call all HubClients of the server from server-side, non-hub code.
+// Note that HubClients.Caller() returns nil, because there is no real caller which can be reached over a HubConnection.
 type Server interface {
 	Party
 	MapHTTP(mux MappableRouter, path string)
 	Serve(conn Connection)
+	HubClients() HubClients
 	availableTransports() []string
 }
 
@@ -98,6 +103,10 @@ func (s *server) Serve(conn Connection) {
 	} else {
 		newLoop(s, conn, protocol).Run(make(chan struct{}, 1))
 	}
+}
+
+func (s *server) HubClients() HubClients {
+	return s.defaultHubClients
 }
 
 func (s *server) availableTransports() []string {
