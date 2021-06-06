@@ -49,4 +49,13 @@ var _ = Describe("Server.HubClients", func() {
 			close(done)
 		}, 1.0)
 	})
+	Context("Caller()", func() {
+		It("should return nil", func() {
+			server, _ := NewServer(context.TODO(), SimpleHubFactory(&simpleHub{}),
+				testLoggerOption(),
+				ChanReceiveTimeout(200*time.Millisecond),
+				StreamBufferCapacity(5))
+			Expect(server.HubClients().Caller()).To(BeNil())
+		})
+	})
 })
