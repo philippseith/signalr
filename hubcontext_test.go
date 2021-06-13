@@ -292,8 +292,6 @@ var _ = Describe("HubContext", func() {
 			<-conns[2].received
 			// Now only conns[1] should be invoked
 			conns[0].ClientSend(`{"type":1,"invocationId": "123","target":"callgroup"}`)
-			callCount := make(chan int, 1)
-			callCount <- 0
 			done := make(chan bool)
 			go func(conns []*testingConnection) {
 				defer GinkgoRecover()
@@ -312,6 +310,8 @@ var _ = Describe("HubContext", func() {
 			go func(conns []*testingConnection) {
 				defer GinkgoRecover()
 				msg := <-conns[1].received
+				callCount := make(chan int, 1)
+				callCount <- 0
 				expectInvocation(msg, callCount, done, 1)
 			}(conns)
 			go func(conns []*testingConnection, done chan bool) {
@@ -322,12 +322,7 @@ var _ = Describe("HubContext", func() {
 				}
 			}(conns, done)
 			Expect(<-hubContextInvocationQueue).To(Equal("CallGroup()"))
-			select {
-			case <-done:
-				break
-			case <-time.After(3000 * time.Millisecond):
-				Fail("timed out")
-			}
+			<-done
 			close(ditIt)
 		}, 4.0)
 	})

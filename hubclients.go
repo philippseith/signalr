@@ -29,6 +29,12 @@ func (c *defaultHubClients) Group(groupName string) ClientProxy {
 	return &groupClientProxy{groupName: groupName, lifetimeManager: c.lifetimeManager}
 }
 
+// Caller is only implemented to fulfill the HubClients interface, so the servers defaultHubClients interface can be
+// used for implementing Server.HubClients.
+func (c *defaultHubClients) Caller() ClientProxy {
+	return nil
+}
+
 type callerHubClients struct {
 	defaultHubClients *defaultHubClients
 	connectionID      string
