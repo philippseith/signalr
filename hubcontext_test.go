@@ -64,36 +64,41 @@ func (c *contextHub) GetItem(key string) interface{} {
 	return nil
 }
 
+func (c *contextHub) TestConnectionID() {
+	hubContextInvocationQueue <- c.ConnectionID()
+}
+
 func (c *contextHub) Abort() {
 	hubContextInvocationQueue <- "Abort()"
-	c.context.Abort()
+	c.Hub.Abort()
 }
 
 var hubContextInvocationQueue = make(chan string, 10)
 
-func connectMany() (Server, []*testingConnection) {
+func connectMany() (Server, []*testingConnection, []string) {
 	server, err := NewServer(context.TODO(), SimpleHubFactory(&contextHub{}),
 		testLoggerOption())
 	if err != nil {
 		Fail(err.Error())
-		return nil, nil
+		return nil, nil, nil
 	}
 	conns := make([]*testingConnection, 3)
+	connIds := make([]string, 0)
 	for i := 0; i < 3; i++ {
 		conns[i] = newTestingConnectionForServer()
 		go server.Serve(conns[i])
 		// Ensure to return all connection with connected hubs
-		<-hubContextOnConnectMsg
+		connIds = append(connIds, <-hubContextOnConnectMsg)
 	}
 
-	return server, conns
+	return server, conns, connIds
 }
 
 var _ = Describe("HubContext", func() {
 	var server Server
 	var conns []*testingConnection
 	BeforeEach(func() {
-		server, conns = connectMany()
+		server, conns, _ = connectMany()
 	})
 	AfterEach(func() {
 		server.cancel()
@@ -150,7 +155,7 @@ var _ = Describe("HubContext", func() {
 	var server Server
 	var conns []*testingConnection
 	BeforeEach(func(done Done) {
-		server, conns = connectMany()
+		server, conns, _ = connectMany()
 		close(done)
 	})
 	AfterEach(func(done Done) {
@@ -349,6 +354,26 @@ var _ = Describe("HubContext", func() {
 			Expect(msg.(completionMessage).Result).To(BeNil())
 			close(done)
 		}, 2.0)
+	})
+})
+
+var _ = Describe("HubContext", func() {
+	var server Server
+	var conns []*testingConnection
+	var connIds []string
+	BeforeEach(func(done Done) {
+		server, conns, connIds = connectMany()
+		close(done)
+	})
+	AfterEach(func(done Done) {
+		server.cancel()
+		close(done)
+	})
+	Context("ConnectionID", func() {
+		It("should be the ID of the connection", func() {
+			conns[0].ClientSend(`{"type":1,"invocationId": "ABC","target":"testconnectionid"}`)
+			Expect(<-hubContextInvocationQueue).To(Equal(connIds[0]))
+		})
 	})
 })
 

@@ -37,6 +37,16 @@ func (h *Hub) Items() *sync.Map {
 	return h.context.Items()
 }
 
+// ConnectionID gets the ID of the current connection
+func (h *Hub) ConnectionID() string {
+	return h.context.ConnectionID()
+}
+
+// Abort aborts the current connection
+func (h *Hub) Abort() {
+	h.context.Abort()
+}
+
 // Logger returns the loggers used in this server. By this, derived hubs can use the same loggers as the server.
 func (h *Hub) Logger() (info StructuredLogger, dbg StructuredLogger) {
 	return h.context.Logger()
@@ -45,5 +55,5 @@ func (h *Hub) Logger() (info StructuredLogger, dbg StructuredLogger) {
 // OnConnected is called when the hub is connected
 func (h *Hub) OnConnected(string) {}
 
-//OnDisconnected is called when the hub is disconnected
+// OnDisconnected is called when the hub is disconnected
 func (h *Hub) OnDisconnected(string) {}
