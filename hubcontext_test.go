@@ -154,9 +154,8 @@ var _ = Describe("HubContext", func() {
 var _ = Describe("HubContext", func() {
 	var server Server
 	var conns []*testingConnection
-	var connIds []string
 	BeforeEach(func(done Done) {
-		server, conns, connIds = connectMany()
+		server, conns, _ = connectMany()
 		close(done)
 	})
 	AfterEach(func(done Done) {
@@ -355,6 +354,20 @@ var _ = Describe("HubContext", func() {
 			Expect(msg.(completionMessage).Result).To(BeNil())
 			close(done)
 		}, 2.0)
+	})
+})
+
+var _ = Describe("HubContext", func() {
+	var server Server
+	var conns []*testingConnection
+	var connIds []string
+	BeforeEach(func(done Done) {
+		server, conns, connIds = connectMany()
+		close(done)
+	})
+	AfterEach(func(done Done) {
+		server.cancel()
+		close(done)
 	})
 	Context("ConnectionID", func() {
 		It("should be the ID of the connection", func() {
