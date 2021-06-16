@@ -64,9 +64,13 @@ func (c *contextHub) GetItem(key string) interface{} {
 	return nil
 }
 
+func (c *contextHub) TestConnectionID() {
+	hubContextInvocationQueue <- c.ConnectionID()
+}
+
 func (c *contextHub) Abort() {
 	hubContextInvocationQueue <- "Abort()"
-	c.context.Abort()
+	c.Hub.Abort()
 }
 
 var hubContextInvocationQueue = make(chan string, 10)
@@ -349,6 +353,12 @@ var _ = Describe("HubContext", func() {
 			Expect(msg.(completionMessage).Result).To(BeNil())
 			close(done)
 		}, 2.0)
+	})
+	Context("ConnectionID", func() {
+		It("should be the ID of the connection", func() {
+			conns[0].ClientSend(`{"type":1,"invocationId": "ABC","target":"testconnectionid"}`)
+			Expect(<-hubContextInvocationQueue).To(Equal("test1"))
+		})
 	})
 })
 
