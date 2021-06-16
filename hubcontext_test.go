@@ -360,9 +360,8 @@ var _ = Describe("HubContext", func() {
 var _ = Describe("HubContext", func() {
 	var server Server
 	var conns []*testingConnection
-	var connIds []string
 	BeforeEach(func(done Done) {
-		server, conns, connIds = connectMany()
+		server, conns, _ = connectMany()
 		close(done)
 	})
 	AfterEach(func(done Done) {
@@ -372,7 +371,8 @@ var _ = Describe("HubContext", func() {
 	Context("ConnectionID", func() {
 		It("should be the ID of the connection", func() {
 			conns[0].ClientSend(`{"type":1,"invocationId": "ABC","target":"testconnectionid"}`)
-			Expect(<-hubContextInvocationQueue).To(Equal(connIds[0]))
+			id := <-hubContextInvocationQueue
+			Expect(strings.Index(id, "test")).To(Equal(0))
 		})
 	})
 })
