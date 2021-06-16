@@ -45,5 +45,5 @@ func (h *Hub) Logger() (info StructuredLogger, dbg StructuredLogger) {
 // OnConnected is called when the hub is connected
 func (h *Hub) OnConnected(string) {}
 
-//OnDisconnected is called when the hub is disconnected
+// OnDisconnected is called when the hub is disconnected
 func (h *Hub) OnDisconnected(string) {}
