@@ -116,7 +116,7 @@ func (h *httpMux) handleWebsocket(writer http.ResponseWriter, request *http.Requ
 	websocketConn, err := websocket.Accept(writer, request, nil)
 	if err != nil {
 		_, debug := h.server.loggers()
-		debug.Log(evt, "handleWebsocket", msg, "error accepting websockets", "error", err)
+		_ = debug.Log(evt, "handleWebsocket", msg, "error accepting websockets", "error", err)
 		// don't need to write an error header here as websocket.Accept has already used http.Error
 		return
 	}
