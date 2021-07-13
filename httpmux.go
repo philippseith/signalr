@@ -115,7 +115,9 @@ func (h *httpMux) handleServerSentEvent(writer http.ResponseWriter, request *htt
 func (h *httpMux) handleWebsocket(writer http.ResponseWriter, request *http.Request) {
 	websocketConn, err := websocket.Accept(writer, request, nil)
 	if err != nil {
-		writer.WriteHeader(400) // Bad request
+		_, debug := h.server.loggers()
+		_ = debug.Log(evt, "handleWebsocket", msg, "error accepting websockets", "error", err)
+		// don't need to write an error header here as websocket.Accept has already used http.Error
 		return
 	}
 	connectionMapKey := request.URL.Query().Get("id")
