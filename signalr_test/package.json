@@ -10,7 +10,6 @@
 		"test:jest": "npx jest -t 'e2e test with microsoft/signalr client should work'"
 	},
 	"dependencies": {
-		"@aspnet/signalr": "^1.1.4",
 		"@microsoft/signalr": "^5.0.3",
 		"@microsoft/signalr-protocol-msgpack": "^5.0.3",
 		"@types/jest": "^26.0.20",
