@@ -43,10 +43,13 @@ func (m *messagePackHubProtocol) parseMessage(buf *bytes.Buffer) (interface{}, e
 	if err != nil {
 		return nil, err
 	}
-	// Ignore Header
-	_, err = decoder.DecodeMap()
-	if err != nil {
-		return nil, err
+	// Ignore Header for all messages, except ping message that has no header
+	// see message spec at https://github.com/dotnet/aspnetcore/blob/main/src/SignalR/docs/specs/HubProtocol.md#message-headers
+	if msgType8 != 6 {
+		_, err = decoder.DecodeMap()
+		if err != nil {
+			return nil, err
+		}
 	}
 	msgType := int(msgType8)
 	switch msgType {
@@ -158,7 +161,7 @@ func (m *messagePackHubProtocol) parseMessage(buf *bytes.Buffer) (interface{}, e
 		return hubMessage{Type: 6}, nil
 	case 7:
 		if msgLen < 2 {
-			return nil, fmt.Errorf("invalid pingMessage length %v", msgLen)
+			return nil, fmt.Errorf("invalid closeMessage length %v", msgLen)
 		}
 		closeMessage := closeMessage{Type: 7}
 		closeMessage.Error, err = decoder.DecodeString()
