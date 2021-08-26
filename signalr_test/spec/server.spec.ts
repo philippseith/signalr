@@ -11,11 +11,14 @@ process.env.http_proxy = "";
 const builder: signalR.HubConnectionBuilder =
     new signalR.HubConnectionBuilder().configureLogging(signalR.LogLevel.Debug);
 
+const hubUrl = "http://127.0.0.1:5001/hub";
+
+
 describe("smoke test", () => {
     it("should connect on a clients request for connection and answer a simple request",
         async () => {
             const connection: signalR.HubConnection = builder
-                .withUrl("http://127.0.0.1:5001/hub")
+                .withUrl(hubUrl)
                 .build();
             await connection.start();
             const pong = await connection.invoke("ping");
@@ -28,7 +31,7 @@ describe("MessagePack smoke test", () => {
     it("should connect on a clients request for connection and answer a simple request",
         async () => {
             const connection: signalR.HubConnection = builder
-                .withUrl("http://127.0.0.1:5001/hub")
+                .withUrl(hubUrl)
                 .withHubProtocol(new MessagePackHubProtocol())
                 .build();
             await connection.start();
@@ -48,7 +51,7 @@ function runE2E(protocol: signalR.IHubProtocol) {
     let connection: signalR.HubConnection;
     beforeEach(async() => {
         connection = builder
-            .withUrl("http://127.0.0.1:5001/hub")
+            .withUrl(hubUrl)
             .withHubProtocol(protocol)
             .build();
         await connection.start();
@@ -75,7 +78,15 @@ function runE2E(protocol: signalR.IHubProtocol) {
         expect(contents["Beer"]).toEqual(4.9);
         expect(Math.abs(contents["Lagavulin Cask Strength"] - 56.2)).toBeLessThan(0.0001);
     })
+    it("should answer a request with a large amount of compressable data", async () => {
+        const data = await connection.invoke("largeCompressableContent");
+        expect(data.length).toEqual(50000);
+    })
 
+    it("should answer a request with a large amount of uncompressable data", async () => {
+        const data = await connection.invoke("largeUncompressableContent");
+        expect(data.length).toEqual(20000);
+    })
     it("should receive a stream", async () => {
         const fiveDates: Subject<string> = new Subject<string>();
         connection.stream<string>("FiveDates").subscribe(fiveDates);
