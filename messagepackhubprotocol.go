@@ -101,19 +101,18 @@ func (m *messagePackHubProtocol) parseMessage(buf *bytes.Buffer) (interface{}, e
 	if err != nil {
 		return nil, err
 	}
-	msgType8, err := decoder.DecodeInt8()
+	msgType, err := decoder.DecodeInt()
 	if err != nil {
 		return nil, err
 	}
 	// Ignore Header for all messages, except ping message that has no header
 	// see message spec at https://github.com/dotnet/aspnetcore/blob/main/src/SignalR/docs/specs/HubProtocol.md#message-headers
-	if msgType8 != 6 {
+	if msgType != 6 {
 		_, err = decoder.DecodeMap()
 		if err != nil {
 			return nil, err
 		}
 	}
-	msgType := int(msgType8)
 	switch msgType {
 	case 1, 4:
 		if msgLen < 5 {
@@ -348,7 +347,7 @@ func (m *messagePackHubProtocol) WriteMessage(message interface{}, writer io.Wri
 		if err := encoder.EncodeArrayLen(1); err != nil {
 			return err
 		}
-		if err := encoder.EncodeUint8(uint8(6)); err != nil {
+		if err := encoder.EncodeInt(6); err != nil {
 			return err
 		}
 	case closeMessage:
@@ -379,7 +378,7 @@ func encodeMsgHeader(e *msgpack.Encoder, msgLen int, msgType int) (err error) {
 	if err = e.EncodeArrayLen(msgLen); err != nil {
 		return err
 	}
-	if err = e.EncodeInt8(int8(msgType)); err != nil {
+	if err = e.EncodeInt(int64(msgType)); err != nil {
 		return err
 	}
 	headers := make(map[string]interface{})
