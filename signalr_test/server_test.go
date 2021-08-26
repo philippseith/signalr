@@ -190,7 +190,7 @@ func (h *hub) LargeCompressableContent() string {
 }
 
 func (h *hub) LargeUncompressableContent() string {
-	return randString(500)
+	return randString(20000)
 }
 
 var letters = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890")

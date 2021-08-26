@@ -80,12 +80,12 @@ function runE2E(protocol: signalR.IHubProtocol) {
     })
     it("should answer a request with a large amount of compressable data", async () => {
         const data = await connection.invoke("largeCompressableContent");
-        expect(data.length).toEqual(500);
+        expect(data.length).toEqual(50000);
     })
 
     it("should answer a request with a large amount of uncompressable data", async () => {
         const data = await connection.invoke("largeUncompressableContent");
-        expect(data.length).toEqual(500);
+        expect(data.length).toEqual(20000);
     })
     it("should receive a stream", async () => {
         const fiveDates: Subject<string> = new Subject<string>();
