@@ -63,6 +63,12 @@ function runE2E(protocol: signalR.IHubProtocol) {
         const pong = await connection.invoke("ping");
         expect(pong).toEqual("Pong!");
     })
+    it("should send correct ping messages", async () => {
+        const pong = await connection.invoke("ping");
+        expect(pong).toEqual("Pong!");
+        // Wait for a ping
+        await new Promise(r => setTimeout(r, 5000));
+    })
     it("should answer a simple request with multiple results", async () => {
         const triple = await connection.invoke("triumphantTriple", "1.FC Bayern München");
         expect(triple).toEqual(["German Championship", "DFB Cup", "Champions League"]);
