@@ -345,7 +345,10 @@ func (m *messagePackHubProtocol) WriteMessage(message interface{}, writer io.Wri
 			return err
 		}
 	case hubMessage:
-		if err := encoder.EncodeInt8(int8(6)); err != nil {
+		if err := encoder.EncodeArrayLen(1); err != nil {
+			return err
+		}
+		if err := encoder.EncodeUint8(uint8(6)); err != nil {
 			return err
 		}
 	case closeMessage:
