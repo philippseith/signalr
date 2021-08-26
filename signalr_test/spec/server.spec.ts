@@ -78,7 +78,15 @@ function runE2E(protocol: signalR.IHubProtocol) {
         expect(contents["Beer"]).toEqual(4.9);
         expect(Math.abs(contents["Lagavulin Cask Strength"] - 56.2)).toBeLessThan(0.0001);
     })
+    it("should answer a request with a large amount of compressable data", async () => {
+        const data = await connection.invoke("largeCompressableContent");
+        expect(data.length).toEqual(500);
+    })
 
+    it("should answer a request with a large amount of uncompressable data", async () => {
+        const data = await connection.invoke("largeUncompressableContent");
+        expect(data.length).toEqual(500);
+    })
     it("should receive a stream", async () => {
         const fiveDates: Subject<string> = new Subject<string>();
         connection.stream<string>("FiveDates").subscribe(fiveDates);

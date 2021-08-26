@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io/ioutil"
+	"math/rand"
 	"net/http"
 	"os"
 	"os/exec"
@@ -182,6 +183,24 @@ func (h *hub) AlcoholicContentMap() map[string]float64 {
 		"Beer":                    4.9,
 		"Lagavulin Cask Strength": 56.2,
 	}
+}
+
+func (h *hub) LargeCompressableContent() string {
+	return strings.Repeat("data_", 10000)
+}
+
+func (h *hub) LargeUncompressableContent() string {
+	return randString(500)
+}
+
+var letters = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890")
+
+func randString(n int) string {
+	b := make([]rune, n)
+	for i := range b {
+		b[i] = letters[rand.Intn(len(letters))]
+	}
+	return string(b)
 }
 
 func (h *hub) FiveDates() <-chan string {
