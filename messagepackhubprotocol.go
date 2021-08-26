@@ -45,7 +45,7 @@ func (m *messagePackHubProtocol) readFrames(reader io.Reader, remainBuf *bytes.B
 			// Some weird other error
 			return nil, err
 		}
-		frameLen, lenLen := binary.Varint(frameLenBuf[:n1+n2])
+		frameLen, lenLen := binary.Uvarint(frameLenBuf[:n1+n2])
 		if lenLen == 0 {
 			// reader could not supply enough bytes to decode the Uvarint
 			// Store the already read bytes in the remainBuf for next iteration
@@ -55,7 +55,7 @@ func (m *messagePackHubProtocol) readFrames(reader io.Reader, remainBuf *bytes.B
 		if lenLen < 0 {
 			return nil, fmt.Errorf("messagepack frame length to large")
 		}
-		if frameLen <= 0 {
+		if frameLen == 0 {
 			return nil, fmt.Errorf("messagepack invalid frame length %v", frameLen)
 		}
 		// Try getting data until at least one frame is available
@@ -362,7 +362,7 @@ func (m *messagePackHubProtocol) WriteMessage(message interface{}, writer io.Wri
 	// Build frame with length information
 	frameBuf := &bytes.Buffer{}
 	lenBuf := make([]byte, binary.MaxVarintLen32)
-	lenLen := binary.PutVarint(lenBuf, int64(buf.Len()))
+	lenLen := binary.PutUvarint(lenBuf, uint64(buf.Len()))
 	if _, err := frameBuf.Write(lenBuf[:lenLen]); err != nil {
 		return err
 	}
