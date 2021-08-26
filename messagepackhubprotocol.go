@@ -2,6 +2,7 @@ package signalr
 
 import (
 	"bytes"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"github.com/go-kit/kit/log"
@@ -27,6 +28,64 @@ func (m *messagePackHubProtocol) ParseMessages(reader io.Reader, remainBuf *byte
 		messages = append(messages, message)
 	}
 	return messages, nil
+}
+
+func (m *messagePackHubProtocol) readFrames(reader io.Reader, remainBuf *bytes.Buffer) ([][]byte, error) {
+	frames := make([][]byte, 0)
+	for {
+		// Try to get the frame length
+		frameLenBuf := make([]byte, binary.MaxVarintLen32)
+		n1, err := remainBuf.Read(frameLenBuf)
+		if err != nil && !errors.Is(err, io.EOF) {
+			// Some weird other error
+			return nil, err
+		}
+		n2, err := reader.Read(frameLenBuf[n1:])
+		if err != nil && !errors.Is(err, io.EOF) {
+			// Some weird other error
+			return nil, err
+		}
+		frameLen, lenLen := binary.Varint(frameLenBuf[:n1+n2])
+		if lenLen == 0 {
+			// reader could not supply enough bytes to decode the Uvarint
+			// Store the already read bytes in the remainBuf for next iteration
+			_, _ = remainBuf.Write(frameLenBuf[:n1+n2])
+			return frames, nil
+		}
+		if lenLen < 0 {
+			return nil, fmt.Errorf("messagepack frame length to large")
+		}
+		// Try getting data until at least one frame is available
+		readBuf := make([]byte, frameLen)
+		frameBuf := &bytes.Buffer{}
+		// Did we read too many bytes when detecting the frameLen?
+		_, _ = frameBuf.Write(frameLenBuf[lenLen:])
+		// Read the rest of the bytes from the last iteration
+		_, _ = frameBuf.ReadFrom(remainBuf)
+		for {
+			n, err := reader.Read(readBuf)
+			if errors.Is(err, io.EOF) {
+				// Less than frameLen. Let the caller parse the already read frames and come here again later
+				_, _ = remainBuf.ReadFrom(frameBuf)
+				return frames, nil
+			}
+			if err != nil {
+				return nil, err
+			}
+			_, _ = frameBuf.Write(readBuf[:n])
+			if frameBuf.Len() == int(frameLen) {
+				// Frame completely read. Return it to the caller
+				frames = append(frames, frameBuf.Next(int(frameLen)))
+				return frames, nil
+			}
+			if frameBuf.Len() > int(frameLen) {
+				// More than frameLen. Append the current frame to the result and start reading the next frame
+				frames = append(frames, frameBuf.Next(int(frameLen)))
+				_, _ = remainBuf.ReadFrom(frameBuf)
+				break
+			}
+		}
+	}
 }
 
 func (m *messagePackHubProtocol) parseMessage(buf *bytes.Buffer) (interface{}, error) {
@@ -188,66 +247,12 @@ func (m *messagePackHubProtocol) decodeInvocationID(decoder *msgpack.Decoder) (s
 	if rawID == nil {
 		return "", nil
 	}
-	// Otherwise it must be string
+	// Otherwise, it must be string
 	invocationID, ok := rawID.(string)
 	if !ok {
 		return "", fmt.Errorf("invalid InvocationID %#v", rawID)
 	}
 	return invocationID, nil
-}
-
-func (m *messagePackHubProtocol) readFrames(reader io.Reader, remainBuf *bytes.Buffer) ([][]byte, error) {
-	p := make([]byte, 1<<15)
-	buf := &bytes.Buffer{}
-	_, _ = buf.ReadFrom(remainBuf)
-	// Try getting data until at least one frame is available
-	for {
-		n, err := reader.Read(p)
-		// Some reader implementations return io.EOF additionally to n=0 if no data could be read
-		if err != nil && !errors.Is(err, io.EOF) {
-			return nil, err
-		}
-		if n > 0 {
-			_, _ = buf.Write(p[:n])
-			frames, err := m.parseFrames(buf)
-			if err != nil {
-				return nil, err
-			}
-			if len(frames) > 0 {
-				_, _ = remainBuf.ReadFrom(buf)
-				return frames, nil
-			}
-		}
-	}
-}
-
-func (m *messagePackHubProtocol) parseFrames(buf *bytes.Buffer) ([][]byte, error) {
-	frames := make([][]byte, 0)
-	for {
-		bufLenWithFrameLen := buf.Len()
-		decoder := msgpack.NewDecoder(buf)
-		frameLen, err := decoder.DecodeInt()
-		// Not enough data to read length info or not enough data to read body?
-		if errors.Is(err, io.EOF) || buf.Len() < frameLen {
-			// Restore bytes read while decoding in buffer
-			for buf.Len() < bufLenWithFrameLen {
-				_ = buf.UnreadByte()
-			}
-			break
-		}
-		if err != nil {
-			return nil, err
-		}
-		// Read complete frame
-		frame := make([]byte, frameLen)
-		_, err = buf.Read(frame)
-		if err != nil {
-			return nil, err
-		}
-		// Add frame to result
-		frames = append(frames, frame)
-	}
-	return frames, nil
 }
 
 func (m *messagePackHubProtocol) WriteMessage(message interface{}, writer io.Writer) error {
@@ -353,8 +358,9 @@ func (m *messagePackHubProtocol) WriteMessage(message interface{}, writer io.Wri
 	}
 	// Build frame with length information
 	frameBuf := &bytes.Buffer{}
-	frameEncoder := msgpack.NewEncoder(frameBuf)
-	if err := frameEncoder.EncodeInt(int64(buf.Len())); err != nil {
+	lenBuf := make([]byte, binary.MaxVarintLen32)
+	lenLen := binary.PutVarint(lenBuf, int64(buf.Len()))
+	if _, err := frameBuf.Write(lenBuf[:lenLen]); err != nil {
 		return err
 	}
 	_ = m.dbg.Log(evt, "Write", msg, fmt.Sprintf("%#v", message))
