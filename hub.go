@@ -1,6 +1,9 @@
 package signalr
 
-import "sync"
+import (
+	"context"
+	"sync"
+)
 
 // HubInterface is a hubs interface
 type HubInterface interface {
@@ -40,6 +43,11 @@ func (h *Hub) Items() *sync.Map {
 // ConnectionID gets the ID of the current connection
 func (h *Hub) ConnectionID() string {
 	return h.context.ConnectionID()
+}
+
+// Context is the context.Context of the current connection
+func (h *Hub) Context() context.Context {
+	return h.context.Context()
 }
 
 // Abort aborts the current connection
