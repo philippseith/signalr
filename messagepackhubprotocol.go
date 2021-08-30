@@ -55,8 +55,11 @@ func (m *messagePackHubProtocol) readFrames(reader io.Reader, remainBuf *bytes.B
 		if lenLen < 0 {
 			return nil, fmt.Errorf("messagepack frame length to large")
 		}
+		// Still wondering why this happens, but it happens!
 		if frameLen == 0 {
-			return nil, fmt.Errorf("messagepack invalid frame length %v", frameLen)
+			// Store the overread bytes for the next iteration
+			_, _ = remainBuf.Write(frameLenBuf[lenLen:])
+			continue
 		}
 		// Try getting data until at least one frame is available
 		readBuf := make([]byte, frameLen)
