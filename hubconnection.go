@@ -100,21 +100,30 @@ func (c *defaultHubConnection) Receive() <-chan receiveResult {
 	reader, writer := io.Pipe()
 	p := make([]byte, c.maximumReceiveMessageSize)
 	go func(ctx context.Context, connection io.Reader, writer io.Writer, recvChan chan<- receiveResult, done chan<- struct{}) {
+	loop:
 		for {
 			if ctx.Err() != nil {
-				break
+				break loop
 			}
 			n, err := connection.Read(p)
 			if err != nil {
-				recvChan <- receiveResult{err: err}
+				select {
+				case recvChan <- receiveResult{err: err}:
+				case <-ctx.Done():
+					break loop
+				}
 			}
 			if ctx.Err() != nil {
-				break
+				break loop
 			}
 			if n > 0 {
 				_, err = writer.Write(p[:n])
 				if err != nil {
-					recvChan <- receiveResult{err: err}
+					select {
+					case recvChan <- receiveResult{err: err}:
+					case <-ctx.Done():
+						break loop
+					}
 				}
 			}
 		}
@@ -124,17 +133,24 @@ func (c *defaultHubConnection) Receive() <-chan receiveResult {
 	// parse
 	go func(ctx context.Context, reader io.Reader, recvChan chan<- receiveResult, done chan<- struct{}) {
 		remainBuf := bytes.Buffer{}
+	loop:
 		for {
 			if ctx.Err() != nil {
-				break
+				break loop
 			}
 			messages, err := c.protocol.ParseMessages(reader, &remainBuf)
 			if err != nil {
-				recvChan <- receiveResult{err: err}
+				select {
+				case recvChan <- receiveResult{err: err}:
+				case <-ctx.Done():
+					break loop
+				}
 			} else {
 				for _, message := range messages {
-					if ctx.Err() == nil {
-						recvChan <- receiveResult{message: message}
+					select {
+					case recvChan <- receiveResult{message: message}:
+					case <-ctx.Done():
+						break loop
 					}
 				}
 			}
