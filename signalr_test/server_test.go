@@ -33,8 +33,8 @@ func TestMain(m *testing.M) {
 	errSlurp, _ := ioutil.ReadAll(stderr)
 	err = npmInstall.Wait()
 	if err != nil {
-		fmt.Println(outSlurp)
-		fmt.Println(errSlurp)
+		fmt.Println(string(outSlurp))
+		fmt.Println(string(errSlurp))
 		os.Exit(123)
 	}
 	os.Exit(m.Run())
