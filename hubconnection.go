@@ -91,7 +91,7 @@ func (c *defaultHubConnection) Receive() <-chan receiveResult {
 	// Prepare cleanup
 	writerDone := make(chan struct{}, 1)
 	// the pipe connects the goroutine which reads from the connection and the goroutine which parses the read data
-	reader, writer := io.Pipe()
+	reader, writer := CtxPipe(c.ctx)
 	p := make([]byte, c.maximumReceiveMessageSize)
 	go func(ctx context.Context, connection io.Reader, writer io.Writer, recvChan chan<- receiveResult, writerDone chan<- struct{}) {
 	loop:
