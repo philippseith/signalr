@@ -5,6 +5,11 @@ import (
 	"time"
 )
 
+// NewConnectionBase initializes a ConnectionBase with a context.Context
+func NewConnectionBase(ctx context.Context) ConnectionBase {
+	return ConnectionBase{ctx: ctx}
+}
+
 // ConnectionBase is a baseclass for implementers of the Connection interface.
 type ConnectionBase struct {
 	ctx          context.Context
