@@ -3,11 +3,9 @@ package signalr
 import (
 	"context"
 	"fmt"
-	"os"
 	"strings"
 	"time"
 
-	"github.com/go-kit/kit/log"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
@@ -66,36 +64,41 @@ func (c *contextHub) GetItem(key string) interface{} {
 	return nil
 }
 
+func (c *contextHub) TestConnectionID() {
+	hubContextInvocationQueue <- c.ConnectionID()
+}
+
 func (c *contextHub) Abort() {
 	hubContextInvocationQueue <- "Abort()"
-	c.context.Abort()
+	c.Hub.Abort()
 }
 
 var hubContextInvocationQueue = make(chan string, 10)
 
-func connectMany() (Server, []*testingConnection) {
+func connectMany() (Server, []*testingConnection, []string) {
 	server, err := NewServer(context.TODO(), SimpleHubFactory(&contextHub{}),
-		Logger(log.NewLogfmtLogger(os.Stderr), false))
+		testLoggerOption())
 	if err != nil {
 		Fail(err.Error())
-		return nil, nil
+		return nil, nil, nil
 	}
 	conns := make([]*testingConnection, 3)
+	connIds := make([]string, 0)
 	for i := 0; i < 3; i++ {
 		conns[i] = newTestingConnectionForServer()
 		go server.Serve(conns[i])
 		// Ensure to return all connection with connected hubs
-		<-hubContextOnConnectMsg
+		connIds = append(connIds, <-hubContextOnConnectMsg)
 	}
 
-	return server, conns
+	return server, conns, connIds
 }
 
 var _ = Describe("HubContext", func() {
 	var server Server
 	var conns []*testingConnection
 	BeforeEach(func() {
-		server, conns = connectMany()
+		server, conns, _ = connectMany()
 	})
 	AfterEach(func() {
 		server.cancel()
@@ -152,7 +155,7 @@ var _ = Describe("HubContext", func() {
 	var server Server
 	var conns []*testingConnection
 	BeforeEach(func(done Done) {
-		server, conns = connectMany()
+		server, conns, _ = connectMany()
 		close(done)
 	})
 	AfterEach(func(done Done) {
@@ -294,8 +297,6 @@ var _ = Describe("HubContext", func() {
 			<-conns[2].received
 			// Now only conns[1] should be invoked
 			conns[0].ClientSend(`{"type":1,"invocationId": "123","target":"callgroup"}`)
-			callCount := make(chan int, 1)
-			callCount <- 0
 			done := make(chan bool)
 			go func(conns []*testingConnection) {
 				defer GinkgoRecover()
@@ -314,6 +315,8 @@ var _ = Describe("HubContext", func() {
 			go func(conns []*testingConnection) {
 				defer GinkgoRecover()
 				msg := <-conns[1].received
+				callCount := make(chan int, 1)
+				callCount <- 0
 				expectInvocation(msg, callCount, done, 1)
 			}(conns)
 			go func(conns []*testingConnection, done chan bool) {
@@ -324,12 +327,7 @@ var _ = Describe("HubContext", func() {
 				}
 			}(conns, done)
 			Expect(<-hubContextInvocationQueue).To(Equal("CallGroup()"))
-			select {
-			case <-done:
-				break
-			case <-time.After(3000 * time.Millisecond):
-				Fail("timed out")
-			}
+			<-done
 			close(ditIt)
 		}, 4.0)
 	})
@@ -359,10 +357,30 @@ var _ = Describe("HubContext", func() {
 	})
 })
 
+var _ = Describe("HubContext", func() {
+	var server Server
+	var conns []*testingConnection
+	BeforeEach(func(done Done) {
+		server, conns, _ = connectMany()
+		close(done)
+	})
+	AfterEach(func(done Done) {
+		server.cancel()
+		close(done)
+	})
+	Context("ConnectionID", func() {
+		It("should be the ID of the connection", func() {
+			conns[0].ClientSend(`{"type":1,"invocationId": "ABC","target":"testconnectionid"}`)
+			id := <-hubContextInvocationQueue
+			Expect(strings.Index(id, "test")).To(Equal(0))
+		})
+	})
+})
+
 var _ = Describe("Abort()", func() {
 	It("should abort the connection of the current caller", func(done Done) {
 		server, err := NewServer(context.TODO(), SimpleHubFactory(&contextHub{}),
-			Logger(log.NewLogfmtLogger(os.Stderr), false),
+			testLoggerOption(),
 			ChanReceiveTimeout(200*time.Millisecond),
 			StreamBufferCapacity(5))
 		Expect(err).NotTo(HaveOccurred())

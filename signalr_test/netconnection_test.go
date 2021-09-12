@@ -29,7 +29,7 @@ var _ = Describe("NetConnection", func() {
 		It("should transport a simple invocation over raw rcp", func(done Done) {
 			var ctx context.Context
 			ctx, cancel := context.WithCancel(context.Background())
-			server, err := signalr.NewServer(ctx, signalr.SimpleHubFactory(&NetHub{}))
+			server, err := signalr.NewServer(ctx, signalr.SimpleHubFactory(&NetHub{}), testLoggerOption())
 			Expect(err).NotTo(HaveOccurred())
 			addr, err := net.ResolveTCPAddr("tcp", "localhost:0")
 			Expect(err).NotTo(HaveOccurred())
@@ -47,7 +47,7 @@ var _ = Describe("NetConnection", func() {
 			for {
 				if clientConn, err := net.Dial("tcp",
 					fmt.Sprintf("localhost:%v", listener.Addr().(*net.TCPAddr).Port)); err == nil {
-					client, err = signalr.NewClient(ctx, signalr.NewNetConnection(ctx, clientConn))
+					client, err = signalr.NewClient(ctx, signalr.NewNetConnection(ctx, clientConn), testLoggerOption())
 					Expect(err).NotTo(HaveOccurred())
 
 					break

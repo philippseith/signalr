@@ -8,11 +8,9 @@ import (
 	"io/ioutil"
 	"net"
 	"net/http"
-	"os"
 	"strings"
 	"time"
 
-	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -42,7 +40,7 @@ var _ = Describe("HTTP server", func() {
 			Context("A correct negotiation request is sent", func() {
 				It(fmt.Sprintf("should send a correct negotiation response with support for %v with text protocol", transport), func(done Done) {
 					// Start server
-					server, err := NewServer(context.TODO(), SimpleHubFactory(&addHub{}), HTTPTransports(transport[0]))
+					server, err := NewServer(context.TODO(), SimpleHubFactory(&addHub{}), HTTPTransports(transport[0]), testLoggerOption())
 					Expect(err).NotTo(HaveOccurred())
 					router := http.NewServeMux()
 					server.MapHTTP(router, "/hub")
@@ -72,7 +70,7 @@ var _ = Describe("HTTP server", func() {
 			Context("A invalid negotiation request is sent", func() {
 				It(fmt.Sprintf("should send a correct negotiation response with support for %v with text protocol", transport), func(done Done) {
 					// Start server
-					server, err := NewServer(context.TODO(), SimpleHubFactory(&addHub{}), HTTPTransports(transport[0]))
+					server, err := NewServer(context.TODO(), SimpleHubFactory(&addHub{}), HTTPTransports(transport[0]), testLoggerOption())
 					Expect(err).NotTo(HaveOccurred())
 					router := http.NewServeMux()
 					server.MapHTTP(router, "/hub")
@@ -92,7 +90,7 @@ var _ = Describe("HTTP server", func() {
 
 			Context("Connection with client", func() {
 				It("should successfully handle an Invoke call", func(done Done) {
-					logger := &nonProtocolLogger{log.NewLogfmtLogger(os.Stderr)}
+					logger := &nonProtocolLogger{testLogger()}
 					// Start server
 					server, err := NewServer(context.TODO(),
 						SimpleHubFactory(&addHub{}), HTTPTransports(transport[0]),
@@ -141,7 +139,7 @@ var _ = Describe("HTTP server", func() {
 	Context("When no negotiation is send", func() {
 		It("should serve websocket requests", func(done Done) {
 			// Start server
-			server, err := NewServer(context.TODO(), SimpleHubFactory(&addHub{}), HTTPTransports("WebSockets"))
+			server, err := NewServer(context.TODO(), SimpleHubFactory(&addHub{}), HTTPTransports("WebSockets"), testLoggerOption())
 			Expect(err).NotTo(HaveOccurred())
 			router := http.NewServeMux()
 			server.MapHTTP(router, "/hub")
@@ -203,7 +201,7 @@ func negotiateWebSocketTestServer(port int) map[string]interface{} {
 
 func handShakeAndCallWebSocketTestServer(port int, connectionID string) {
 	waitForPort(port)
-	logger := log.NewLogfmtLogger(os.Stderr)
+	logger := testLogger()
 	protocol := jsonHubProtocol{}
 	protocol.setDebugLogger(level.Debug(logger))
 	var urlParam string
@@ -216,7 +214,7 @@ func handShakeAndCallWebSocketTestServer(port int, connectionID string) {
 		_ = ws.Close(websocket.StatusNormalClosure, "")
 	}()
 	wsConn := newWebSocketConnection(context.TODO(), context.TODO(), connectionID, ws)
-	cliConn := newHubConnection(wsConn, &protocol, 1<<15, log.NewLogfmtLogger(os.Stderr))
+	cliConn := newHubConnection(wsConn, &protocol, 1<<15, testLogger())
 	_, _ = wsConn.Write(append([]byte(`{"protocol": "json","version": 1}`), 30))
 	_, _ = wsConn.Write(append([]byte(`{"type":1,"invocationId":"666","target":"add2","arguments":[1]}`), 30))
 	result := make(chan interface{})

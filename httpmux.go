@@ -113,9 +113,14 @@ func (h *httpMux) handleServerSentEvent(writer http.ResponseWriter, request *htt
 }
 
 func (h *httpMux) handleWebsocket(writer http.ResponseWriter, request *http.Request) {
-	websocketConn, err := websocket.Accept(writer, request, nil)
+	websocketConn, err := websocket.Accept(writer, request,
+		// Reuse compression sliding window. Should cause better compression with repetitive signalr messages
+		&websocket.AcceptOptions{CompressionMode: websocket.CompressionContextTakeover},
+	)
 	if err != nil {
-		writer.WriteHeader(400) // Bad request
+		_, debug := h.server.loggers()
+		_ = debug.Log(evt, "handleWebsocket", msg, "error accepting websockets", "error", err)
+		// don't need to write an error header here as websocket.Accept has already used http.Error
 		return
 	}
 	connectionMapKey := request.URL.Query().Get("id")
@@ -188,6 +193,8 @@ func (h *httpMux) negotiate(w http.ResponseWriter, req *http.Request) {
 			NegotiateVersion:    negotiateVersion,
 			AvailableTransports: availableTransports,
 		}
+
+		w.WriteHeader(200)
 		_ = json.NewEncoder(w).Encode(response) // Can't imagine an error when encoding
 	}
 }

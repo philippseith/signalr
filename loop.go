@@ -53,10 +53,22 @@ func (l *loop) Run(started chan struct{}) {
 	var err error
 	ch := make(chan receiveResult, 1)
 	go func() {
-		for result := range l.hubConn.Receive() {
-			ch <- result
-			// The loop ends when the chan returned by hubConn.Receive() is closed.
-			// This happens when hubConn.Abort is called at the end to Run()
+		recv := l.hubConn.Receive()
+	loop:
+		for {
+			select {
+			case result, ok := <-recv:
+				if !ok {
+					break loop
+				}
+				select {
+				case ch <- result:
+				case <-l.hubConn.Context().Done():
+					break loop
+				}
+			case <-l.hubConn.Context().Done():
+				break loop
+			}
 		}
 	}()
 msgLoop:

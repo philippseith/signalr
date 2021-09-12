@@ -87,7 +87,7 @@ var _ = Describe("Server options", func() {
 		})
 		Context("When UseHub is used on a client", func() {
 			It("should return an error", func(done Done) {
-				_, err := NewClient(context.TODO(), newTestingConnection(), UseHub(&singleHub{}))
+				_, err := NewClient(context.TODO(), newTestingConnection(), testLoggerOption(), UseHub(&singleHub{}))
 				Expect(err).To(HaveOccurred())
 				close(done)
 			})
@@ -97,7 +97,7 @@ var _ = Describe("Server options", func() {
 	Describe("SimpleHubFactory option", func() {
 		Context("When the SimpleHubFactory option is used", func() {
 			It("should call the hub factory on each hub method invocation", func(done Done) {
-				server, err := NewServer(context.TODO(), SimpleHubFactory(&singleHub{}))
+				server, err := NewServer(context.TODO(), SimpleHubFactory(&singleHub{}), testLoggerOption())
 				Expect(server).NotTo(BeNil())
 				Expect(err).To(BeNil())
 				conn := newTestingConnectionForServer()
@@ -137,7 +137,7 @@ var _ = Describe("Server options", func() {
 		})
 		Context("When SimpleHubFactory is used on a client", func() {
 			It("should return an error", func(done Done) {
-				_, err := NewClient(context.TODO(), newTestingConnection(), SimpleHubFactory(&singleHub{}))
+				_, err := NewClient(context.TODO(), newTestingConnection(), testLoggerOption(), SimpleHubFactory(&singleHub{}))
 				Expect(err).To(HaveOccurred())
 				close(done)
 			})
@@ -206,7 +206,7 @@ var _ = Describe("Server options", func() {
 		})
 		Context("When no option which sets the hub type is used, NewServer", func() {
 			It("should return an error", func(done Done) {
-				_, err := NewServer(context.TODO())
+				_, err := NewServer(context.TODO(), testLoggerOption())
 				Expect(err).NotTo(BeNil())
 				close(done)
 			})
@@ -223,7 +223,7 @@ var _ = Describe("Server options", func() {
 	Describe("EnableDetailedErrors option", func() {
 		Context("When the EnableDetailedErrors option false is used, calling a method which panics", func() {
 			It("should return a completion, which contains only the panic", func(done Done) {
-				server, err := NewServer(context.TODO(), UseHub(&invocationHub{}))
+				server, err := NewServer(context.TODO(), UseHub(&invocationHub{}), testLoggerOption())
 				Expect(server).NotTo(BeNil())
 				Expect(err).To(BeNil())
 				conn := newTestingConnectionForServer()
@@ -244,7 +244,7 @@ var _ = Describe("Server options", func() {
 		})
 		Context("When the EnableDetailedErrors option true is used, calling a method which panics", func() {
 			It("should return a completion, which contains only the panic", func(done Done) {
-				server, err := NewServer(context.TODO(), UseHub(&invocationHub{}), EnableDetailedErrors(true))
+				server, err := NewServer(context.TODO(), UseHub(&invocationHub{}), EnableDetailedErrors(true), testLoggerOption())
 				Expect(server).NotTo(BeNil())
 				Expect(err).To(BeNil())
 				conn := newTestingConnectionForServer()
@@ -268,7 +268,7 @@ var _ = Describe("Server options", func() {
 	Describe("TimeoutInterval option", func() {
 		Context("When the TimeoutInterval has expired without any client message", func() {
 			It("the connection should be closed", func(done Done) {
-				server, err := NewServer(context.TODO(), UseHub(&invocationHub{}), TimeoutInterval(100*time.Millisecond))
+				server, err := NewServer(context.TODO(), UseHub(&invocationHub{}), TimeoutInterval(100*time.Millisecond), testLoggerOption())
 				Expect(server).NotTo(BeNil())
 				Expect(err).To(BeNil())
 				conn := newTestingConnectionForServer()
@@ -294,7 +294,7 @@ var _ = Describe("Server options", func() {
 	Describe("KeepAliveInterval option", func() {
 		Context("When the KeepAliveInterval has expired without any server message", func() {
 			It("a ping should have been sent", func(done Done) {
-				server, err := NewServer(context.TODO(), UseHub(&invocationHub{}), KeepAliveInterval(200*time.Millisecond))
+				server, err := NewServer(context.TODO(), UseHub(&invocationHub{}), KeepAliveInterval(200*time.Millisecond), testLoggerOption())
 				Expect(server).NotTo(BeNil())
 				Expect(err).To(BeNil())
 				conn := newTestingConnection()
@@ -327,7 +327,7 @@ var _ = Describe("Server options", func() {
 	Describe("StreamBufferCapacity option", func() {
 		Context("When the StreamBufferCapacity is 0", func() {
 			It("should return an error", func(done Done) {
-				_, err := NewServer(context.TODO(), UseHub(&singleHub{}), StreamBufferCapacity(0))
+				_, err := NewServer(context.TODO(), UseHub(&singleHub{}), StreamBufferCapacity(0), testLoggerOption())
 				Expect(err).NotTo(BeNil())
 				close(done)
 			})
@@ -337,7 +337,7 @@ var _ = Describe("Server options", func() {
 	Describe("MaximumReceiveMessageSize option", func() {
 		Context("When the MaximumReceiveMessageSize is 0", func() {
 			It("should return an error", func(done Done) {
-				_, err := NewServer(context.TODO(), UseHub(&singleHub{}), MaximumReceiveMessageSize(0))
+				_, err := NewServer(context.TODO(), UseHub(&singleHub{}), MaximumReceiveMessageSize(0), testLoggerOption())
 				Expect(err).NotTo(BeNil())
 				close(done)
 			})
@@ -346,19 +346,19 @@ var _ = Describe("Server options", func() {
 	Describe("HTTPTransports option", func() {
 		Context("When HTTPTransports is one of WebSockets, ServerSentEvents or both", func() {
 			It("should set these transports", func(done Done) {
-				s, err := NewServer(context.TODO(), UseHub(&singleHub{}), HTTPTransports("WebSockets"))
+				s, err := NewServer(context.TODO(), UseHub(&singleHub{}), HTTPTransports("WebSockets"), testLoggerOption())
 				Expect(err).NotTo(HaveOccurred())
 				Expect(s.availableTransports()).To(ContainElement("WebSockets"))
 				close(done)
 			})
 			It("should set these transports", func(done Done) {
-				s, err := NewServer(context.TODO(), UseHub(&singleHub{}), HTTPTransports("ServerSentEvents"))
+				s, err := NewServer(context.TODO(), UseHub(&singleHub{}), HTTPTransports("ServerSentEvents"), testLoggerOption())
 				Expect(err).NotTo(HaveOccurred())
 				Expect(s.availableTransports()).To(ContainElement("ServerSentEvents"))
 				close(done)
 			})
 			It("should set these transports", func(done Done) {
-				s, err := NewServer(context.TODO(), UseHub(&singleHub{}), HTTPTransports("ServerSentEvents", "WebSockets"))
+				s, err := NewServer(context.TODO(), UseHub(&singleHub{}), HTTPTransports("ServerSentEvents", "WebSockets"), testLoggerOption())
 				Expect(err).NotTo(HaveOccurred())
 				Expect(s.availableTransports()).To(ContainElement("WebSockets"))
 				Expect(s.availableTransports()).To(ContainElement("ServerSentEvents"))
@@ -367,14 +367,14 @@ var _ = Describe("Server options", func() {
 		})
 		Context("When HTTPTransports is none of WebSockets, ServerSentEvents", func() {
 			It("should return an error", func(done Done) {
-				_, err := NewServer(context.TODO(), UseHub(&singleHub{}), HTTPTransports("WebTransport"))
+				_, err := NewServer(context.TODO(), UseHub(&singleHub{}), HTTPTransports("WebTransport"), testLoggerOption())
 				Expect(err).To(HaveOccurred())
 				close(done)
 			})
 		})
 		Context("When HTTPTransports is used on a client", func() {
 			It("should return an error", func(done Done) {
-				_, err := NewClient(context.TODO(), newTestingConnection(), HTTPTransports("ServerSentEvents"))
+				_, err := NewClient(context.TODO(), newTestingConnection(), HTTPTransports("ServerSentEvents"), testLoggerOption())
 				Expect(err).To(HaveOccurred())
 				close(done)
 			})

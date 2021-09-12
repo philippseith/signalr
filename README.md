@@ -3,8 +3,6 @@
 [![Actions Status](https://github.com/philippseith/signalr/workflows/Build%20and%20Test/badge.svg)](https://github.com/philippseith/signalr/actions)
 [![codecov](https://codecov.io/gh/philippseith/signalr/branch/master/graph/badge.svg)](https://codecov.io/gh/philippseith/signalr)
 [![PkgGoDev](https://pkg.go.dev/badge/github.com/philippseith/signalr)](https://pkg.go.dev/github.com/philippseith/signalr)
-[![Go Report Card](https://goreportcard.com/badge/github.com/philippseith/signalr)](https://goreportcard.com/report/github.com/philippseith/signalr)
-[![HitCount](http://hits.dwyl.com/philippseith/https://githubcom/philippseith/signalr.svg)](http://hits.dwyl.com/philippseith/https://githubcom/philippseith/signalr)
 
 SignalR is an open-source library that simplifies adding real-time web functionality to apps. 
 Real-time web functionality enables server-side code to push content to clients instantly.
@@ -25,13 +23,14 @@ Protocol encoding in JSON is fully supported, and there is MessagePack support f
     - [Client side](#client-side)
         - [Grab copies of the signalr scripts](#grab-copies-of-the-signalr-scripts)
         - [Use a HubConnection to connect to your server Hub](#use-a-hubconnection-to-connect-to-your-server-hub)
+- [Debugging](#debugging)
 
 ## Install
 
 With a [correctly configured](https://golang.org/doc/install#testing) Go toolchain:
 
 ```sh
-go get -u github.com/philippeseith/signalr
+go get -u github.com/philippseith/signalr
 ```
 
 ## Getting Started
@@ -129,9 +128,9 @@ func runHTTPServer() {
 
 #### Grab copies of the signalr scripts
 
-Microsft has published the client-side libraries as a node package with embedded typescript annotations: `@microsoft/signalr`.
+Microsoft has published the client-side libraries as a node package with embedded typescript annotations: `@microsoft/signalr`.
 
-You can install `@microsft/signalr` through any node package manager:
+You can install `@microsoft/signalr` through any node package manager:
 
 | package manager | command |
 | --------------- | ------- |
@@ -224,3 +223,16 @@ How you format your client UI is going to depend on your application use case bu
 </body>
 </html>
 ```
+
+### Debugging
+
+Server, Client and the protocol implementations are able to log most of their operations. The logging option is disabled
+by default in all tests. To configure logging, edit the `testLogConf.json` file:
+```json
+{
+  "Enabled": false,
+  "Debug": false
+}
+```
+- If `Enabled` is set to `true`, the logging will be enabled. The tests will log to `os.Stderr`.
+- If `Debug` ist set to `true`, the logging will be more detailed.

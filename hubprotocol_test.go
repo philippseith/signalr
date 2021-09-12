@@ -4,14 +4,12 @@ import (
 	"bytes"
 	"fmt"
 	"github.com/dave/jennifer/jen"
-	"github.com/go-kit/kit/log"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"go/ast"
 	"go/parser"
 	"go/token"
 	"io"
-	"os"
 	"reflect"
 	"testing"
 	"time"
@@ -23,7 +21,7 @@ var _ = Describe("Protocol", func() {
 		&messagePackHubProtocol{},
 	} {
 		protocol := p
-		protocol.setDebugLogger(log.NewLogfmtLogger(os.Stderr))
+		protocol.setDebugLogger(testLogger())
 		Describe(fmt.Sprintf("%T: WriteMessage/ParseMessages roundtrip", protocol), func() {
 			Context("InvocationMessage", func() {
 				for _, a := range [][]interface{}{
@@ -158,29 +156,6 @@ var _ = Describe("Protocol", func() {
 					completion := completionMessage{Type: 3, InvocationID: "2", Result: "B"}
 					Expect(protocol.WriteMessage(streamItem, &buf)).NotTo(HaveOccurred())
 					Expect(protocol.WriteMessage(completion, &buf)).NotTo(HaveOccurred())
-					var remainBuf bytes.Buffer
-					got, err := protocol.ParseMessages(&buf, &remainBuf)
-					Expect(err).NotTo(HaveOccurred())
-					Expect(len(got)).To(Equal(2))
-					Expect(got[0]).To(BeAssignableToTypeOf(streamItemMessage{}))
-					gotStreamItem := got[0].(streamItemMessage)
-					var item string
-					Expect(protocol.UnmarshalArgument(gotStreamItem.Item, &item)).NotTo(HaveOccurred())
-					Expect(item).To(Equal(streamItem.Item))
-					Expect(got[1]).To(BeAssignableToTypeOf(completionMessage{}))
-					gotCompletion := got[1].(completionMessage)
-					var result string
-					Expect(protocol.UnmarshalArgument(gotCompletion.Result, &result)).NotTo(HaveOccurred())
-					Expect(result).To(Equal(completion.Result))
-					close(done)
-				})
-				It("should parse multiple messages sent in one step, even if garbage follows", func(done Done) {
-					buf := bytes.Buffer{}
-					streamItem := streamItemMessage{Type: 2, InvocationID: "2", Item: "A"}
-					completion := completionMessage{Type: 3, InvocationID: "2", Result: "B"}
-					Expect(protocol.WriteMessage(streamItem, &buf)).NotTo(HaveOccurred())
-					Expect(protocol.WriteMessage(completion, &buf)).NotTo(HaveOccurred())
-					buf.WriteString("Some Garbage")
 					var remainBuf bytes.Buffer
 					got, err := protocol.ParseMessages(&buf, &remainBuf)
 					Expect(err).NotTo(HaveOccurred())

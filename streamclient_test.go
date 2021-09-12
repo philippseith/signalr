@@ -31,7 +31,8 @@ func (c *clientStreamHub) UploadStreamSmoke(upload1 <-chan int, factor float64, 
 			if ok2 {
 				clientStreamingInvocationQueue <- fmt.Sprintf("u2: %v", u2)
 			}
-		default:
+		case <-c.Hub.Context().Done():
+			return
 		}
 		if !ok1 && !ok2 {
 			clientStreamingInvocationQueue <- "Finished"

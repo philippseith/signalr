@@ -88,50 +88,75 @@ func (c *defaultHubConnection) Abort() {
 
 func (c *defaultHubConnection) Receive() <-chan receiveResult {
 	recvChan := make(chan receiveResult, 20)
+	// Prepare cleanup
+	writerDone := make(chan struct{}, 1)
 	// the pipe connects the goroutine which reads from the connection and the goroutine which parses the read data
-	reader, writer := io.Pipe()
+	reader, writer := CtxPipe(c.ctx)
 	p := make([]byte, c.maximumReceiveMessageSize)
-	go func(ctx context.Context, connection io.Reader, writer io.Writer, recvChan chan receiveResult) {
+	go func(ctx context.Context, connection io.Reader, writer io.Writer, recvChan chan<- receiveResult, writerDone chan<- struct{}) {
+	loop:
 		for {
-			if ctx.Err() != nil {
-				break
-			}
-			n, err := connection.Read(p)
-			if err != nil &&
-				ctx.Err() == nil { // if ctx.Err != nil, recvChan is closed and we shouldn't push to it
-				recvChan <- receiveResult{err: err}
-			}
-			if ctx.Err() != nil {
-				break
-			}
-			if n > 0 {
-				_, err = writer.Write(p[:n])
-				if err != nil &&
-					ctx.Err() == nil { // if ctx.Err != nil, recvChan is closed and we shouldn't push to it
-					recvChan <- receiveResult{err: err}
+			select {
+			case <-ctx.Done():
+				break loop
+			default:
+				n, err := connection.Read(p)
+				if err != nil {
+					select {
+					case recvChan <- receiveResult{err: err}:
+					case <-ctx.Done():
+						break loop
+					}
+				}
+				if n > 0 {
+					_, err = writer.Write(p[:n])
+					if err != nil {
+						select {
+						case recvChan <- receiveResult{err: err}:
+						case <-ctx.Done():
+							break loop
+						}
+					}
 				}
 			}
 		}
-	}(c.ctx, c.connection, writer, recvChan)
+		// The pipe writer is done
+		close(writerDone)
+	}(c.ctx, c.connection, writer, recvChan, writerDone)
 	// parse
-	go func(ctx context.Context, reader io.Reader, recvChan chan receiveResult) {
+	go func(ctx context.Context, reader io.Reader, recvChan chan<- receiveResult, writerDone <-chan struct{}) {
 		remainBuf := bytes.Buffer{}
+	loop:
 		for {
-			if ctx.Err() != nil {
-				close(recvChan)
-				break
-			}
-			messages, err := c.protocol.ParseMessages(reader, &remainBuf)
-			if err != nil && ctx.Err() == nil { // if ctx.Err != nil, recvChan is closed and we shouldn't push to it
-				recvChan <- receiveResult{err: err}
-			}
-			for _, message := range messages {
-				if ctx.Err() == nil { // if ctx.Err != nil, recvChan is closed and we shouldn't push to it
-					recvChan <- receiveResult{message: message}
+			select {
+			case <-ctx.Done():
+				break loop
+			case <-writerDone:
+				break loop
+			default:
+				messages, err := c.protocol.ParseMessages(reader, &remainBuf)
+				if err != nil {
+					select {
+					case recvChan <- receiveResult{err: err}:
+					case <-ctx.Done():
+						break loop
+					case <-writerDone:
+						break loop
+					}
+				} else {
+					for _, message := range messages {
+						select {
+						case recvChan <- receiveResult{message: message}:
+						case <-ctx.Done():
+							break loop
+						case <-writerDone:
+							break loop
+						}
+					}
 				}
 			}
 		}
-	}(c.ctx, reader, recvChan)
+	}(c.ctx, reader, recvChan, writerDone)
 	return recvChan
 }
 

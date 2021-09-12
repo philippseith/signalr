@@ -6,17 +6,18 @@ import (
 )
 
 // HubContext is a context abstraction for a hub
-// Clients() gets a HubClients that can be used to invoke methods on clients connected to the hub
-// Groups() gets a GroupManager that can be used to add and remove connections to named groups
-// Items() holds key/value pairs scoped to the hubs connection
-// ConnectionID() gets the ID of the current connection
-// Abort() aborts the current connection
-// Logger() returns the logger used in this server
+// Clients gets a HubClients that can be used to invoke methods on clients connected to the hub
+// Groups gets a GroupManager that can be used to add and remove connections to named groups
+// Items holds key/value pairs scoped to the hubs connection
+// ConnectionID gets the ID of the current connection
+// Abort aborts the current connection
+// Logger returns the logger used in this server
 type HubContext interface {
 	Clients() HubClients
 	Groups() GroupManager
 	Items() *sync.Map
 	ConnectionID() string
+	Context() context.Context
 	Abort()
 	Logger() (info StructuredLogger, dbg StructuredLogger)
 }
@@ -44,6 +45,10 @@ func (c *connectionHubContext) Items() *sync.Map {
 
 func (c *connectionHubContext) ConnectionID() string {
 	return c.connection.ConnectionID()
+}
+
+func (c *connectionHubContext) Context() context.Context {
+	return c.connection.Context()
 }
 
 func (c *connectionHubContext) Abort() {

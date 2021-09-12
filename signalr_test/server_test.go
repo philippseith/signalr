@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io/ioutil"
+	"math/rand"
 	"net/http"
 	"os"
 	"os/exec"
@@ -12,7 +13,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/go-kit/kit/log"
 	"github.com/philippseith/signalr"
 )
 
@@ -33,8 +33,8 @@ func TestMain(m *testing.M) {
 	errSlurp, _ := ioutil.ReadAll(stderr)
 	err = npmInstall.Wait()
 	if err != nil {
-		fmt.Println(outSlurp)
-		fmt.Println(errSlurp)
+		fmt.Println(string(outSlurp))
+		fmt.Println(string(errSlurp))
 		os.Exit(123)
 	}
 	os.Exit(m.Run())
@@ -44,16 +44,16 @@ func TestServerSmoke(t *testing.T) {
 	testServer(t, "^smoke", signalr.HTTPTransports("WebSockets"))
 }
 
-func TestServerWebSockets(t *testing.T) {
-	testServer(t, "^e2e", signalr.HTTPTransports("WebSockets"))
+func TestServerJsonWebSockets(t *testing.T) {
+	testServer(t, "^JSON", signalr.HTTPTransports("WebSockets"))
+}
+
+func TestServerJsonSSE(t *testing.T) {
+	testServer(t, "^JSON", signalr.HTTPTransports("ServerSentEvents"))
 }
 
 func TestServerMessagePack(t *testing.T) {
 	testServer(t, "^MessagePack", signalr.HTTPTransports("WebSockets"))
-}
-
-func TestServerSSE(t *testing.T) {
-	testServer(t, "^e2e", signalr.HTTPTransports("ServerSentEvents"))
 }
 
 func testServer(t *testing.T, testNamePattern string, transports func(signalr.Party) error) {
@@ -101,7 +101,7 @@ func runServer(t *testing.T, serverIsUp chan struct{}, quitServer chan struct{},
 	sRServer, _ := signalr.NewServer(ctx, signalr.SimpleHubFactory(&hub{}),
 		signalr.KeepAliveInterval(2*time.Second),
 		transports,
-		signalr.Logger(log.NewLogfmtLogger(os.Stderr), true))
+		testLoggerOption())
 	router := http.NewServeMux()
 	sRServer.MapHTTP(router, "/hub")
 
@@ -183,6 +183,24 @@ func (h *hub) AlcoholicContentMap() map[string]float64 {
 		"Beer":                    4.9,
 		"Lagavulin Cask Strength": 56.2,
 	}
+}
+
+func (h *hub) LargeCompressableContent() string {
+	return strings.Repeat("data_", 10000)
+}
+
+func (h *hub) LargeUncompressableContent() string {
+	return randString(20000)
+}
+
+var letters = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890")
+
+func randString(n int) string {
+	b := make([]rune, n)
+	for i := range b {
+		b[i] = letters[rand.Intn(len(letters))]
+	}
+	return string(b)
 }
 
 func (h *hub) FiveDates() <-chan string {

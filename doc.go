@@ -16,7 +16,7 @@ Client
 A Client can be used in client side code to access server methods. From an existing connection, it can be created with NewClient().
   // NewClient with raw TCP connection and MessagePack encoding
   conn, err := net.Dial("tcp", "example.com:6502")
-  client := NewClient(ctx, NewNetConnection(conn), TransferFormat("Binary), Receiver(receiver))
+  client := NewClient(ctx, NewNetConnection(ctx, conn), TransferFormat("Binary), Receiver(receiver))
   client.Start()
 A special case is NewHTTPClient(), which creates a Client from a server address and negotiates with the server
 which kind of connection (Websockets, Server-Sent Events) will be used.
@@ -37,15 +37,42 @@ Servers for arbitrary connection types can be created with NewServer().
 To serve a connection, call server.Serve(connection) in a goroutine. Serve ends when the connection is closed or the
 servers context is canceled.
   // Serving over TCP, accepting client who use MessagePack or JSON
-  conn, err := net.Dial("tcp", "example.com:6502")
+  addr, _ := net.ResolveTCPAddr("tcp", "localhost:6502")
+  listener, _ := net.ListenTCP("tcp", addr)
+  tcpConn, _ := listener.Accept()
   go server.Serve(NewNetConnection(conn))
 To server a HTTP connection, use server.MapHTTP(), which connects the server with a path in an http.ServeMux.
 The server then automatically negotiates which kind of connection (Websockets, Server-Sent Events) will be used.
-  // a chat server
+  // build a signalr.Server using your hub
+  // and any server options you may need
+  server, _ := signalr.NewServer(ctx,
+      signalr.SimpleHubFactory(&AppHub{})
+      signalr.KeepAliveInterval(2*time.Second),
+      signalr.Logger(kitlog.NewLogfmtLogger(os.Stderr), true))
+  )
+
+  // create a new http.ServerMux to handle your app's http requests
   router := http.NewServeMux()
+
+  // ask the signalr server to map it's server
+  // api routes to your custom baseurl
   server.MapHTTP(router, "/chat")
-  router.Handle("/", http.FileServer(http.Dir("./public")))
-  http.ListenAndServe(address, router)
+
+  // in addition to mapping the signalr routes
+  // your mux will need to serve the static files
+  // which make up your client-side app, including
+  // the signalr javascript files. here is an example
+  // of doing that using a local `public` package
+  // which was created with the go:embed directive
+  //
+  // fmt.Printf("Serving static content from the embedded filesystem\n")
+  // router.Handle("/", http.FileServer(http.FS(public.FS)))
+
+  // bind your mux to a given address and start handling requests
+  fmt.Printf("Listening for websocket connections on http://%s\n", address)
+  if err := http.ListenAndServe(address, router); err != nil {
+      log.Fatal("ListenAndServe:", err)
+  }
 
 Supported method signatures
 
