@@ -9,43 +9,23 @@ import (
 )
 
 type netConnection struct {
-	ctx          context.Context
-	timeout      time.Duration
-	conn         net.Conn
-	connectionID string
+	ConnectionBase
+	conn net.Conn
 }
 
 func NewNetConnection(ctx context.Context, conn net.Conn) *netConnection {
 	netConn := &netConnection{
-		ctx:          ctx,
-		connectionID: getConnectionID(),
-		conn:         conn,
+		ConnectionBase: ConnectionBase{
+			ctx:          ctx,
+			connectionID: getConnectionID(),
+		},
+		conn: conn,
 	}
 	go func() {
 		<-ctx.Done()
 		_ = conn.Close()
 	}()
 	return netConn
-}
-
-func (nc *netConnection) SetTimeout(timeout time.Duration) {
-	nc.timeout = timeout
-}
-
-func (nc *netConnection) Timeout() time.Duration {
-	return nc.timeout
-}
-
-func (nc *netConnection) ConnectionID() string {
-	return nc.connectionID
-}
-
-func (nc *netConnection) SetConnectionID(id string) {
-	nc.connectionID = id
-}
-
-func (nc *netConnection) Context() context.Context {
-	return nc.ctx
 }
 
 func (nc *netConnection) Write(p []byte) (n int, err error) {
