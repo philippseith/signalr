@@ -16,9 +16,11 @@ type Doer interface {
 }
 
 type httpConnection struct {
-	client Doer
+	client  Doer
+	handler func(*http.Request)
 }
 
+// HTTPClientOption sets the http client used to connect to the signalR server
 func HTTPClientOption(client Doer) func(*httpConnection) error {
 	return func(c *httpConnection) error {
 		c.client = client
@@ -26,7 +28,15 @@ func HTTPClientOption(client Doer) func(*httpConnection) error {
 	}
 }
 
-// NewHTTPConnection creates a signalR Client which tries to connect over http to the given address
+// HTTPRequestHandlerOption sets the handler for modifying the initial HTTP request
+func HTTPRequestHandlerOption(handler func(*http.Request)) func(*httpConnection) error {
+	return func(c *httpConnection) error {
+		c.handler = handler
+		return nil
+	}
+}
+
+// NewHTTPConnection creates a signalR HTTP Connection
 func NewHTTPConnection(ctx context.Context, address string, options ...func(*httpConnection) error) (Connection, error) {
 	httpConn := &httpConnection{}
 
@@ -39,6 +49,10 @@ func NewHTTPConnection(ctx context.Context, address string, options ...func(*htt
 	}
 
 	req, err := http.NewRequest("POST", fmt.Sprintf("%v/negotiate", address), nil)
+	if httpConn.handler != nil {
+		httpConn.handler(req)
+	}
+
 	if err != nil {
 		return nil, err
 	}
