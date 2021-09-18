@@ -25,7 +25,7 @@ which kind of connection (Websockets, Server-Sent Events) will be used.
   // Client with JSON encoding
   client, err := NewClient(ctx, conn, TransferFormat("Text"), Receiver(receiver))
   client.Start()
-The object which will receive server callbacks is passed to NewClient() / NewHTTPClient() by using the Receiver option.
+The object which will receive server callbacks is passed to NewClient() by using the Receiver option.
 After calling client.Start(), the client is ready to call server methods or to receive callbacks.
 
 Server
