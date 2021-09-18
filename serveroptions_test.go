@@ -4,12 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/go-kit/kit/log"
+	"strings"
+	"time"
+
+	"github.com/go-kit/log"
 	"github.com/google/uuid"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	"strings"
-	"time"
 )
 
 type singleHub struct {

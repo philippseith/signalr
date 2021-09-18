@@ -5,9 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/go-kit/kit/log"
 	"io"
 	"reflect"
+
+	"github.com/go-kit/log"
 )
 
 // jsonHubProtocol is the JSON based SignalR protocol

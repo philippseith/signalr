@@ -2,9 +2,10 @@ package signalr
 
 import (
 	"encoding/json"
-	"github.com/go-kit/kit/log"
 	"io/ioutil"
 	"os"
+
+	"github.com/go-kit/log"
 )
 
 type loggerConfig struct {

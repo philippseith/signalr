@@ -2,8 +2,9 @@ package signalr
 
 import (
 	"context"
-	"github.com/go-kit/kit/log"
 	"time"
+
+	"github.com/go-kit/log"
 )
 
 // Party is the common base of Server and Client. The Party methods are only used internally,

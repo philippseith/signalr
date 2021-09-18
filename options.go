@@ -2,9 +2,10 @@ package signalr
 
 import (
 	"errors"
-	"github.com/go-kit/kit/log"
-	"github.com/go-kit/kit/log/level"
 	"time"
+
+	"github.com/go-kit/log"
+	"github.com/go-kit/log/level"
 )
 
 // The Party option TimeoutInterval is the interval one Party will consider the other Party disconnected
@@ -88,7 +89,7 @@ func EnableDetailedErrors(enable bool) func(Party) error {
 }
 
 // StructuredLogger is the simplest logging interface for structured logging.
-// See github.com/go-kit/kit/log
+// See github.com/go-kit/log
 type StructuredLogger interface {
 	Log(keyVals ...interface{}) error
 }

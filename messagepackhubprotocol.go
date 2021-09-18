@@ -5,9 +5,10 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
-	"github.com/go-kit/kit/log"
-	"github.com/vmihailenco/msgpack/v5"
 	"io"
+
+	"github.com/go-kit/log"
+	"github.com/vmihailenco/msgpack/v5"
 )
 
 type messagePackHubProtocol struct {
