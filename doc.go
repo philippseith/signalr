@@ -1,11 +1,11 @@
 /*
 Package signalr contains a SignalR client and a SignalR server.
-Both support the transport types Websockets and Server-Sent Events and the transfer format Text (JSON).
-Rudimentary support for binary transfer format (MessagePack) is available.
+Both support the transport types Websockets and Server-Sent Events 
+and the transfer formats Text (JSON) and Binary (MessagePack).
 
 Basics
 
-The SignalR Protocol is a protocol for two-way RPC over any Message-based transport.
+The SignalR Protocol is a protocol for two-way RPC over any stream- or message-based transport.
 Either party in the connection may invoke procedures on the other party,
 and procedures can return zero or more results or an error.
 Typically, SignalR connections are HTTP-based, but it is dead simple to implement a signalr.Connection on any transport
