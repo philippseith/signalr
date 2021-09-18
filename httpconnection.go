@@ -43,7 +43,9 @@ func NewHTTPConnection(ctx context.Context, address string, options ...func(*htt
 
 	for _, option := range options {
 		if option != nil {
-			option(httpConn)
+			if err := option(httpConn); err != nil {
+				return nil, err
+			}
 		}
 	}
 
