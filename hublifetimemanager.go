@@ -1,7 +1,7 @@
 package signalr
 
 import (
-	"github.com/go-kit/kit/log"
+	"github.com/go-kit/log"
 	"sync"
 )
 

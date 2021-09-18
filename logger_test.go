@@ -2,7 +2,7 @@ package signalr
 
 import (
 	"encoding/json"
-	"github.com/go-kit/kit/log"
+	"github.com/go-kit/log"
 	"io/ioutil"
 	"os"
 )

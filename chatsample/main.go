@@ -4,7 +4,7 @@ import (
 	"context"
 	_ "embed"
 	"fmt"
-	kitlog "github.com/go-kit/kit/log"
+	kitlog "github.com/go-kit/log"
 	"github.com/philippseith/signalr"
 	"github.com/philippseith/signalr/chatsample/middleware"
 	"github.com/philippseith/signalr/chatsample/public"
