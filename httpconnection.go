@@ -11,6 +11,7 @@ import (
 	"nhooyr.io/websocket"
 )
 
+// Doer is the *http.Client interface
 type Doer interface {
 	Do(req *http.Request) (*http.Response, error)
 }
@@ -20,16 +21,16 @@ type httpConnection struct {
 	headers func() http.Header
 }
 
-// HTTPClientOption sets the http client used to connect to the signalR server
-func HTTPClientOption(client Doer) func(*httpConnection) error {
+// WithHTTPClientOption sets the http client used to connect to the signalR server
+func WithHTTPClientOption(client Doer) func(*httpConnection) error {
 	return func(c *httpConnection) error {
 		c.client = client
 		return nil
 	}
 }
 
-// HTTPHeadersOption sets the function for providing request headers for HTTP and websocket requests
-func HTTPHeadersOption(headers func() http.Header) func(*httpConnection) error {
+// WithHTTPHeadersOption sets the function for providing request headers for HTTP and websocket requests
+func WithHTTPHeadersOption(headers func() http.Header) func(*httpConnection) error {
 	return func(c *httpConnection) error {
 		c.headers = headers
 		return nil
@@ -41,27 +42,29 @@ func NewHTTPConnection(ctx context.Context, address string, options ...func(*htt
 	httpConn := &httpConnection{}
 
 	for _, option := range options {
-		option(httpConn)
+		if option != nil {
+			option(httpConn)
+		}
 	}
 
 	if httpConn.client == nil {
 		httpConn.client = &http.Client{}
 	}
 
-	req, err := http.NewRequest("POST", fmt.Sprintf("%v/negotiate", address), nil)
-	if httpConn.headers != nil {
-		req.Header = httpConn.headers()
-	}
-
+	req, err := http.NewRequest("POST", fmt.Sprintf("%s/negotiate", address), nil)
 	if err != nil {
 		return nil, err
+	}
+
+	if httpConn.headers != nil {
+		req.Header = httpConn.headers()
 	}
 
 	resp, err := httpConn.client.Do(req)
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = resp.Body.Close() }()
+	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
 		return nil, fmt.Errorf("%v -> %v", req, resp.Status)
@@ -73,8 +76,7 @@ func NewHTTPConnection(ctx context.Context, address string, options ...func(*htt
 	}
 
 	nr := negotiateResponse{}
-	err = json.Unmarshal(body, &nr)
-	if err != nil {
+	if err := json.Unmarshal(body, &nr); err != nil {
 		return nil, err
 	}
 
@@ -95,7 +97,7 @@ func NewHTTPConnection(ctx context.Context, address string, options ...func(*htt
 	} else if formats = nr.getTransferFormats("WebSockets"); formats != nil {
 		wsURL := reqURL
 
-		// switch to wss/443 for secure connection
+		// switch to wss for secure connection
 		if reqURL.Scheme == "https" {
 			wsURL.Scheme = "wss"
 		} else {
