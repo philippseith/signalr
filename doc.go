@@ -1,5 +1,5 @@
 /*
-package signalr contains a SignalR client and a SignalR server.
+Package signalr contains a SignalR client and a SignalR server.
 Both support the transport types Websockets and Server-Sent Events and the transfer format Text (JSON).
 Rudimentary support for binary transfer format (MessagePack) is available.
 

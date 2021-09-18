@@ -19,19 +19,19 @@ type clientSSEConnection struct {
 
 func newClientSSEConnection(parentContext context.Context, address string, connectionID string, body io.ReadCloser) (*clientSSEConnection, error) {
 	// Setup request
-	reqUrl, err := url.Parse(address)
+	reqURL, err := url.Parse(address)
 	if err != nil {
 		return nil, err
 	}
-	q := reqUrl.Query()
+	q := reqURL.Query()
 	q.Set("id", connectionID)
-	reqUrl.RawQuery = q.Encode()
+	reqURL.RawQuery = q.Encode()
 	c := clientSSEConnection{
 		ConnectionBase: ConnectionBase{
 			ctx:          parentContext,
 			connectionID: connectionID,
 		},
-		reqURL: reqUrl.String(),
+		reqURL: reqURL.String(),
 	}
 	c.sseReader, c.sseWriter = io.Pipe()
 	go func() {

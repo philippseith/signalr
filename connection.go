@@ -17,6 +17,7 @@ type Connection interface {
 	SetTimeout(duration time.Duration)
 }
 
+// TransferMode is either TextTransferMode or BinaryTransferMode
 type TransferMode int
 
 // MessageType constants.
@@ -27,6 +28,7 @@ const (
 	BinaryTransferMode
 )
 
+// ConnectionWithTransferMode is a Connection with TransferMode (e.g. Websocket)
 type ConnectionWithTransferMode interface {
 	TransferMode() TransferMode
 	SetTransferMode(transferMode TransferMode)
