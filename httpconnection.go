@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"net/url"
 
@@ -17,7 +17,7 @@ type Doer interface {
 
 type httpConnection struct {
 	client  Doer
-	handler func(*http.Request)
+	headers func() http.Header
 }
 
 // HTTPClientOption sets the http client used to connect to the signalR server
@@ -28,10 +28,10 @@ func HTTPClientOption(client Doer) func(*httpConnection) error {
 	}
 }
 
-// HTTPRequestHandlerOption sets the handler for modifying the initial HTTP request
-func HTTPRequestHandlerOption(handler func(*http.Request)) func(*httpConnection) error {
+// HTTPHeadersOption sets the function for providing request headers for HTTP and websocket requests
+func HTTPHeadersOption(headers func() http.Header) func(*httpConnection) error {
 	return func(c *httpConnection) error {
-		c.handler = handler
+		c.headers = headers
 		return nil
 	}
 }
@@ -49,8 +49,8 @@ func NewHTTPConnection(ctx context.Context, address string, options ...func(*htt
 	}
 
 	req, err := http.NewRequest("POST", fmt.Sprintf("%v/negotiate", address), nil)
-	if httpConn.handler != nil {
-		httpConn.handler(req)
+	if httpConn.headers != nil {
+		req.Header = httpConn.headers()
 	}
 
 	if err != nil {
@@ -67,16 +67,22 @@ func NewHTTPConnection(ctx context.Context, address string, options ...func(*htt
 		return nil, fmt.Errorf("%v -> %v", req, resp.Status)
 	}
 
-	body, _ := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
 	nr := negotiateResponse{}
 	err = json.Unmarshal(body, &nr)
 	if err != nil {
 		return nil, err
 	}
+
 	reqURL, err := url.Parse(address)
 	if err != nil {
 		return nil, err
 	}
+
 	q := reqURL.Query()
 	q.Set("id", nr.ConnectionID)
 	reqURL.RawQuery = q.Encode()
@@ -88,23 +94,41 @@ func NewHTTPConnection(ctx context.Context, address string, options ...func(*htt
 		// TODO
 	} else if formats = nr.getTransferFormats("WebSockets"); formats != nil {
 		wsURL := reqURL
-		wsURL.Scheme = "ws"
-		ws, _, err := websocket.Dial(ctx, wsURL.String(), nil)
+
+		// switch to wss/443 for secure connection
+		if reqURL.Scheme == "https" {
+			wsURL.Scheme = "wss"
+		} else {
+			wsURL.Scheme = "ws"
+		}
+
+		opts := &websocket.DialOptions{}
+		if httpConn.headers != nil {
+			opts.HTTPHeader = httpConn.headers()
+		}
+
+		ws, _, err := websocket.Dial(ctx, wsURL.String(), opts)
 		if err != nil {
 			return nil, err
 		}
+
 		conn = newWebSocketConnection(ctx, context.Background(), nr.ConnectionID, ws)
 	} else if formats = nr.getTransferFormats("ServerSentEvents"); formats != nil {
 		req, err := http.NewRequest("GET", reqURL.String(), nil)
 		if err != nil {
 			return nil, err
 		}
+
+		if httpConn.headers != nil {
+			req.Header = httpConn.headers()
+		}
 		req.Header.Set("Accept", "text/event-stream")
-		client := &http.Client{}
-		resp, err := client.Do(req)
+
+		resp, err := httpConn.client.Do(req)
 		if err != nil {
 			return nil, err
 		}
+
 		conn, err = newClientSSEConnection(ctx, address, nr.ConnectionID, resp.Body)
 		if err != nil {
 			return nil, err
