@@ -103,8 +103,12 @@ var _ = Describe("HTTP server", func() {
 						_ = http.ListenAndServe(fmt.Sprintf("127.0.0.1:%v", port), router)
 					}()
 					waitForPort(port)
-					client, err := NewHTTPClient(context.TODO(),
-						fmt.Sprintf("http://127.0.0.1:%v/hub", port),
+
+					// Try first connection
+					conn, err := NewHTTPConnection(context.TODO(), fmt.Sprintf("http://127.0.0.1:%v/hub", port))
+					Expect(err).NotTo(HaveOccurred())
+					client, err := NewClient(context.TODO(),
+						conn,
 						Logger(logger, true),
 						TransferFormat(transport[1]))
 					Expect(err).NotTo(HaveOccurred())
@@ -114,9 +118,12 @@ var _ = Describe("HTTP server", func() {
 					result := <-client.Invoke("Add2", 1)
 					Expect(result.Error).NotTo(HaveOccurred())
 					Expect(result.Value).To(BeEquivalentTo(3))
+
 					// Try second connection
-					client2, err := NewHTTPClient(context.TODO(),
-						fmt.Sprintf("http://127.0.0.1:%v/hub", port),
+					conn2, err := NewHTTPConnection(context.TODO(), fmt.Sprintf("http://127.0.0.1:%v/hub", port))
+					Expect(err).NotTo(HaveOccurred())
+					client2, err := NewClient(context.TODO(),
+						conn2,
 						Logger(logger, true),
 						TransferFormat(transport[1]))
 					Expect(err).NotTo(HaveOccurred())
