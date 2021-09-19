@@ -18,7 +18,7 @@ type Client interface {
 	Party
 	Start() error
 	Stop() error
-	// Closed() <-chan error TODO Define connection state
+	Closed() <-chan struct{}
 	Invoke(method string, arguments ...interface{}) <-chan InvokeResult
 	Send(method string, arguments ...interface{}) <-chan error
 	PullStream(method string, arguments ...interface{}) <-chan InvokeResult
@@ -61,17 +61,17 @@ func (c *client) Start() error {
 	if err != nil {
 		return err
 	}
+
 	c.loop = newLoop(c, c.conn, protocol)
+	c.closed = make(chan struct{}, 1)
 	started := make(chan struct{}, 1)
+
 	go func(c *client, started chan struct{}) {
 		c.loop.Run(started)
 		c.loopMx.Lock()
 		c.loopEnded = true
 		c.loopMx.Unlock()
-		// signal client closed
-		if c.closed != nil {
-			close(c.closed)
-		}
+		close(c.closed)
 	}(c, started)
 	<-started
 	return nil
@@ -81,6 +81,10 @@ func (c *client) Stop() error {
 	err := c.loop.hubConn.Close("", false)
 	c.cancel()
 	return err
+}
+
+func (c *client) Closed() <-chan struct{} {
+	return c.closed
 }
 
 func (c *client) Invoke(method string, arguments ...interface{}) <-chan InvokeResult {

@@ -33,14 +33,3 @@ func TransferFormat(format string) func(Party) error {
 		return errors.New("option TransferFormat is client only")
 	}
 }
-
-// Closer adds a signaling channel for client closed
-func Closer(closed chan struct{}) func(Party) error {
-	return func(party Party) error {
-		if client, ok := party.(*client); ok {
-			client.closed = closed
-			return nil
-		}
-		return errors.New("option Closer is client only")
-	}
-}
