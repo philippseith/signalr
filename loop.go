@@ -1,6 +1,7 @@
 package signalr
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"reflect"
@@ -383,5 +384,18 @@ func getMethod(target interface{}, name string) (reflect.Value, bool) {
 }
 
 func fmtMsg(message interface{}) string {
+	switch msg := message.(type) {
+	case invocationMessage:
+		fmtArgs := make([]interface{}, 0)
+		for _, arg := range msg.Arguments {
+			if rawArg, ok := arg.(json.RawMessage); ok {
+				fmtArgs = append(fmtArgs, string(rawArg))
+			} else {
+				fmtArgs = append(fmtArgs, arg)
+			}
+		}
+		msg.Arguments = fmtArgs
+		message = msg
+	}
 	return fmt.Sprintf("%#v", message)
 }
