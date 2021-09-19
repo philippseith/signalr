@@ -6,10 +6,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/go-kit/log"
 	"os"
 	"reflect"
 	"sync"
+
+	"github.com/go-kit/log"
 )
 
 // Client is the signalR connection used on the client side.

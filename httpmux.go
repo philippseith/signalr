@@ -6,10 +6,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"nhooyr.io/websocket"
 	"strconv"
 	"strings"
 	"sync"
+
+	"nhooyr.io/websocket"
 )
 
 type httpMux struct {
