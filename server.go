@@ -6,11 +6,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/go-kit/log"
 	"net/http"
 	"os"
 	"reflect"
 	"runtime/debug"
+
+	"github.com/go-kit/log"
 )
 
 // Server is a SignalR server for one type of hub.
