@@ -20,6 +20,9 @@ import (
 // Start starts the client loop. After starting the client, the interaction with a server can be started.
 //  Stop() error
 // Stop stops the client loop.
+//  Context() context.Context
+// Context returns a Context that is canceled when the client loop ends. Context().Err() is the error which caused
+// the loop to end.
 //  Invoke(method string, arguments ...interface{}) <-chan InvokeResult
 // Invoke invokes a method on the server and returns a channel wich will return the InvokeResult.
 // When failing, InvokeResult.Error contains the client side error.
