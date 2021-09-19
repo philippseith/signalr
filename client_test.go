@@ -4,12 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	. "github.com/onsi/ginkgo"
-	. "github.com/onsi/gomega"
 	"io"
 	"strings"
 	"sync/atomic"
 	"time"
+
+	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/gomega"
 )
 
 type pipeConnection struct {

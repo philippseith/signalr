@@ -27,4 +27,3 @@ func LogRequests(h http.Handler) http.Handler {
 		fmt.Printf("%03d %s %s %v\n", status, method, uri, duration)
 	})
 }
-

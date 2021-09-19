@@ -2,9 +2,10 @@ package signalr
 
 import (
 	"errors"
+	"time"
+
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
-	"time"
 )
 
 // TimeoutInterval is the interval one Party will consider the other Party disconnected

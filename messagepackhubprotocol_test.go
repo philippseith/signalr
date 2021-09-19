@@ -2,9 +2,10 @@ package signalr
 
 import (
 	"bytes"
+	"reflect"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	"reflect"
 )
 
 var _ = Describe("MessagePackHubProtocol", func() {
