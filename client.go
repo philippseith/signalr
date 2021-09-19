@@ -33,7 +33,7 @@ type Client interface {
 	Party
 	Start() error
 	Stop() error
-	Closed() <-chan struct{}
+	Closed() <-chan error
 	Invoke(method string, arguments ...interface{}) <-chan InvokeResult
 	Send(method string, arguments ...interface{}) <-chan error
 	PullStream(method string, arguments ...interface{}) <-chan InvokeResult
@@ -62,7 +62,7 @@ func NewClient(ctx context.Context, conn Connection, options ...func(Party) erro
 type client struct {
 	partyBase
 	conn      Connection
-	closed    chan struct{}
+	closed    chan error
 	format    string
 	loop      *loop
 	receiver  interface{}
@@ -78,14 +78,15 @@ func (c *client) Start() error {
 	}
 
 	c.loop = newLoop(c, c.conn, protocol)
-	c.closed = make(chan struct{}, 1)
+	c.closed = make(chan error, 1)
 	started := make(chan struct{}, 1)
 
 	go func(c *client, started chan struct{}) {
-		c.loop.Run(started)
+		err := c.loop.Run(started)
 		c.loopMx.Lock()
 		c.loopEnded = true
 		c.loopMx.Unlock()
+		c.closed <- err
 		close(c.closed)
 	}(c, started)
 	<-started
@@ -98,7 +99,7 @@ func (c *client) Stop() error {
 	return err
 }
 
-func (c *client) Closed() <-chan struct{} {
+func (c *client) Closed() <-chan error {
 	return c.closed
 }
 
