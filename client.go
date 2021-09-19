@@ -6,10 +6,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/go-kit/log"
 	"os"
 	"reflect"
 	"sync"
+
+	"github.com/go-kit/log"
 )
 
 // Client is the signalR connection used on the client side
@@ -46,6 +47,7 @@ func NewClient(ctx context.Context, conn Connection, options ...func(Party) erro
 type client struct {
 	partyBase
 	conn      Connection
+	closed    chan struct{}
 	format    string
 	loop      *loop
 	receiver  interface{}
@@ -66,6 +68,10 @@ func (c *client) Start() error {
 		c.loopMx.Lock()
 		c.loopEnded = true
 		c.loopMx.Unlock()
+		// signal client closed
+		if c.closed != nil {
+			close(c.closed)
+		}
 	}(c, started)
 	<-started
 	return nil
