@@ -20,7 +20,7 @@ var _ = Describe("Server.HubClients", func() {
 			// Create both ends of the connection
 			cliConn, srvConn := newClientServerConnections()
 			// Start the server
-			go server.Serve(srvConn)
+			go func() { _ = server.Serve(srvConn) }()
 			// Create the Client
 			receiver := &simpleReceiver{}
 			clientConn, _ := NewClient(context.TODO(), cliConn,
