@@ -47,7 +47,7 @@ func (j *jsonError) Error() string {
 	return fmt.Sprintf("%v (source: %v)", j.err, j.raw)
 }
 
-// UnmarshalArgument unmarshals a json.RawMessage depending of the specified value type into value
+// UnmarshalArgument unmarshals a json.RawMessage depending on the specified value type into value
 func (j *jsonHubProtocol) UnmarshalArgument(src interface{}, dst interface{}) error {
 	rawSrc, ok := src.(json.RawMessage)
 	if !ok {
