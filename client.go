@@ -6,10 +6,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/go-kit/log"
 	"os"
 	"reflect"
 	"sync"
+
+	"github.com/teivah/onecontext"
+
+	"github.com/go-kit/log"
 )
 
 // Client is the signalR connection used on the client side.
@@ -33,7 +36,7 @@ type Client interface {
 	Party
 	Start() error
 	Stop() error
-	Closed() <-chan error
+	Context() context.Context
 	Invoke(method string, arguments ...interface{}) <-chan InvokeResult
 	Send(method string, arguments ...interface{}) <-chan error
 	PullStream(method string, arguments ...interface{}) <-chan InvokeResult
@@ -61,14 +64,15 @@ func NewClient(ctx context.Context, conn Connection, options ...func(Party) erro
 
 type client struct {
 	partyBase
-	conn      Connection
-	closed    chan error
-	format    string
-	loop      *loop
-	receiver  interface{}
-	lastID    int64
-	loopMx    sync.Mutex
-	loopEnded bool
+	conn       Connection
+	loopCtx    *clientContext
+	cancelLoop context.CancelFunc
+	format     string
+	loop       *loop
+	receiver   interface{}
+	lastID     int64
+	loopMx     sync.Mutex
+	loopEnded  bool
 }
 
 func (c *client) Start() error {
@@ -77,30 +81,37 @@ func (c *client) Start() error {
 		return err
 	}
 
-	c.loop = newLoop(c, c.conn, protocol)
-	c.closed = make(chan error, 1)
 	started := make(chan struct{}, 1)
 
 	go func(c *client, started chan struct{}) {
-		err := c.loop.Run(started)
+		c.loopMx.Lock()
+		ctx, cancel := onecontext.Merge(c.ctx, c.conn.Context())
+		c.loopCtx = &clientContext{Context: ctx}
+		c.cancelLoop = cancel
+		c.loop = newLoop(c, c.conn, protocol)
+		c.loopMx.Unlock()
+
+		c.loopCtx.SetErr(c.loop.Run(started))
+
 		c.loopMx.Lock()
 		c.loopEnded = true
+		c.cancelLoop()
 		c.loopMx.Unlock()
-		c.closed <- err
-		close(c.closed)
 	}(c, started)
+
 	<-started
+
 	return nil
 }
 
 func (c *client) Stop() error {
 	err := c.loop.hubConn.Close("", false)
-	c.cancel()
+	c.cancelLoop()
 	return err
 }
 
-func (c *client) Closed() <-chan error {
-	return c.closed
+func (c *client) Context() context.Context {
+	return c.loopCtx
 }
 
 func (c *client) Invoke(method string, arguments ...interface{}) <-chan InvokeResult {

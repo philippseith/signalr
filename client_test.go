@@ -4,12 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	. "github.com/onsi/ginkgo"
-	. "github.com/onsi/gomega"
 	"io"
 	"strings"
 	"sync/atomic"
 	"time"
+
+	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/gomega"
 )
 
 type pipeConnection struct {
@@ -117,8 +118,8 @@ func (s *simpleReceiver) OnCallback(result string) {
 
 var _ = Describe("Client", func() {
 	formatOption := TransferFormat("Text")
-	Context("Start", func() {
-		It("should connect to the server", func(done Done) {
+	Context("Start/Stop", func() {
+		It("should connect to the server and then be stopped without error", func(done Done) {
 			// Create a simple server
 			server, err := NewServer(context.TODO(), SimpleHubFactory(&simpleHub{}),
 				testLoggerOption(),
@@ -420,12 +421,12 @@ var _ = Describe("Client", func() {
 			close(done)
 		}, 2.0)
 
-		It("Closed should return an error when the connection fails", func(done Done) {
+		It("client.Context.Err() should be the error which made the connection fail", func(done Done) {
 			failErr := errors.New("fail")
 			cliConn.fail.Store(failErr)
-			err := <-client.Closed()
-			Expect(err, Equal(failErr))
+			<-client.Context().Done()
+			Expect(client.Context().Err(), Equal(failErr))
 			close(done)
-		}, 2.0)
+		}, 6.0)
 	})
 })

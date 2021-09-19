@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	. "github.com/onsi/ginkgo"
@@ -86,11 +87,21 @@ func connectMany() (Server, []*testingConnection, []string) {
 	connIds := make([]string, 0)
 	for i := 0; i < 3; i++ {
 		conns[i] = newTestingConnectionForServer()
-		go func() { _ = server.Serve(conns[i]) }()
+
+	}
+	var wg sync.WaitGroup
+	wg.Add(3)
+	for i := 0; i < 3; i++ {
+		go func(i int) {
+			wg.Done()
+			_ = server.Serve(conns[i])
+		}(i)
+	}
+	wg.Wait()
+	for i := 0; i < 3; i++ {
 		// Ensure to return all connection with connected hubs
 		connIds = append(connIds, <-hubContextOnConnectMsg)
 	}
-
 	return server, conns, connIds
 }
 
