@@ -6,14 +6,29 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/go-kit/log"
 	"os"
 	"reflect"
 	"sync"
-
-	"github.com/go-kit/log"
 )
 
-// Client is the signalR connection used on the client side
+// Client is the signalR connection used on the client side.
+//   Start() error
+// Start starts the client loop. After starting the client, the interaction with a server can be started.
+//  Stop() error
+// Stop stops the client loop.
+//  Invoke(method string, arguments ...interface{}) <-chan InvokeResult
+// Invoke invokes a method on the server and returns a channel wich will return the InvokeResult.
+// When failing, InvokeResult.Error contains the client side error.
+//  Send(method string, arguments ...interface{}) <-chan error
+// Send invokes a method on the server but does not return a result from the server but only a channel,
+// which might contain a client side error occurred while sending.
+//   PullStream(method string, arguments ...interface{}) <-chan InvokeResult
+// PullStream invokes a streaming method on the server and returns a channel which delivers the stream items.
+// For more info about Streaming see https://github.com/dotnet/aspnetcore/blob/main/src/SignalR/docs/specs/HubProtocol.md#streaming
+//   PushStreams(method string, arguments ...interface{}) <-chan error
+// PushStreams pushes all items received from its arguments of type channel to the server (Upload Streaming).
+// For more info about Upload Streaming see https://github.com/dotnet/aspnetcore/blob/main/src/SignalR/docs/specs/HubProtocol.md#upload-streaming
 type Client interface {
 	Party
 	Start() error
