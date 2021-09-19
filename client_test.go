@@ -391,7 +391,7 @@ var _ = Describe("Client", func() {
 		}, 2.0)
 	})
 
-	FContext("Reconnect", func() {
+	Context("Reconnect", func() {
 		var cliConn *pipeConnection
 		var srvConn *pipeConnection
 		var client Client
