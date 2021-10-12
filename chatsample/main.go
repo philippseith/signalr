@@ -4,7 +4,6 @@ import (
 	"context"
 	_ "embed"
 	"fmt"
-	"github.com/rs/cors"
 	"log"
 	"net/http"
 	"os"
@@ -125,12 +124,8 @@ func (c *chat) UploadStream(upload1 <-chan int, factor float64, upload2 <-chan f
 
 func runHTTPServer(address string, hub signalr.HubInterface) {
 	server, _ := signalr.NewServer(context.TODO(), signalr.SimpleHubFactory(hub),
-		signalr.SetCorsOptions(cors.Options{
-			AllowedOrigins: []string{"http://foo.com", "http://foo.com:8080"},
-			AllowCredentials: true,
-			// Enable Debugging for testing, consider disabling in production
-			Debug: true,
-		}),
+		signalr.InsecureSkipVerify(true),
+		//signalr.AllowOriginPatterns([]string {}),
 		signalr.KeepAliveInterval(2*time.Second),
 		signalr.Logger(kitlog.NewLogfmtLogger(os.Stderr), true))
 	router := http.NewServeMux()

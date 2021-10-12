@@ -114,10 +114,12 @@ func (h *httpMux) handleServerSentEvent(writer http.ResponseWriter, request *htt
 }
 
 func (h *httpMux) handleWebsocket(writer http.ResponseWriter, request *http.Request) {
-	websocketConn, err := websocket.Accept(writer, request,
-		// Reuse compression sliding window. Should cause better compression with repetitive signalr messages
-		&websocket.AcceptOptions{CompressionMode: websocket.CompressionContextTakeover},
-	)
+	accOptions := &websocket.AcceptOptions{
+		CompressionMode: websocket.CompressionContextTakeover,
+		InsecureSkipVerify: h.server.insecureSkipVerify(),
+		OriginPatterns:  h.server.originPatterns(),
+	}
+	websocketConn, err := websocket.Accept(writer, request, accOptions)
 	if err != nil {
 		_, debug := h.server.loggers()
 		_ = debug.Log(evt, "handleWebsocket", msg, "error accepting websockets", "error", err)
