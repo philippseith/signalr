@@ -125,7 +125,7 @@ func (c *chat) UploadStream(upload1 <-chan int, factor float64, upload2 <-chan f
 func runHTTPServer(address string, hub signalr.HubInterface) {
 	server, _ := signalr.NewServer(context.TODO(), signalr.SimpleHubFactory(hub),
 		signalr.InsecureSkipVerify(true),
-		//signalr.AllowOriginPatterns([]string {}),
+	//	signalr.AllowOriginPatterns([]string {}),
 		signalr.KeepAliveInterval(2*time.Second),
 		signalr.Logger(kitlog.NewLogfmtLogger(os.Stderr), true))
 	router := http.NewServeMux()
