@@ -58,3 +58,21 @@ func HTTPTransports(transports ...string) func(Party) error {
 		return errors.New("option Transports is server only")
 	}
 }
+
+// InsecureSkipVerify disables Accepts origin verification behaviour which is used to avoid same origin strategy.
+// See https://pkg.go.dev/nhooyr.io/websocket#AcceptOptions
+func InsecureSkipVerify(skip bool) func(Party) error {
+	return func(p Party) error {
+		p.setInsecureSkipVerify(skip)
+		return nil
+	}
+}
+
+// AllowOriginPatterns lists the host patterns for authorized origins which is used for avoid same origin strategy.
+// See https://pkg.go.dev/nhooyr.io/websocket#AcceptOptions
+func AllowOriginPatterns(origins []string) func(Party) error {
+	return func(p Party) error {
+		p.setOriginPatterns(origins)
+		return nil
+	}
+}

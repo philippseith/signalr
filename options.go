@@ -43,24 +43,8 @@ func KeepAliveInterval(interval time.Duration) func(Party) error {
 	}
 }
 
-// InsecureSkipVerify is disable Accept's origin verification behaviour, is used fo avoid smae origin  strategy
-func InsecureSkipVerify(skip bool) func(Party) error {
-	return func(p Party) error {
-		p.setInsecureSkipVerify(skip)
-		return nil
-	}
-}
-
-//  AllowOriginPatterns lists the host patterns for authorized origins, is used for avoid same origin strategy
-func AllowOriginPatterns(origins []string) func(Party) error {
-	return func(p Party) error {
-		p.setOriginPatterns(origins)
-		return nil
-	}
-}
-
 // StreamBufferCapacity is the maximum number of items that can be buffered for client upload streams.
-// If this limit is reached, the processing of invocations is blocked until the the server processes stream items.
+// If this limit is reached, the processing of invocations is blocked until the server processes stream items.
 // Default is 10.
 func StreamBufferCapacity(capacity uint) func(Party) error {
 	return func(p Party) error {
