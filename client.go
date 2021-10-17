@@ -10,7 +10,10 @@ import (
 	"reflect"
 	"sync"
 
-	"github.com/go-kit/log"
+
+	"github.com/teivah/onecontext"
+
+  "github.com/go-kit/log"
 )
 
 // Client is the signalR connection used on the client side.
@@ -18,6 +21,9 @@ import (
 // Start starts the client loop. After starting the client, the interaction with a server can be started.
 //  Stop() error
 // Stop stops the client loop.
+//  Context() context.Context
+// Context returns a Context that is canceled when the client loop ends. Context().Err() is the error which caused
+// the loop to end.
 //  Invoke(method string, arguments ...interface{}) <-chan InvokeResult
 // Invoke invokes a method on the server and returns a channel wich will return the InvokeResult.
 // When failing, InvokeResult.Error contains the client side error.
@@ -34,7 +40,7 @@ type Client interface {
 	Party
 	Start() error
 	Stop() error
-	Closed() <-chan struct{}
+	Context() context.Context
 	Invoke(method string, arguments ...interface{}) <-chan InvokeResult
 	Send(method string, arguments ...interface{}) <-chan error
 	PullStream(method string, arguments ...interface{}) <-chan InvokeResult
@@ -62,14 +68,15 @@ func NewClient(ctx context.Context, conn Connection, options ...func(Party) erro
 
 type client struct {
 	partyBase
-	conn      Connection
-	closed    chan struct{}
-	format    string
-	loop      *loop
-	receiver  interface{}
-	lastID    int64
-	loopMx    sync.Mutex
-	loopEnded bool
+	conn       Connection
+	loopCtx    *clientContext
+	cancelLoop context.CancelFunc
+	format     string
+	loop       *loop
+	receiver   interface{}
+	lastID     int64
+	loopMx     sync.Mutex
+	loopEnded  bool
 }
 
 func (c *client) Start() error {
@@ -78,29 +85,37 @@ func (c *client) Start() error {
 		return err
 	}
 
-	c.loop = newLoop(c, c.conn, protocol)
-	c.closed = make(chan struct{}, 1)
 	started := make(chan struct{}, 1)
 
 	go func(c *client, started chan struct{}) {
-		c.loop.Run(started)
+		c.loopMx.Lock()
+		ctx, cancel := onecontext.Merge(c.ctx, c.conn.Context())
+		c.loopCtx = &clientContext{Context: ctx}
+		c.cancelLoop = cancel
+		c.loop = newLoop(c, c.conn, protocol)
+		c.loopMx.Unlock()
+
+		c.loopCtx.SetErr(c.loop.Run(started))
+
 		c.loopMx.Lock()
 		c.loopEnded = true
+		c.cancelLoop()
 		c.loopMx.Unlock()
-		close(c.closed)
 	}(c, started)
+
 	<-started
+
 	return nil
 }
 
 func (c *client) Stop() error {
 	err := c.loop.hubConn.Close("", false)
-	c.cancel()
+	c.cancelLoop()
 	return err
 }
 
-func (c *client) Closed() <-chan struct{} {
-	return c.closed
+func (c *client) Context() context.Context {
+	return c.loopCtx
 }
 
 func (c *client) Invoke(method string, arguments ...interface{}) <-chan InvokeResult {

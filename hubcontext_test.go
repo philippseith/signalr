@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	. "github.com/onsi/ginkgo"
@@ -86,11 +87,21 @@ func connectMany() (Server, []*testingConnection, []string) {
 	connIds := make([]string, 0)
 	for i := 0; i < 3; i++ {
 		conns[i] = newTestingConnectionForServer()
-		go server.Serve(conns[i])
+
+	}
+	var wg sync.WaitGroup
+	wg.Add(3)
+	for i := 0; i < 3; i++ {
+		go func(i int) {
+			wg.Done()
+			_ = server.Serve(conns[i])
+		}(i)
+	}
+	wg.Wait()
+	for i := 0; i < 3; i++ {
 		// Ensure to return all connection with connected hubs
 		connIds = append(connIds, <-hubContextOnConnectMsg)
 	}
-
 	return server, conns, connIds
 }
 
@@ -385,9 +396,9 @@ var _ = Describe("Abort()", func() {
 			StreamBufferCapacity(5))
 		Expect(err).NotTo(HaveOccurred())
 		conn0 := newTestingConnectionForServer()
-		go server.Serve(conn0)
+		go func() { _ = server.Serve(conn0) }()
 		conn1 := newTestingConnectionForServer()
-		go server.Serve(conn1)
+		go func() { _ = server.Serve(conn1) }()
 		conn0.ClientSend(`{"type":1,"invocationId": "ab0ab0","target":"abort"}`)
 		// Wait for execution
 		Expect(<-hubContextInvocationQueue).To(Equal("Abort()"))

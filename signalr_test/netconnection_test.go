@@ -40,7 +40,7 @@ var _ = Describe("NetConnection", func() {
 				for {
 					tcpConn, err := listener.Accept()
 					Expect(err).NotTo(HaveOccurred())
-					go server.Serve(signalr.NewNetConnection(ctx, tcpConn))
+					go func() { _ = server.Serve(signalr.NewNetConnection(ctx, tcpConn)) }()
 					break
 				}
 			}()

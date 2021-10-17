@@ -102,7 +102,7 @@ func (h *httpMux) handleServerSentEvent(writer http.ResponseWriter, request *htt
 			if sseConn, err := newServerSSEConnection(h.server.context(), request.Context(), c.ConnectionID(), writer); err != nil {
 				writer.WriteHeader(500) // Internal server error
 			} else {
-				h.serveConnection(sseConn)
+				_ = h.serveConnection(sseConn)
 			}
 		} else {
 			// connectionID in use
@@ -142,7 +142,7 @@ func (h *httpMux) handleWebsocket(writer http.ResponseWriter, request *http.Requ
 	if ok {
 		if _, ok := c.(*negotiateConnection); ok {
 			// Connection is negotiated but not initiated
-			h.serveConnection(newWebSocketConnection(h.server.context(), request.Context(), c.ConnectionID(), websocketConn))
+			_ = h.serveConnection(newWebSocketConnection(h.server.context(), request.Context(), c.ConnectionID(), websocketConn))
 		} else {
 			// Already initiated
 			_ = websocketConn.Close(409, "Bad request")
@@ -202,11 +202,11 @@ func (h *httpMux) negotiate(w http.ResponseWriter, req *http.Request) {
 	}
 }
 
-func (h *httpMux) serveConnection(c Connection) {
+func (h *httpMux) serveConnection(c Connection) error {
 	h.mx.Lock()
 	h.connectionMap[c.ConnectionID()] = c
 	h.mx.Unlock()
-	h.server.Serve(c)
+	return h.server.Serve(c)
 }
 
 func newConnectionID() string {

@@ -42,16 +42,15 @@ func newLoop(p Party, conn Connection, protocol hubProtocol) *loop {
 	}
 }
 
-var closeMessageError = errors.New("CloseMessage received")
+var errCloseMessage = errors.New("CloseMessage received")
 
 // Run runs the loop. After the startup sequence is done, this is signaled over the started channel.
 // Callers should pass a channel with buffer size 1 to allow the loop to run without waiting for the caller.
-func (l *loop) Run(started chan struct{}) {
+func (l *loop) Run(started chan struct{}) (err error) {
 	l.party.onConnected(l.hubConn)
 	started <- struct{}{}
 	close(started)
 	// Process messages
-	var err error
 	ch := make(chan receiveResult, 1)
 	go func() {
 		recv := l.hubConn.Receive()
@@ -93,7 +92,7 @@ msgLoop:
 					case closeMessage:
 						_ = l.dbg.Log(evt, msgRecv, msg, fmtMsg(message))
 						// Bogus error to break the msgLoop
-						err = closeMessageError
+						err = errCloseMessage
 					case hubMessage:
 						// Mostly ping
 						err = l.handleOtherMessage(message)
@@ -126,12 +125,16 @@ msgLoop:
 	}
 	l.party.onDisconnected(l.hubConn)
 	// Don't send CloseMessage if we received a CloseMessage
-	if err != closeMessageError {
+	if !errors.Is(err, errCloseMessage) {
 		_ = l.hubConn.Close(fmt.Sprintf("%v", err), l.party.allowReconnect())
 	}
 	_ = l.dbg.Log(evt, "message loop ended")
 	l.invokeClient.cancelAllInvokes()
 	l.hubConn.Abort()
+	if !errors.Is(err, errCloseMessage) {
+		return err
+	}
+	return nil
 }
 
 func (l *loop) PullStream(method, id string, arguments ...interface{}) <-chan InvokeResult {

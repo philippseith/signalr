@@ -104,6 +104,10 @@ func (s *simpleHub) ReceiveStream(arg string, ch <-chan int) {
 	}(ch, s.receiveStreamDone)
 }
 
+func (s *simpleHub) Abort() {
+	s.Hub.Abort()
+}
+
 type simpleReceiver struct {
 	result atomic.Value
 }
@@ -114,8 +118,8 @@ func (s *simpleReceiver) OnCallback(result string) {
 
 var _ = Describe("Client", func() {
 	formatOption := TransferFormat("Text")
-	Context("Start", func() {
-		It("should connect to the server", func(done Done) {
+	Context("Start/Stop", func() {
+		It("should connect to the server and then be stopped without error", func(done Done) {
 			// Create a simple server
 			server, err := NewServer(context.TODO(), SimpleHubFactory(&simpleHub{}),
 				testLoggerOption(),
@@ -126,7 +130,7 @@ var _ = Describe("Client", func() {
 			// Create both ends of the connection
 			cliConn, srvConn := newClientServerConnections()
 			// Start the server
-			go server.Serve(srvConn)
+			go func() { _ = server.Serve(srvConn) }()
 			// Create the Client
 			clientConn, err := NewClient(context.TODO(), cliConn, testLoggerOption(), formatOption)
 			Expect(err).NotTo(HaveOccurred())
@@ -153,7 +157,7 @@ var _ = Describe("Client", func() {
 			// Create both ends of the connection
 			cliConn, srvConn = newClientServerConnections()
 			// Start the server
-			go server.Serve(srvConn)
+			go func() { _ = server.Serve(srvConn) }()
 			// Create the Client
 			client, _ = NewClient(context.TODO(), cliConn, Receiver(simpleReceiver{}), testLoggerOption(), formatOption)
 			// Start it
@@ -205,7 +209,7 @@ var _ = Describe("Client", func() {
 			// Create both ends of the connection
 			cliConn, srvConn = newClientServerConnections()
 			// Start the server
-			go server.Serve(srvConn)
+			go func() { _ = server.Serve(srvConn) }()
 			// Create the Client
 			client, _ = NewClient(context.TODO(), cliConn, Receiver(receiver), testLoggerOption(), formatOption)
 			// Start it
@@ -284,7 +288,7 @@ var _ = Describe("Client", func() {
 			// Create both ends of the connection
 			cliConn, srvConn = newClientServerConnections()
 			// Start the server
-			go server.Serve(srvConn)
+			go func() { _ = server.Serve(srvConn) }()
 			// Create the Client
 			receiver := &simpleReceiver{}
 			client, _ = NewClient(context.TODO(), cliConn, Receiver(receiver), testLoggerOption(), formatOption)
@@ -351,7 +355,7 @@ var _ = Describe("Client", func() {
 			// Create both ends of the connection
 			cliConn, srvConn = newClientServerConnections()
 			// Start the server
-			go server.Serve(srvConn)
+			go func() { _ = server.Serve(srvConn) }()
 			// Create the Client
 			receiver := &simpleReceiver{}
 			client, _ = NewClient(context.TODO(), cliConn, Receiver(receiver), testLoggerOption(), formatOption)
@@ -386,5 +390,43 @@ var _ = Describe("Client", func() {
 			Expect(err).To(HaveOccurred())
 			close(done)
 		}, 2.0)
+	})
+
+	Context("Reconnect", func() {
+		var cliConn *pipeConnection
+		var srvConn *pipeConnection
+		var client Client
+		var server Server
+		hub := &simpleHub{}
+		BeforeEach(func(done Done) {
+			hub.receiveStreamDone = make(chan struct{}, 1)
+			server, _ = NewServer(context.TODO(), HubFactory(func() HubInterface { return hub }),
+				testLoggerOption(),
+				ChanReceiveTimeout(200*time.Millisecond),
+				StreamBufferCapacity(5))
+			// Create both ends of the connection
+			cliConn, srvConn = newClientServerConnections()
+			// Start the server
+			go func() { _ = server.Serve(srvConn) }()
+			// Create the Client
+			receiver := &simpleReceiver{}
+			client, _ = NewClient(context.TODO(), cliConn, Receiver(receiver), testLoggerOption(), formatOption)
+			// Start it
+			_ = client.Start()
+			close(done)
+		}, 2.0)
+		AfterEach(func(done Done) {
+			_ = client.Stop()
+			server.cancel()
+			close(done)
+		}, 2.0)
+
+		It("client.Context.Err() should be the error which made the connection fail", func(done Done) {
+			failErr := errors.New("fail")
+			cliConn.fail.Store(failErr)
+			<-client.Context().Done()
+			Expect(client.Context().Err(), Equal(failErr))
+			close(done)
+		}, 6.0)
 	})
 })

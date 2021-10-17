@@ -109,7 +109,7 @@ var _ = Describe("Handshake", func() {
 	BeforeEach(func(done Done) {
 		server, _ = NewServer(context.TODO(), SimpleHubFactory(&handshakeHub{}), testLoggerOption())
 		conn = newTestingConnection()
-		go server.Serve(conn)
+		go func() { _ = server.Serve(conn) }()
 		close(done)
 	})
 	AfterEach(func(done Done) {
@@ -209,7 +209,7 @@ var _ = Describe("Handshake", func() {
 		It("should not be connected", func(done Done) {
 			server, _ := NewServer(context.TODO(), SimpleHubFactory(&handshakeHub{}), HandshakeTimeout(time.Millisecond*100), testLoggerOption())
 			conn := newTestingConnection()
-			go server.Serve(conn)
+			go func() { _ = server.Serve(conn) }()
 			time.Sleep(time.Millisecond * 200)
 			conn.ClientSend(`{"protocol": "json","version": 1}`)
 			conn.ClientSend(`{"type":1,"invocationId": "123H","target":"shake"}`)

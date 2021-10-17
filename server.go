@@ -30,7 +30,7 @@ import (
 type Server interface {
 	Party
 	MapHTTP(mux MappableRouter, path string)
-	Serve(conn Connection)
+	Serve(conn Connection) error
 	HubClients() HubClients
 	availableTransports() []string
 }
@@ -96,13 +96,14 @@ func (s *server) MapHTTP(mux MappableRouter, path string) {
 
 // Serve serves the hub of the server on one connection.
 // The same server might serve different connections in parallel. Serve does not return until the connection is closed
-// or the servers context is canceled.
-func (s *server) Serve(conn Connection) {
+// or the servers' context is canceled.
+func (s *server) Serve(conn Connection) error {
 	if protocol, err := s.processHandshake(conn); err != nil {
 		info, _ := s.prefixLoggers("")
 		_ = info.Log(evt, "processHandshake", "connectionId", conn.ConnectionID(), "error", err, react, "do not connect")
+		return err
 	} else {
-		newLoop(s, conn, protocol).Run(make(chan struct{}, 1))
+		return newLoop(s, conn, protocol).Run(make(chan struct{}, 1))
 	}
 }
 
