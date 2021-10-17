@@ -24,6 +24,8 @@ import (
 //  Context() context.Context
 // Context returns a Context that is canceled when the client loop ends. Context().Err() is the error which caused
 // the loop to end.
+// If the loop was ended by a CloseMessage, Context().Err() is nil. Note that this is a deviation from
+// the normal context.Context.Err() behavior.
 //  Invoke(method string, arguments ...interface{}) <-chan InvokeResult
 // Invoke invokes a method on the server and returns a channel wich will return the InvokeResult.
 // When failing, InvokeResult.Error contains the client side error.
