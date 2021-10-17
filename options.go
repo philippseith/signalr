@@ -45,17 +45,17 @@ func KeepAliveInterval(interval time.Duration) func(Party) error {
 
 // InsecureSkipVerify is disable Accept's origin verification behaviour, is used fo avoid smae origin  strategy
 func InsecureSkipVerify(skip bool) func(Party) error {
-	  return  func(p Party) error  {
+	return func(p Party) error {
 		p.setInsecureSkipVerify(skip)
-		return  nil
+		return nil
 	}
 }
 
 //  AllowOriginPatterns lists the host patterns for authorized origins, is used for avoid same origin strategy
 func AllowOriginPatterns(origins []string) func(Party) error {
-	return  func(p Party) error  {
+	return func(p Party) error {
 		p.setOriginPatterns(origins)
-		return  nil
+		return nil
 	}
 }
 
@@ -95,7 +95,8 @@ func ChanReceiveTimeout(timeout time.Duration) func(Party) error {
 	}
 }
 
-// EnableDetailedErrors: If true, detailed exception messages are returned to the other Party when an exception is thrown in a Hub method.
+// EnableDetailedErrors If true, detailed exception messages are returned to the other
+// Party when an exception is thrown in a Hub method.
 // The default is false, as these exception messages can contain sensitive information.
 func EnableDetailedErrors(enable bool) func(Party) error {
 	return func(p Party) error {
