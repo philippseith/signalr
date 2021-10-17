@@ -26,6 +26,12 @@ type Party interface {
 	keepAliveInterval() time.Duration
 	setKeepAliveInterval(interval time.Duration)
 
+	insecureSkipVerify() bool
+	setInsecureSkipVerify(skip bool)
+
+	originPatterns()   [] string
+	setOriginPatterns(orgs []string)
+
 	chanReceiveTimeout() time.Duration
 	setChanReceiveTimeout(interval time.Duration)
 
@@ -58,6 +64,8 @@ func newPartyBase(parentContext context.Context, info log.Logger, dbg log.Logger
 		_streamBufferCapacity:      10,
 		_maximumReceiveMessageSize: 1 << 15, // 32KB
 		_enableDetailedErrors:      false,
+		_insecureSkipVerify:        false,
+		_originPatterns:            nil,
 		info:                       info,
 		dbg:                        dbg,
 	}
@@ -73,6 +81,8 @@ type partyBase struct {
 	_streamBufferCapacity      uint
 	_maximumReceiveMessageSize uint
 	_enableDetailedErrors      bool
+	_insecureSkipVerify		   bool
+	_originPatterns             []string
 	info                       StructuredLogger
 	dbg                        StructuredLogger
 }
@@ -107,6 +117,20 @@ func (p *partyBase) keepAliveInterval() time.Duration {
 
 func (p *partyBase) setKeepAliveInterval(interval time.Duration) {
 	p._keepAliveInterval = interval
+}
+
+func (p *partyBase) insecureSkipVerify() bool {
+	return  p._insecureSkipVerify
+}
+func (p *partyBase) setInsecureSkipVerify(skip bool) {
+	p._insecureSkipVerify = skip
+}
+
+func (p *partyBase) originPatterns() []string {
+	return  p._originPatterns
+}
+func (p *partyBase) setOriginPatterns(origins  []string) {
+	p._originPatterns = origins
 }
 
 func (p *partyBase) chanReceiveTimeout() time.Duration {
