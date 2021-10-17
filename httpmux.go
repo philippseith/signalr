@@ -90,6 +90,11 @@ func (h *httpMux) handleServerSentEvent(writer http.ResponseWriter, request *htt
 	h.mx.Unlock()
 	if ok {
 		if _, ok := c.(*negotiateConnection); ok {
+			sseConn, err := newServerSSEConnection(h.server.context(), request.Context(), c.ConnectionID(), writer)
+			if err != nil {
+				writer.WriteHeader(500)
+				return
+			}
 			// Connection is negotiated but not initiated
 			// We compose http and send it over sse
 			writer.Header().Set("Content-Type", "text/event-stream")
@@ -99,14 +104,8 @@ func (h *httpMux) handleServerSentEvent(writer http.ResponseWriter, request *htt
 			// End this Server Sent Event (yes, your response now is one and the client will wait for this initial event to end)
 			_, _ = fmt.Fprint(writer, ":\r\n\r\n")
 			writer.(http.Flusher).Flush()
-			if sseConn, err := newServerSSEConnection(h.server.context(), request.Context(), c.ConnectionID(), writer); err != nil {
-				writer.WriteHeader(500) // Internal server error
-			} else {
-				err = h.serveConnection(sseConn)
-				if err != nil {
-					writer.WriteHeader(500)
-				}
-			}
+			_ = h.serveConnection(sseConn)
+			// We can't WriteHeader 500 if we get an error as we already wrote the header, so ignore it.
 		} else {
 			// connectionID in use
 			writer.WriteHeader(409) // Conflict
