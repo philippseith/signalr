@@ -2,7 +2,7 @@
 
 <body>
     <input type="text" id="message" />
-    <input type="button" value="Send" id="send" />
+    <input type="button" value="Broadcast" id="broadcast" />
     <input type="button" value="Echo" id="echo" />
     <input type="button" value="Panic" id="panic" />
     <input type="button" value="RequestTuple" id="requesttuple" />
@@ -10,7 +10,8 @@
     <input type="button" value="Stream" id="stream" />
     <input type="button" value="Stop Stream" id="stopstream" />
     <input type="button" value="Upstream" id="upstream" />
-    <input type="button" value="Stop/Start" id="stop" />
+    <input type="button" value="Stop/Start Client Connection" id="stop" />
+    <input type="button" value="Abort Server Connection" id="abort" />
     <ul id="messages">
     </ul>
 
@@ -22,10 +23,10 @@
                 .withUrl('/chat')
                 .build();
 
-            document.getElementById('send').addEventListener('click', () => {
+            document.getElementById('broadcast').addEventListener('click', () => {
                 var val = document.getElementById('message').value;
                 if (val) {
-                    connection.invoke('send', val);
+                    connection.invoke('broadcast', val);
                 }
             });
             document.getElementById('echo').addEventListener('click', () => {
@@ -109,6 +110,9 @@
                 connection.stop().then(() => {
                     connection.start();
                 });
+            });
+            document.getElementById('abort').addEventListener('click', () => {
+                connection.send('abort')
             });
             connection.on('receive', message => {
                 var li = document.createElement('li');

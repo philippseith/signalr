@@ -4,13 +4,14 @@ import (
 	"context"
 	_ "embed"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"net/http"
-	"os"
 	"strings"
 	"time"
 
 	kitlog "github.com/go-kit/log"
+
 	"github.com/philippseith/signalr"
 	"github.com/philippseith/signalr/chatsample/middleware"
 	"github.com/philippseith/signalr/chatsample/public"
@@ -30,7 +31,8 @@ func (c *chat) OnDisconnected(connectionID string) {
 	c.Groups().RemoveFromGroup("group", connectionID)
 }
 
-func (c *chat) Send(message string) {
+func (c *chat) Broadcast(message string) {
+	// Broadcast to all clients
 	c.Clients().Group("group").Send("receive", message)
 }
 
@@ -98,6 +100,10 @@ func (c *chat) UploadStream(upload1 <-chan int, factor float64, upload2 <-chan f
 	}
 }
 
+func (c *chat) Abort() {
+	c.Hub.Abort()
+}
+
 //func runTCPServer(address string, hub signalr.HubInterface) {
 //	listener, err := net.Listen("tcp", address)
 //
@@ -124,10 +130,8 @@ func (c *chat) UploadStream(upload1 <-chan int, factor float64, upload2 <-chan f
 
 func runHTTPServer(address string, hub signalr.HubInterface) {
 	server, _ := signalr.NewServer(context.TODO(), signalr.SimpleHubFactory(hub),
-		signalr.InsecureSkipVerify(true),
-	//	signalr.AllowOriginPatterns([]string {}),
-		signalr.KeepAliveInterval(2*time.Second),
-		signalr.Logger(kitlog.NewLogfmtLogger(os.Stderr), true))
+		signalr.Logger(kitlog.NewLogfmtLogger(ioutil.Discard), false),
+		signalr.KeepAliveInterval(2*time.Second))
 	router := http.NewServeMux()
 	server.MapHTTP(router, "/chat")
 
@@ -139,27 +143,56 @@ func runHTTPServer(address string, hub signalr.HubInterface) {
 	}
 }
 
-//func runHTTPClient(address string, client interface{}) {
-//	c, _ := signalr.NewHTTPClient(context.TODO(), address) // hubProtocol is determined inside
-//	c.SetReceiver(client)
-//	c.Start()
-//}
+func runHTTPClient(address string, receiver interface{}) error {
+	for {
+		conn, err := signalr.NewHTTPConnection(context.Background(), address)
+		if err != nil {
+			return err
+		}
+		c, err := signalr.NewClient(context.Background(), conn,
+			signalr.Receiver(receiver),
+			signalr.Logger(kitlog.NewLogfmtLogger(ioutil.Discard), false))
+		if err != nil {
+			return err
+		}
+		err = c.Start()
+		fmt.Println("Client started")
+		if err != nil {
+			return err
+		}
+		// The silly client urges the server to end his connection after 10 seconds
+		go func() {
+			<-time.After(10 * time.Second)
+			c.Send("abort")
+		}()
+		// Wait for the inevitable
+		<-c.Context().Done()
+		// Wenn the server closed the connection, on client side no error occurred. So err is nil
+		err = c.Context().Err()
+		if err != nil {
+			return err
+		}
+		fmt.Println("Restarting client...")
+	}
+}
 
-//type client struct {
-//	signalr.Hub
-//}
-//
-//func (c *client) Receive(msg string) {
-//	fmt.Println(msg)
-//}
+type receiver struct {
+	signalr.Hub
+}
+
+func (c *receiver) Receive(msg string) {
+	fmt.Println(msg)
+}
 
 func main() {
 	hub := &chat{}
 
 	//go runTCPServer("127.0.0.1:8007", hub)
 	go runHTTPServer("localhost:8086", hub)
-	//<-time.After(time.Millisecond * 2)
-	//go runHTTPClient("http://localhost:8086/chat", &client{})
+	<-time.After(time.Millisecond * 2)
+	go func() {
+		fmt.Println(runHTTPClient("http://localhost:8086/chat", &receiver{}))
+	}()
 	ch := make(chan struct{})
 	<-ch
 }

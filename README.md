@@ -20,9 +20,10 @@ Protocol encoding in JSON is fully supported, and there is MessagePack support f
     - [Server side](#server-side)
         - [Implement the HubInterface](#implement-the-hubinterface)
         - [Serve with http.ServeMux](#serve-with-httpservemux)
-    - [Client side](#client-side)
+    - [Client side: JavaScript/TypeScript](#client-side-javascripttypescript)
         - [Grab copies of the signalr scripts](#grab-copies-of-the-signalr-scripts)
         - [Use a HubConnection to connect to your server Hub](#use-a-hubconnection-to-connect-to-your-server-hub)
+    - [Client side: go](#client-side-go)
 - [Debugging](#debugging)
 
 ## Install
@@ -124,7 +125,7 @@ func runHTTPServer() {
 }
 ```
 
-### Client side
+### Client side: JavaScript/TypeScript
 
 #### Grab copies of the signalr scripts
 
@@ -224,7 +225,61 @@ How you format your client UI is going to depend on your application use case bu
 </html>
 ```
 
-### Debugging
+### Client side: go
+
+To handle callbacks from the server, create a receiver class which gets the server callbacks mapped
+to its methods:
+```go
+type receiver struct {
+	signalr.Hub
+}
+
+func (c *receiver) Receive(msg string) {
+	fmt.Println(msg)
+}
+```
+`Receive` gets called when the server does something like this:
+```go
+hub.Clients().Caller().Send("receive", message)
+```
+
+The client itself might be used like that:
+```go
+// Endless loop to reconnect automatically
+for {
+    // Create a Connection
+    conn, err := signalr.NewHTTPConnection(ctx, address)
+    if err != nil {
+        return err
+    }
+    // Create the client and set a receiver for callbacks from the server
+    client, err := signalr.NewClient(ctx, conn, signalr.Receiver(receiver))
+    if err != nil {
+        return err
+    }
+    // Start the client loop
+    err = c.Start()
+    if err != nil {
+        return err
+    }
+	select {
+	// Outside signal to end the client
+	case <-context.Done(): 
+		return nil
+    // Wait for the client loop to end
+    case <-client.Context().Done(): 
+		// If the loop was ended by a CloseMessage, Context().Err() is nil. 
+        // Note that this is a deviation from the normal context.Context.Err() behavior.
+        err = client.Context().Err()
+        if err != nil {
+            return err
+        }
+    }
+}
+```
+If yor client should not support auto reconnect, just remove the endless loop.
+
+## Debugging
 
 Server, Client and the protocol implementations are able to log most of their operations. The logging option is disabled
 by default in all tests. To configure logging, edit the `testLogConf.json` file:
