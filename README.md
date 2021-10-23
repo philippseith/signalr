@@ -262,13 +262,13 @@ for {
     if err != nil {
         return err
     }
-	select {
-	// Outside signal to end the client
-	case <-context.Done(): 
-		return nil
+    select {
+    // Outside signal to end the client
+    case <-context.Done(): 
+    	return nil
     // Wait for the client loop to end
-    case <-client.Context().Done(): 
-		// If the loop was ended by a CloseMessage, Context().Err() is nil. 
+    case <-client.Context().Done():
+    	// If the loop was ended by a CloseMessage, Context().Err() is nil. 
         // Note that this is a deviation from the normal context.Context.Err() behavior.
         err = client.Context().Err()
         if err != nil {
