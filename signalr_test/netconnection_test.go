@@ -2,6 +2,7 @@ package signalr_test
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"testing"
@@ -28,7 +29,6 @@ func (n *NetHub) Smoke() string {
 var _ = Describe("NetConnection", func() {
 	Context("Smoke", func() {
 		It("should transport a simple invocation over raw rcp", func(done Done) {
-			var ctx context.Context
 			ctx, cancel := context.WithCancel(context.Background())
 			server, err := signalr.NewServer(ctx, signalr.SimpleHubFactory(&NetHub{}), testLoggerOption())
 			Expect(err).NotTo(HaveOccurred())
@@ -50,17 +50,16 @@ var _ = Describe("NetConnection", func() {
 					fmt.Sprintf("localhost:%v", listener.Addr().(*net.TCPAddr).Port)); err == nil {
 					client, err = signalr.NewClient(ctx, signalr.NewNetConnection(ctx, clientConn), testLoggerOption())
 					Expect(err).NotTo(HaveOccurred())
-
 					break
 				}
 				time.Sleep(100 * time.Millisecond)
 			}
-			err = client.Start()
-			Expect(err).NotTo(HaveOccurred())
+			go func() {
+				defer GinkgoRecover()
+				Expect(errors.Is(<-client.Start(), context.Canceled)).To(BeTrue())
+			}()
 			result := <-client.Invoke("smoke")
 			Expect(result.Value).To(Equal("no smoke!"))
-			err = client.Stop()
-			Expect(err).NotTo(HaveOccurred())
 			cancel()
 			close(done)
 		})

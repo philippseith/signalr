@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"net"
@@ -107,13 +108,18 @@ var _ = Describe("HTTP server", func() {
 					// Try first connection
 					conn, err := NewHTTPConnection(context.TODO(), fmt.Sprintf("http://127.0.0.1:%v/hub", port))
 					Expect(err).NotTo(HaveOccurred())
-					client, err := NewClient(context.TODO(),
+					ctx, cancelClient := context.WithCancel(context.Background())
+					client, err := NewClient(ctx,
 						conn,
 						Logger(logger, true),
 						TransferFormat(transport[1]))
 					Expect(err).NotTo(HaveOccurred())
 					Expect(client).NotTo(BeNil())
-					err = client.Start()
+					errCh := client.Start()
+					go func() {
+						defer GinkgoRecover()
+						Expect(errors.Is(<-errCh, context.Canceled)).To(BeTrue())
+					}()
 					Expect(err).NotTo(HaveOccurred())
 					result := <-client.Invoke("Add2", 1)
 					Expect(result.Error).NotTo(HaveOccurred())
@@ -122,7 +128,8 @@ var _ = Describe("HTTP server", func() {
 					// Try second connection
 					conn2, err := NewHTTPConnection(context.TODO(), fmt.Sprintf("http://127.0.0.1:%v/hub", port))
 					Expect(err).NotTo(HaveOccurred())
-					client2, err := NewClient(context.TODO(),
+					ctx2, cancelClient2 := context.WithCancel(context.Background())
+					client2, err := NewClient(ctx2,
 						conn2,
 						Logger(logger, true),
 						TransferFormat(transport[1]))
@@ -138,6 +145,8 @@ var _ = Describe("HTTP server", func() {
 					Expect(result.Error).NotTo(HaveOccurred())
 					s := result.Value.(string)
 					Expect(s).To(Equal(hugo))
+					cancelClient()
+					cancelClient2()
 					close(done)
 				}, 10.0)
 			})

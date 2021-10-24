@@ -118,7 +118,7 @@ func (s *simpleReceiver) OnCallback(result string) {
 
 var _ = Describe("Client", func() {
 	formatOption := TransferFormat("Text")
-	Context("Start/Stop", func() {
+	Context("Start/Cancel", func() {
 		It("should connect to the server and then be stopped without error", func(done Done) {
 			// Create a simple server
 			server, err := NewServer(context.TODO(), SimpleHubFactory(&simpleHub{}),
@@ -132,14 +132,20 @@ var _ = Describe("Client", func() {
 			// Start the server
 			go func() { _ = server.Serve(srvConn) }()
 			// Create the Client
-			clientConn, err := NewClient(context.TODO(), cliConn, testLoggerOption(), formatOption)
+			ctx, cancelClient := context.WithCancel(context.Background())
+			clientConn, err := NewClient(ctx, cliConn, testLoggerOption(), formatOption)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(clientConn).NotTo(BeNil())
 			// Start it
-			err = clientConn.Start()
-			Expect(err).NotTo(HaveOccurred())
-			err = clientConn.Stop()
-			Expect(err).NotTo(HaveOccurred())
+			errCh := clientConn.Start()
+			clientLoopDone := make(chan struct{})
+			go func() {
+				defer GinkgoRecover()
+				Expect(errors.Is(<-errCh, context.Canceled)).To(BeTrue())
+				close(clientLoopDone)
+			}()
+			cancelClient()
+			<-clientLoopDone
 			server.cancel()
 			close(done)
 		}, 1.0)
@@ -148,6 +154,7 @@ var _ = Describe("Client", func() {
 		var cliConn *pipeConnection
 		var srvConn *pipeConnection
 		var client Client
+		var cancelClient context.CancelFunc
 		var server Server
 		BeforeEach(func(done Done) {
 			server, _ = NewServer(context.TODO(), SimpleHubFactory(&simpleHub{}),
@@ -159,13 +166,15 @@ var _ = Describe("Client", func() {
 			// Start the server
 			go func() { _ = server.Serve(srvConn) }()
 			// Create the Client
-			client, _ = NewClient(context.TODO(), cliConn, Receiver(simpleReceiver{}), testLoggerOption(), formatOption)
+			var ctx context.Context
+			ctx, cancelClient = context.WithCancel(context.Background())
+			client, _ = NewClient(ctx, cliConn, Receiver(simpleReceiver{}), testLoggerOption(), formatOption)
 			// Start it
 			_ = client.Start()
 			close(done)
 		}, 2.0)
 		AfterEach(func(done Done) {
-			_ = client.Stop()
+			cancelClient()
 			server.cancel()
 			close(done)
 		}, 2.0)
@@ -199,6 +208,7 @@ var _ = Describe("Client", func() {
 		var cliConn *pipeConnection
 		var srvConn *pipeConnection
 		var client Client
+		var cancelClient context.CancelFunc
 		receiver := &simpleReceiver{}
 		var server Server
 		BeforeEach(func(done Done) {
@@ -211,13 +221,15 @@ var _ = Describe("Client", func() {
 			// Start the server
 			go func() { _ = server.Serve(srvConn) }()
 			// Create the Client
-			client, _ = NewClient(context.TODO(), cliConn, Receiver(receiver), testLoggerOption(), formatOption)
+			var ctx context.Context
+			ctx, cancelClient = context.WithCancel(context.Background())
+			client, _ = NewClient(ctx, cliConn, Receiver(receiver), testLoggerOption(), formatOption)
 			// Start it
 			_ = client.Start()
 			close(done)
 		}, 2.0)
 		AfterEach(func(done Done) {
-			_ = client.Stop()
+			cancelClient()
 			server.cancel()
 			close(done)
 		}, 2.0)
@@ -279,6 +291,7 @@ var _ = Describe("Client", func() {
 		var cliConn *pipeConnection
 		var srvConn *pipeConnection
 		var client Client
+		var cancelClient context.CancelFunc
 		var server Server
 		BeforeEach(func(done Done) {
 			server, _ = NewServer(context.TODO(), SimpleHubFactory(&simpleHub{}),
@@ -291,13 +304,15 @@ var _ = Describe("Client", func() {
 			go func() { _ = server.Serve(srvConn) }()
 			// Create the Client
 			receiver := &simpleReceiver{}
-			client, _ = NewClient(context.TODO(), cliConn, Receiver(receiver), testLoggerOption(), formatOption)
+			var ctx context.Context
+			ctx, cancelClient = context.WithCancel(context.Background())
+			client, _ = NewClient(ctx, cliConn, Receiver(receiver), testLoggerOption(), formatOption)
 			// Start it
 			_ = client.Start()
 			close(done)
 		}, 2.0)
 		AfterEach(func(done Done) {
-			_ = client.Stop()
+			cancelClient()
 			server.cancel()
 			close(done)
 		}, 2.0)
@@ -344,6 +359,7 @@ var _ = Describe("Client", func() {
 		var cliConn *pipeConnection
 		var srvConn *pipeConnection
 		var client Client
+		var cancelClient context.CancelFunc
 		var server Server
 		hub := &simpleHub{}
 		BeforeEach(func(done Done) {
@@ -358,13 +374,15 @@ var _ = Describe("Client", func() {
 			go func() { _ = server.Serve(srvConn) }()
 			// Create the Client
 			receiver := &simpleReceiver{}
-			client, _ = NewClient(context.TODO(), cliConn, Receiver(receiver), testLoggerOption(), formatOption)
+			var ctx context.Context
+			ctx, cancelClient = context.WithCancel(context.Background())
+			client, _ = NewClient(ctx, cliConn, Receiver(receiver), testLoggerOption(), formatOption)
 			// Start it
 			_ = client.Start()
 			close(done)
 		}, 2.0)
 		AfterEach(func(done Done) {
-			_ = client.Stop()
+			cancelClient()
 			server.cancel()
 			close(done)
 		}, 2.0)
@@ -396,6 +414,7 @@ var _ = Describe("Client", func() {
 		var cliConn *pipeConnection
 		var srvConn *pipeConnection
 		var client Client
+		var cancelClient context.CancelFunc
 		var server Server
 		hub := &simpleHub{}
 		BeforeEach(func(done Done) {
@@ -410,23 +429,18 @@ var _ = Describe("Client", func() {
 			go func() { _ = server.Serve(srvConn) }()
 			// Create the Client
 			receiver := &simpleReceiver{}
-			client, _ = NewClient(context.TODO(), cliConn, Receiver(receiver), testLoggerOption(), formatOption)
+			var ctx context.Context
+			ctx, cancelClient = context.WithCancel(context.Background())
+			client, _ = NewClient(ctx, cliConn, Receiver(receiver), testLoggerOption(), formatOption)
 			// Start it
 			_ = client.Start()
 			close(done)
 		}, 2.0)
 		AfterEach(func(done Done) {
-			_ = client.Stop()
+			cancelClient()
 			server.cancel()
 			close(done)
 		}, 2.0)
-
-		It("client.Context.Err() should be the error which made the connection fail", func(done Done) {
-			failErr := errors.New("fail")
-			cliConn.fail.Store(failErr)
-			<-client.Context().Done()
-			Expect(client.Context().Err(), Equal(failErr))
-			close(done)
-		}, 6.0)
+		// TODO
 	})
 })

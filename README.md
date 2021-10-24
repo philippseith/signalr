@@ -245,39 +245,22 @@ hub.Clients().Caller().Send("receive", message)
 
 The client itself might be used like that:
 ```go
-// Endless loop to reconnect automatically
-for {
-    // Create a Connection
-    conn, err := signalr.NewHTTPConnection(ctx, address)
-    if err != nil {
-        return err
-    }
-    // Create the client and set a receiver for callbacks from the server
-    client, err := signalr.NewClient(ctx, conn, signalr.Receiver(receiver))
-    if err != nil {
-        return err
-    }
-    // Start the client loop
-    err = c.Start()
-    if err != nil {
-        return err
-    }
-    select {
-    // Outside signal to end the client
-    case <-context.Done(): 
-    	return nil
-    // Wait for the client loop to end
-    case <-client.Context().Done():
-    	// If the loop was ended by a CloseMessage, Context().Err() is nil. 
-        // Note that this is a deviation from the normal context.Context.Err() behavior.
-        err = client.Context().Err()
-        if err != nil {
-            return err
-        }
-    }
+// Create a Connection
+conn, err := signalr.NewHTTPConnection(ctx, address)
+if err != nil {
+    return err
 }
+// Create the client and set a receiver for callbacks from the server
+client, err := signalr.NewClient(ctx, conn, signalr.Receiver(receiver))
+if err != nil {
+    return err
+}
+// Start the client loop
+c.Start()
+// Do some client work
+ch := <-c.Invoke("update", data)
+// ch gets the result of the update operation
 ```
-If yor client should not support auto reconnect, just remove the endless loop.
 
 ## Debugging
 

@@ -22,15 +22,24 @@ var _ = Describe("Server.HubClients", func() {
 			cliConn, srvConn := newClientServerConnections()
 			// Start the server
 			go func() { _ = server.Serve(srvConn) }()
+			// Give the server some time. In contrast to the client, we have not connected state to query
+			<-time.After(100 * time.Millisecond)
 			// Create the Client
 			receiver := &simpleReceiver{}
-			clientConn, _ := NewClient(context.TODO(), cliConn,
+			ctx, cancelClient := context.WithCancel(context.Background())
+			client, _ := NewClient(ctx, cliConn,
 				Receiver(receiver),
 				testLoggerOption(),
 				TransferFormat("Text"))
-			Expect(clientConn).NotTo(BeNil())
+			Expect(client).NotTo(BeNil())
 			// Start it
-			_ = clientConn.Start()
+			client.Start()
+			// Wait for client running
+			for {
+				if <-client.Connected() {
+					break
+				}
+			}
 			// Send from the server to "all" clients
 			server.HubClients().All().Send("OnCallback", "All")
 			ch := make(chan string, 1)
@@ -45,7 +54,7 @@ var _ = Describe("Server.HubClients", func() {
 			}()
 			// Did the receiver get what we did send?
 			Expect(<-ch).To(Equal("All"))
-			_ = clientConn.Stop()
+			cancelClient()
 			server.cancel()
 			close(done)
 		}, 1.0)

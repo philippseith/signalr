@@ -7,6 +7,7 @@ type InvokeResult struct {
 }
 
 // newInvokeResultChan combines a value result and an error result channel into one InvokeResult channel
+// The InvokeResult channel is automatically closed when both input channels are closed.
 func newInvokeResultChan(resultChan <-chan interface{}, errChan <-chan error) <-chan InvokeResult {
 	ch := make(chan InvokeResult, 1)
 	go func(ch chan InvokeResult, resultChan <-chan interface{}, errChan <-chan error) {
