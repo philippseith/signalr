@@ -5,6 +5,21 @@ import (
 	"fmt"
 )
 
+// AutoReconnect makes the client to auto reconnect
+// using the Connection build by the connectionFactory.
+func AutoReconnect(connectionFactory func() (Connection, error)) func(Party) error {
+	return func(party Party) error {
+		if client, ok := party.(*client); ok {
+			if client.conn != nil {
+				return errors.New("option AutoReconnect can not be used when connection is already set")
+			}
+			client.connectionFactory = connectionFactory
+			return nil
+		}
+		return errors.New("option AutoReconnect is client only")
+	}
+}
+
 // Receiver sets the object which will receive server side calls to client methods (e.g. callbacks)
 func Receiver(receiver interface{}) func(Party) error {
 	return func(party Party) error {
