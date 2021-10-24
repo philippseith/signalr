@@ -10,22 +10,19 @@ import (
 	"reflect"
 	"sync"
 
-
-	"github.com/teivah/onecontext"
-
-  "github.com/go-kit/log"
+	"github.com/go-kit/log"
 )
 
 // Client is the signalR connection used on the client side.
 //   Start() error
 // Start starts the client loop. After starting the client, the interaction with a server can be started.
-//  Stop() error
-// Stop stops the client loop.
-//  Context() context.Context
-// Context returns a Context that is canceled when the client loop ends. Context().Err() is the error which caused
-// the loop to end.
-// If the loop was ended by a CloseMessage, Context().Err() is nil. Note that this is a deviation from
-// the normal context.Context.Err() behavior.
+// The client loop will run until the server closes the connection. If AutoReconnect is used, Start will
+// start a new loop. To end the loop from the client side, the context passed in NewClient has to be canceled.
+//  Connected() <-chan bool
+// Connected returns a channel which gives the connection state after Start() was called. Util the connection
+// is established, the channel returns false, while connected it returns true, when the connection is lost,
+// the channel is closed and returns nil. If the AutoReconnect option is used, the channel will be replaced
+// instead of closed and return false until the new auto reconnect was successful, then true.
 //  Invoke(method string, arguments ...interface{}) <-chan InvokeResult
 // Invoke invokes a method on the server and returns a channel wich will return the InvokeResult.
 // When failing, InvokeResult.Error contains the client side error.
@@ -40,9 +37,8 @@ import (
 // For more info about Upload Streaming see https://github.com/dotnet/aspnetcore/blob/main/src/SignalR/docs/specs/HubProtocol.md#upload-streaming
 type Client interface {
 	Party
-	Start() error
-	Stop() error
-	Context() context.Context
+	Start() <-chan error
+	Connected() <-chan bool
 	Invoke(method string, arguments ...interface{}) <-chan InvokeResult
 	Send(method string, arguments ...interface{}) <-chan error
 	PullStream(method string, arguments ...interface{}) <-chan InvokeResult
@@ -50,10 +46,13 @@ type Client interface {
 }
 
 // NewClient builds a new Client.
+// When ctx is canceled, the client loop and a possible auto reconnect loop are ended.
+// When the AutoReconnect option is given, conn must be nil.
 func NewClient(ctx context.Context, conn Connection, options ...func(Party) error) (Client, error) {
 	info, dbg := buildInfoDebugLogger(log.NewLogfmtLogger(os.Stderr), true)
 	c := &client{
 		conn:      conn,
+		connected: make(chan bool),
 		format:    "json",
 		partyBase: newPartyBase(ctx, info, dbg),
 		lastID:    -1,
@@ -70,54 +69,114 @@ func NewClient(ctx context.Context, conn Connection, options ...func(Party) erro
 
 type client struct {
 	partyBase
-	conn       Connection
-	loopCtx    *clientContext
-	cancelLoop context.CancelFunc
-	format     string
-	loop       *loop
-	receiver   interface{}
-	lastID     int64
-	loopMx     sync.Mutex
-	loopEnded  bool
+	mx                sync.Mutex
+	conn              Connection
+	connectionFactory func() (Connection, error)
+	connected         chan bool
+	format            string
+	loop              *loop
+	receiver          interface{}
+	lastID            int64
 }
 
-func (c *client) Start() error {
-	protocol, err := c.processHandshake()
-	if err != nil {
-		return err
+func (c *client) Start() <-chan error {
+	errChan := make(chan error, 1)
+	go func() {
+		defer close(errChan)
+		for {
+			c.run(errChan)
+			if c.ctx.Err() != nil {
+				return
+			}
+			if c.connectionFactory == nil {
+				return
+			}
+		}
+	}()
+	return errChan
+}
+
+func (c *client) run(errChan chan<- error) {
+	protocol := c.setupConnectionAndProtocol(errChan)
+	if protocol == nil {
+		return
 	}
 
-	started := make(chan struct{}, 1)
+	loop := newLoop(c, c.conn, protocol)
+	c.mx.Lock()
+	c.loop = loop
+	c.mx.Unlock()
 
-	go func(c *client, started chan struct{}) {
-		c.loopMx.Lock()
-		ctx, cancel := onecontext.Merge(c.ctx, c.conn.Context())
-		c.loopCtx = &clientContext{Context: ctx}
-		c.cancelLoop = cancel
-		c.loop = newLoop(c, c.conn, protocol)
-		c.loopMx.Unlock()
+	finished := make(chan struct{})
+	defer close(finished)
 
-		c.loopCtx.SetErr(c.loop.Run(started))
+	loopConnected := make(chan bool, 1)
+	go c.feedConnected(loopConnected, finished)
 
-		c.loopMx.Lock()
-		c.loopEnded = true
-		c.cancelLoop()
-		c.loopMx.Unlock()
-	}(c, started)
+	err := loop.Run(loopConnected)
+	if err != nil {
+		errChan <- err
+		return
+	}
 
-	<-started
-
-	return nil
+	err = loop.hubConn.Close("", false) // allowReconnect value is ignored as servers never initiate a connection
+	if err != nil {
+		errChan <- err
+		return
+	}
 }
 
-func (c *client) Stop() error {
-	err := c.loop.hubConn.Close("", false)
-	c.cancelLoop()
-	return err
+func (c *client) setupConnectionAndProtocol(errChan chan<- error) hubProtocol {
+	return func() hubProtocol {
+		c.mx.Unlock()
+		defer c.mx.Unlock()
+
+		if c.conn == nil {
+			if c.connectionFactory == nil {
+				errChan <- errors.New("neither Connection nor AutoReconnect connectionFactory set")
+				return nil
+			}
+			var err error
+			c.conn, err = c.connectionFactory()
+			if err != nil {
+				errChan <- err
+				return nil
+			}
+		}
+		protocol, err := c.processHandshake()
+		if err != nil {
+			errChan <- err
+			return nil
+		}
+
+		return protocol
+	}()
 }
 
-func (c *client) Context() context.Context {
-	return c.loopCtx
+// feedConnected feeds the Connected channel with the right connection state values
+func (c *client) feedConnected(loopConnected chan bool, runFinished <-chan struct{}) {
+	connected := false
+	for {
+		select {
+		case c.connected <- connected:
+			// next
+		case <-loopConnected:
+			// One time event: loop.Run is now connected
+			connected = true
+		case <-runFinished:
+			// loop.Run finished
+			close(c.connected)
+			return
+		case <-c.ctx.Done():
+			// It's all over now
+			close(c.connected)
+			return
+		}
+	}
+}
+
+func (c *client) Connected() <-chan bool {
+	return c.connected
 }
 
 func (c *client) Invoke(method string, arguments ...interface{}) <-chan InvokeResult {
@@ -165,10 +224,7 @@ func (c *client) PushStreams(method string, arguments ...interface{}) <-chan err
 }
 
 func (c *client) isLoopEnded() (bool, <-chan InvokeResult, <-chan error) {
-	defer c.loopMx.Unlock()
-	c.loopMx.Lock()
-	loopEnded := c.loopEnded
-	if loopEnded {
+	if _, loopRunning := <-c.connected; !loopRunning {
 		irCh, errCh := createResultChansWithError(errors.New("message loop ended"))
 		return true, irCh, errCh
 	}
