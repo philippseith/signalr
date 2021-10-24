@@ -103,7 +103,9 @@ func (s *server) Serve(conn Connection) error {
 		_ = info.Log(evt, "processHandshake", "connectionId", conn.ConnectionID(), "error", err, react, "do not connect")
 		return err
 	} else {
-		return newLoop(s, conn, protocol).Run(make(chan struct{}, 1))
+		connected := make(chan bool, 1)
+		defer close(connected)
+		return newLoop(s, conn, protocol).Run(connected)
 	}
 }
 

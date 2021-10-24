@@ -46,10 +46,9 @@ var errCloseMessage = errors.New("CloseMessage received")
 
 // Run runs the loop. After the startup sequence is done, this is signaled over the started channel.
 // Callers should pass a channel with buffer size 1 to allow the loop to run without waiting for the caller.
-func (l *loop) Run(started chan struct{}) (err error) {
+func (l *loop) Run(connected chan<- bool) (err error) {
 	l.party.onConnected(l.hubConn)
-	started <- struct{}{}
-	close(started)
+	connected <- true
 	// Process messages
 	ch := make(chan receiveResult, 1)
 	go func() {
