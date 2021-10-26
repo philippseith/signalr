@@ -17,7 +17,7 @@ var _ = Describe("Client options", func() {
 			}, 3.0)
 		})
 		Context("both are given", func() {
-			FIt("NewClient should fail", func() {
+			It("NewClient should fail", func() {
 				conn := NewNetConnection(context.TODO(), nil)
 				_, err := NewClient(context.TODO(), WithConnection(conn), WithAutoReconnect(func() (Connection, error) {
 					return conn, nil
