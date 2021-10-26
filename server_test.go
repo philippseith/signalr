@@ -27,7 +27,8 @@ var _ = Describe("Server.HubClients", func() {
 			// Create the Client
 			receiver := &simpleReceiver{}
 			ctx, cancelClient := context.WithCancel(context.Background())
-			client, _ := NewClient(ctx, cliConn,
+			client, _ := NewClient(ctx,
+				WithConnection(cliConn),
 				Receiver(receiver),
 				testLoggerOption(),
 				TransferFormat("Text"))

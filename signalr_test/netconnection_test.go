@@ -48,7 +48,7 @@ var _ = Describe("NetConnection", func() {
 			for {
 				if clientConn, err := net.Dial("tcp",
 					fmt.Sprintf("localhost:%v", listener.Addr().(*net.TCPAddr).Port)); err == nil {
-					client, err = signalr.NewClient(ctx, signalr.NewNetConnection(ctx, clientConn), testLoggerOption())
+					client, err = signalr.NewClient(ctx, signalr.WithConnection(signalr.NewNetConnection(ctx, clientConn)), testLoggerOption())
 					Expect(err).NotTo(HaveOccurred())
 					break
 				}

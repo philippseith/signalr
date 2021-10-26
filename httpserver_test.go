@@ -110,7 +110,7 @@ var _ = Describe("HTTP server", func() {
 					Expect(err).NotTo(HaveOccurred())
 					ctx, cancelClient := context.WithCancel(context.Background())
 					client, err := NewClient(ctx,
-						conn,
+						WithConnection(conn),
 						Logger(logger, true),
 						TransferFormat(transport[1]))
 					Expect(err).NotTo(HaveOccurred())
@@ -131,7 +131,7 @@ var _ = Describe("HTTP server", func() {
 					Expect(err).NotTo(HaveOccurred())
 					ctx2, cancelClient2 := context.WithCancel(context.Background())
 					client2, err := NewClient(ctx2,
-						conn2,
+						WithConnection(conn2),
 						Logger(logger, true),
 						TransferFormat(transport[1]))
 					Expect(err).NotTo(HaveOccurred())
