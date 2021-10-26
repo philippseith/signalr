@@ -4,9 +4,9 @@ import (
 	"context"
 	_ "embed"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -101,6 +101,7 @@ func (c *chat) UploadStream(upload1 <-chan int, factor float64, upload2 <-chan f
 }
 
 func (c *chat) Abort() {
+	fmt.Println("Abort")
 	c.Hub.Abort()
 }
 
@@ -130,7 +131,7 @@ func (c *chat) Abort() {
 
 func runHTTPServer(address string, hub signalr.HubInterface) {
 	server, _ := signalr.NewServer(context.TODO(), signalr.SimpleHubFactory(hub),
-		signalr.Logger(kitlog.NewLogfmtLogger(ioutil.Discard), false),
+		signalr.Logger(kitlog.NewLogfmtLogger(os.Stdout), false),
 		signalr.KeepAliveInterval(2*time.Second))
 	router := http.NewServeMux()
 	server.MapHTTP(router, "/chat")
@@ -144,44 +145,28 @@ func runHTTPServer(address string, hub signalr.HubInterface) {
 }
 
 func runHTTPClient(address string, receiver interface{}) error {
-	for {
-		conn, err := signalr.NewHTTPConnection(context.Background(), address)
-		if err != nil {
-			return err
-		}
-		c, err := signalr.NewClient(context.Background(), conn,
-			signalr.Receiver(receiver),
-			signalr.Logger(kitlog.NewLogfmtLogger(ioutil.Discard), false))
-		if err != nil {
-			return err
-		}
-		err = c.Start()
-		fmt.Println("Client started")
-		if err != nil {
-			return err
-		}
-		// The silly client urges the server to end his connection after 10 seconds
-		go func() {
-			<-time.After(10 * time.Second)
-			c.Send("abort")
-		}()
-		// Wait for the inevitable
-		<-c.Context().Done()
-		// Wenn the server closed the connection, on client side no error occurred. So err is nil
-		err = c.Context().Err()
-		if err != nil {
-			return err
-		}
-		fmt.Println("Restarting client...")
+	c, err := signalr.NewClient(context.Background(), nil,
+		signalr.Receiver(receiver),
+		signalr.AutoReconnect(func() (signalr.Connection, error) {
+			return signalr.NewHTTPConnection(context.Background(), address)
+		}),
+		signalr.Logger(kitlog.NewLogfmtLogger(os.Stdout), false))
+	if err != nil {
+		return err
 	}
+	c.Start()
+	fmt.Println("Client started")
+	return nil
 }
 
 type receiver struct {
-	signalr.Hub
+	signalr.ClientHub
 }
 
-func (c *receiver) Receive(msg string) {
+func (r *receiver) Receive(msg string) {
 	fmt.Println(msg)
+	// The silly client urges the server to end his connection after 10 seconds
+	r.Server().Send("abort")
 }
 
 func main() {
