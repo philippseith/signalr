@@ -35,11 +35,7 @@ var _ = Describe("Server.HubClients", func() {
 			// Start it
 			client.Start()
 			// Wait for client running
-			for {
-				if <-client.Connected() {
-					break
-				}
-			}
+			Expect(client.WaitConnected(context.Background())).NotTo(HaveOccurred())
 			// Send from the server to "all" clients
 			server.HubClients().All().Send("OnCallback", "All")
 			ch := make(chan string, 1)

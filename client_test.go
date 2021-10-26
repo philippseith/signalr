@@ -138,6 +138,7 @@ var _ = Describe("Client", func() {
 			Expect(clientConn).NotTo(BeNil())
 			// Start it
 			errCh := clientConn.Start()
+			Expect(clientConn.WaitConnected(context.Background())).NotTo(HaveOccurred())
 			clientLoopDone := make(chan struct{})
 			go func() {
 				defer GinkgoRecover()
@@ -171,6 +172,7 @@ var _ = Describe("Client", func() {
 			client, _ = NewClient(ctx, cliConn, Receiver(simpleReceiver{}), testLoggerOption(), formatOption)
 			// Start it
 			_ = client.Start()
+			Expect(client.WaitConnected(context.Background())).NotTo(HaveOccurred())
 			close(done)
 		}, 2.0)
 		AfterEach(func(done Done) {
@@ -202,7 +204,7 @@ var _ = Describe("Client", func() {
 			r := <-client.Invoke("InvokeMe", "A", 1)
 			Expect(r.Error).To(HaveOccurred())
 			close(done)
-		}, 2.0)
+		}, 1.0)
 	})
 	Context("Send", func() {
 		var cliConn *pipeConnection
@@ -226,6 +228,7 @@ var _ = Describe("Client", func() {
 			client, _ = NewClient(ctx, cliConn, Receiver(receiver), testLoggerOption(), formatOption)
 			// Start it
 			_ = client.Start()
+			Expect(client.WaitConnected(context.Background())).NotTo(HaveOccurred())
 			close(done)
 		}, 2.0)
 		AfterEach(func(done Done) {
@@ -379,6 +382,7 @@ var _ = Describe("Client", func() {
 			client, _ = NewClient(ctx, cliConn, Receiver(receiver), testLoggerOption(), formatOption)
 			// Start it
 			_ = client.Start()
+			Expect(client.WaitConnected(context.Background())).NotTo(HaveOccurred())
 			close(done)
 		}, 2.0)
 		AfterEach(func(done Done) {
@@ -434,6 +438,7 @@ var _ = Describe("Client", func() {
 			client, _ = NewClient(ctx, cliConn, Receiver(receiver), testLoggerOption(), formatOption)
 			// Start it
 			_ = client.Start()
+			Expect(client.WaitConnected(context.Background())).NotTo(HaveOccurred())
 			close(done)
 		}, 2.0)
 		AfterEach(func(done Done) {

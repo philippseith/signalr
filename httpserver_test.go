@@ -116,6 +116,7 @@ var _ = Describe("HTTP server", func() {
 					Expect(err).NotTo(HaveOccurred())
 					Expect(client).NotTo(BeNil())
 					errCh := client.Start()
+					Expect(client.WaitConnected(context.Background())).NotTo(HaveOccurred())
 					go func() {
 						defer GinkgoRecover()
 						Expect(errors.Is(<-errCh, context.Canceled)).To(BeTrue())
@@ -136,6 +137,7 @@ var _ = Describe("HTTP server", func() {
 					Expect(err).NotTo(HaveOccurred())
 					Expect(client2).NotTo(BeNil())
 					_ = client2.Start()
+					Expect(client.WaitConnected(context.Background())).NotTo(HaveOccurred())
 					result = <-client2.Invoke("Add2", 2)
 					Expect(result.Error).NotTo(HaveOccurred())
 					Expect(result.Value).To(BeEquivalentTo(4))
