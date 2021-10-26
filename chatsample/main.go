@@ -147,7 +147,7 @@ func runHTTPServer(address string, hub signalr.HubInterface) {
 func runHTTPClient(address string, receiver interface{}) error {
 	c, err := signalr.NewClient(context.Background(), nil,
 		signalr.Receiver(receiver),
-		signalr.AutoReconnect(func() (signalr.Connection, error) {
+		signalr.WithAutoReconnect(func() (signalr.Connection, error) {
 			return signalr.NewHTTPConnection(context.Background(), address)
 		}),
 		signalr.Logger(kitlog.NewLogfmtLogger(os.Stdout), false))

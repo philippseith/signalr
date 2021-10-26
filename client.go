@@ -16,7 +16,7 @@ import (
 // Client is the signalR connection used on the client side.
 //   Start() <- chan error
 // Start starts the client loop. After starting the client, the interaction with a server can be started.
-// The client loop will run until the server closes the connection. If AutoReconnect is used, Start will
+// The client loop will run until the server closes the connection. If WithAutoReconnect is used, Start will
 // start a new loop. To end the loop from the client side, the context passed in NewClient has to be canceled.
 // In that case
 //  errors.Is(<-Start(), context.Canceled)
@@ -27,7 +27,8 @@ import (
 //  WaitClosed(ctx context.Context) error
 // WaitClosed waits until the Client is closed or ctx is canceled. The result is != nil when ctx was canceled.
 // The client gets in closed state when the client loop ends or can not be started.
-// When AutoReconnect is set, the client leaves closed state and tries to reach connected state.
+// When WithAutoReconnect is set, the client leaves closed state and tries to reach connected state.
+// Without WithAutoReconnect, WaitClosed can be used to implement an own auto reconnect strategy
 //  Invoke(method string, arguments ...interface{}) <-chan InvokeResult
 // Invoke invokes a method on the server and returns a channel wich will return the InvokeResult.
 // When failing, InvokeResult.Error contains the client side error.
@@ -53,11 +54,10 @@ type Client interface {
 
 // NewClient builds a new Client.
 // When ctx is canceled, the client loop and a possible auto reconnect loop are ended.
-// When the AutoReconnect option is given, conn must be nil.
-func NewClient(ctx context.Context, conn Connection, options ...func(Party) error) (Client, error) {
+// When the WithAutoReconnect option is given, conn must be nil.
+func NewClient(ctx context.Context, options ...func(Party) error) (Client, error) {
 	info, dbg := buildInfoDebugLogger(log.NewLogfmtLogger(os.Stderr), true)
 	c := &client{
-		conn:      conn,
 		format:    "json",
 		partyBase: newPartyBase(ctx, info, dbg),
 		lastID:    -1,
@@ -69,6 +69,9 @@ func NewClient(ctx context.Context, conn Connection, options ...func(Party) erro
 				return nil, err
 			}
 		}
+	}
+	if c.conn == nil && c.connectionFactory == nil {
+		return nil, errors.New("neither WithConnection nor WithAutoReconnect option was given")
 	}
 	return c, nil
 }
@@ -177,7 +180,7 @@ func (c *client) setupConnectionAndProtocol(errChan chan<- error) (hubProtocol, 
 
 		if c.conn == nil {
 			if c.connectionFactory == nil {
-				err := errors.New("neither Connection nor AutoReconnect connectionFactory set")
+				err := errors.New("neither Connection nor WithAutoReconnect connectionFactory set")
 				go func() {
 					errChan <- err
 				}()

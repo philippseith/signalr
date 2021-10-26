@@ -7,16 +7,16 @@ import (
 
 // AutoReconnect makes the client to auto reconnect
 // using the Connection build by the connectionFactory.
-func AutoReconnect(connectionFactory func() (Connection, error)) func(Party) error {
+func WithAutoReconnect(connectionFactory func() (Connection, error)) func(Party) error {
 	return func(party Party) error {
 		if client, ok := party.(*client); ok {
 			if client.conn != nil {
-				return errors.New("option AutoReconnect can not be used when connection is already set")
+				return errors.New("options WithConnection and WithAutoReconnect can not be used together")
 			}
 			client.connectionFactory = connectionFactory
 			return nil
 		}
-		return errors.New("option AutoReconnect is client only")
+		return errors.New("option WithAutoReconnect is client only")
 	}
 }
 
