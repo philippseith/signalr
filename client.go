@@ -21,12 +21,13 @@ import (
 // In that case
 //  errors.Is(<-Start(), context.Canceled)
 // is true.
-//  Connected() <-chan bool
-// Connected returns a channel which gives the connection state after Start() was called. Util the connection
-// is established, the channel returns false, while connected it returns true, when the connection is lost,
-// the channel is closed and returns nil. If the AutoReconnect option is used, the channel will be replaced
-// instead of closed and return false until the new auto reconnect was successful, then true.
-// All other client functions (Invoke, Send, PullStream, PushStreams) block until the client is connected.
+//  WaitConnected(ctx context.Context) error
+// WaitConnected waits until the Client is connected or closed or ctx was canceled.
+// When closed or ctx was canceled, the result is != nil.
+//  WaitClosed(ctx context.Context) error
+// WaitClosed waits until the Client is closed or ctx is canceled. The result is != nil when ctx was canceled.
+// The client gets in closed state when the client loop ends or can not be started.
+// When AutoReconnect is set, the client leaves closed state and tries to reach connected state.
 //  Invoke(method string, arguments ...interface{}) <-chan InvokeResult
 // Invoke invokes a method on the server and returns a channel wich will return the InvokeResult.
 // When failing, InvokeResult.Error contains the client side error.
@@ -42,7 +43,8 @@ import (
 type Client interface {
 	Party
 	Start() <-chan error
-	Connected() <-chan bool
+	WaitConnected(ctx context.Context) error
+	WaitClosed(ctx context.Context) error
 	Invoke(method string, arguments ...interface{}) <-chan InvokeResult
 	Send(method string, arguments ...interface{}) <-chan error
 	PullStream(method string, arguments ...interface{}) <-chan InvokeResult
@@ -56,11 +58,11 @@ func NewClient(ctx context.Context, conn Connection, options ...func(Party) erro
 	info, dbg := buildInfoDebugLogger(log.NewLogfmtLogger(os.Stderr), true)
 	c := &client{
 		conn:      conn,
-		connected: make(chan bool),
 		format:    "json",
 		partyBase: newPartyBase(ctx, info, dbg),
 		lastID:    -1,
 	}
+	c.stateCond = sync.NewCond(&c.stateMx)
 	for _, option := range options {
 		if option != nil {
 			if err := option(c); err != nil {
@@ -74,9 +76,12 @@ func NewClient(ctx context.Context, conn Connection, options ...func(Party) erro
 type client struct {
 	partyBase
 	mx                sync.Mutex
+	stateMx           sync.Mutex
+	stateCond         *sync.Cond
 	conn              Connection
 	connectionFactory func() (Connection, error)
-	connected         chan bool
+	connected         bool
+	closed            bool
 	format            string
 	loop              *loop
 	receiver          interface{}
@@ -86,13 +91,32 @@ type client struct {
 func (c *client) Start() <-chan error {
 	errChan := make(chan error, 1)
 	go func() {
-		defer close(errChan)
 		for {
-			c.run(errChan)
+			// reset state
+			c.stateMx.Lock()
+			c.connected = false
+			c.closed = false
+			c.stateMx.Unlock()
+			// Redirect inner errors to the outside
+			loopErrChan := make(chan error, 1)
+			go func() {
+				for err := range loopErrChan {
+					errChan <- err
+				}
+			}()
+			// RUN!
+			c.run(loopErrChan)
+			close(loopErrChan)
+			// Canceled?
 			if c.ctx.Err() != nil {
 				return
 			}
+			// Reconnecting not possible
 			if c.connectionFactory == nil {
+				return
+			}
+			// Reconnecting not allowed
+			if c.loop != nil && c.loop.closeMessage != nil && !c.loop.closeMessage.AllowReconnect {
 				return
 			}
 		}
@@ -101,14 +125,27 @@ func (c *client) Start() <-chan error {
 }
 
 func (c *client) run(errChan chan<- error) {
-	// prepare publishing state with Connected()
-	isRunFinished := make(chan struct{})
-	defer close(isRunFinished)
-	isLoopConnected := make(chan bool, 1)
-	go c.feedConnected(isLoopConnected, isRunFinished)
+	// When run is over, the client is closed (but might be reopened)
+	defer func() {
+		c.stateMx.Lock()
+		c.closed = true
+		c.stateCond.Broadcast()
+		c.stateMx.Unlock()
+	}()
 
-	protocol := c.setupConnectionAndProtocol(errChan)
-	if protocol == nil {
+	// Broadcast when loop is connected
+	isLoopConnected := make(chan bool, 1)
+	go func() {
+		connected := <-isLoopConnected
+		close(isLoopConnected)
+		c.stateMx.Lock()
+		c.connected = connected
+		c.stateCond.Broadcast()
+		c.stateMx.Unlock()
+	}()
+
+	protocol, err := c.setupConnectionAndProtocol(errChan)
+	if err != nil {
 		return
 	}
 
@@ -117,135 +154,169 @@ func (c *client) run(errChan chan<- error) {
 	c.loop = loop
 	c.mx.Unlock()
 
-	err := loop.Run(isLoopConnected)
+	err = loop.Run(isLoopConnected)
 	if err != nil {
 		errChan <- err
 		return
 	}
-
 	err = loop.hubConn.Close("", false) // allowReconnect value is ignored as servers never initiate a connection
+	// Reset conn to allow reconnecting
+	c.mx.Lock()
+	c.conn = nil
+	c.mx.Unlock()
+
 	if err != nil {
 		errChan <- err
-		return
 	}
 }
 
-func (c *client) setupConnectionAndProtocol(errChan chan<- error) hubProtocol {
-	return func() hubProtocol {
+func (c *client) setupConnectionAndProtocol(errChan chan<- error) (hubProtocol, error) {
+	return func() (hubProtocol, error) {
 		c.mx.Lock()
 		defer c.mx.Unlock()
 
 		if c.conn == nil {
 			if c.connectionFactory == nil {
-				errChan <- errors.New("neither Connection nor AutoReconnect connectionFactory set")
-				return nil
+				err := errors.New("neither Connection nor AutoReconnect connectionFactory set")
+				go func() {
+					errChan <- err
+				}()
+				return nil, err
 			}
 			var err error
 			c.conn, err = c.connectionFactory()
 			if err != nil {
 				errChan <- err
-				return nil
+				return nil, err
 			}
 		}
 		protocol, err := c.processHandshake()
 		if err != nil {
 			errChan <- err
-			return nil
+			return nil, err
 		}
 
-		return protocol
+		return protocol, nil
 	}()
 }
 
-// feedConnected feeds the Connected channel with the right connection state values
-func (c *client) feedConnected(loopConnected chan bool, runFinished <-chan struct{}) {
-	connected := false
-	for {
-		select {
-		case c.connected <- connected:
-			// next
-		case <-loopConnected:
-			// One time event: loop.Run is now connected
-			connected = true
-		case <-runFinished:
-			// loop.Run finished
-			close(c.connected)
-			return
-		case <-c.ctx.Done():
-			// It's all over now
-			close(c.connected)
-			return
+func (c *client) WaitConnected(ctx context.Context) error {
+	c.stateMx.Lock()
+	defer c.stateMx.Unlock()
+
+	for !c.connected {
+		c.stateCond.Wait()
+		if c.closed {
+			return errors.New("client is not establishing a connection")
+		}
+		if ctx.Err() != nil {
+			return ctx.Err()
 		}
 	}
+	return nil
 }
 
-func (c *client) Connected() <-chan bool {
-	return c.connected
+func (c *client) WaitClosed(ctx context.Context) error {
+	c.stateMx.Lock()
+	defer c.stateMx.Unlock()
+	for !c.closed {
+		c.stateCond.Wait()
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+	}
+	return nil
 }
 
 func (c *client) Invoke(method string, arguments ...interface{}) <-chan InvokeResult {
-	if ok, ch, _ := c.waitLoopConnected(); !ok {
-		return ch
-	}
-	id := c.loop.GetNewID()
-	resultCh, errCh := c.loop.invokeClient.newInvocation(id)
-	ch := newInvokeResultChan(resultCh, errCh)
-	if err := c.loop.hubConn.SendInvocation(id, method, arguments); err != nil {
-		// When we get an error here, the loop is closed and the errCh might be already closed
-		// We create a new one to deliver our error
-		ch, _ = createResultChansWithError(err)
-		c.loop.invokeClient.deleteInvocation(id)
-	}
+	ch := make(chan InvokeResult, 1)
+	go func() {
+		if err := c.WaitConnected(context.Background()); err != nil {
+			ch <- InvokeResult{Error: err}
+			close(ch)
+			return
+		}
+		id := c.loop.GetNewID()
+		resultCh, errCh := c.loop.invokeClient.newInvocation(id)
+		irCh := newInvokeResultChan(resultCh, errCh)
+		if err := c.loop.hubConn.SendInvocation(id, method, arguments); err != nil {
+			c.loop.invokeClient.deleteInvocation(id)
+			ch <- InvokeResult{Error: err}
+			close(ch)
+			return
+		}
+		go func() {
+			for ir := range irCh {
+				ch <- ir
+			}
+			close(ch)
+		}()
+	}()
 	return ch
 }
 
 func (c *client) Send(method string, arguments ...interface{}) <-chan error {
-	if ok, _, ch := c.waitLoopConnected(); !ok {
-		return ch
-	}
-	id := c.loop.GetNewID()
-	_, errCh := c.loop.invokeClient.newInvocation(id)
-	if err := c.loop.hubConn.SendInvocation(id, method, arguments); err != nil {
-		// When we get an error here, the loop is closed and the errCh might be already closed
-		// We create a new one to deliver our error
-		errCh = make(chan error, 1)
-		errCh <- err
-		close(errCh)
-		c.loop.invokeClient.deleteInvocation(id)
-	}
+	errCh := make(chan error, 1)
+	go func() {
+		if err := c.WaitConnected(context.Background()); err != nil {
+			errCh <- err
+			close(errCh)
+			return
+		}
+		id := c.loop.GetNewID()
+		_, sendErrCh := c.loop.invokeClient.newInvocation(id)
+		if err := c.loop.hubConn.SendInvocation(id, method, arguments); err != nil {
+			c.loop.invokeClient.deleteInvocation(id)
+			errCh <- err
+			close(errCh)
+			return
+		}
+		go func() {
+			for ir := range sendErrCh {
+				errCh <- ir
+			}
+			close(errCh)
+		}()
+	}()
 	return errCh
 }
 
 func (c *client) PullStream(method string, arguments ...interface{}) <-chan InvokeResult {
-	if ok, ch, _ := c.waitLoopConnected(); !ok {
-		return ch
-	}
-	return c.loop.PullStream(method, c.loop.GetNewID(), arguments...)
+	irCh := make(chan InvokeResult, 1)
+	go func() {
+		if err := c.WaitConnected(context.Background()); err != nil {
+			irCh <- InvokeResult{Error: err}
+			close(irCh)
+			return
+		}
+		pullCh := c.loop.PullStream(method, c.loop.GetNewID(), arguments...)
+		go func() {
+			for ir := range pullCh {
+				irCh <- ir
+			}
+			close(irCh)
+		}()
+	}()
+	return irCh
 }
 
 func (c *client) PushStreams(method string, arguments ...interface{}) <-chan error {
-	if ok, _, ch := c.waitLoopConnected(); !ok {
-		return ch
-	}
-	return c.loop.PushStreams(method, c.loop.GetNewID(), arguments...)
-}
-
-func (c *client) waitLoopConnected() (bool, <-chan InvokeResult, <-chan error) {
-	for {
-		select {
-		case connected, notEnded := <-c.connected:
-			if !notEnded {
-				resultCh, errCh := createResultChansWithError(fmt.Errorf("message loop ended: %w", context.Canceled))
-				return false, resultCh, errCh
-			}
-			if connected {
-				return true, nil, nil
-			}
-		case <-c.ctx.Done():
-			resultCh, errCh := createResultChansWithError(fmt.Errorf("client canceled: %w", context.Canceled))
-			return false, resultCh, errCh
+	errCh := make(chan error, 1)
+	go func() {
+		if err := c.WaitConnected(context.Background()); err != nil {
+			errCh <- err
+			close(errCh)
+			return
 		}
-	}
+		pushCh := c.loop.PushStreams(method, c.loop.GetNewID(), arguments...)
+		go func() {
+			for err := range pushCh {
+				errCh <- err
+			}
+			close(errCh)
+		}()
+	}()
+	return errCh
 }
 
 func createResultChansWithError(err error) (<-chan InvokeResult, chan error) {
