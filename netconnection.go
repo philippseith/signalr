@@ -13,6 +13,7 @@ type netConnection struct {
 	conn net.Conn
 }
 
+// NewNetConnection wraps net.Conn into a Connection
 func NewNetConnection(ctx context.Context, conn net.Conn) *netConnection {
 	netConn := &netConnection{
 		ConnectionBase: ConnectionBase{
