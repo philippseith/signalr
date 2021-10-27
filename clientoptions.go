@@ -39,7 +39,7 @@ func WithReceiver(receiver interface{}) func(Party) error {
 	return func(party Party) error {
 		if client, ok := party.(*client); ok {
 			client.receiver = receiver
-			if receiver, ok := receiver.(ClientHubInterface); ok {
+			if receiver, ok := receiver.(ReceiverInterface); ok {
 				receiver.Init(client)
 			}
 			return nil
