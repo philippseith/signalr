@@ -29,7 +29,7 @@ var _ = Describe("Server.HubClients", func() {
 			ctx, cancelClient := context.WithCancel(context.Background())
 			client, _ := NewClient(ctx,
 				WithConnection(cliConn),
-				Receiver(receiver),
+				WithReceiver(receiver),
 				testLoggerOption(),
 				TransferFormat("Text"))
 			Expect(client).NotTo(BeNil())

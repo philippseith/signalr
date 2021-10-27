@@ -169,7 +169,7 @@ var _ = Describe("Client", func() {
 			// Create the Client
 			var ctx context.Context
 			ctx, cancelClient = context.WithCancel(context.Background())
-			client, _ = NewClient(ctx, WithConnection(cliConn), Receiver(simpleReceiver{}), testLoggerOption(), formatOption)
+			client, _ = NewClient(ctx, WithConnection(cliConn), WithReceiver(simpleReceiver{}), testLoggerOption(), formatOption)
 			// Start it
 			_ = client.Start()
 			Expect(client.WaitConnected(context.Background())).NotTo(HaveOccurred())
@@ -225,7 +225,7 @@ var _ = Describe("Client", func() {
 			// Create the Client
 			var ctx context.Context
 			ctx, cancelClient = context.WithCancel(context.Background())
-			client, _ = NewClient(ctx, WithConnection(cliConn), Receiver(receiver), testLoggerOption(), formatOption)
+			client, _ = NewClient(ctx, WithConnection(cliConn), WithReceiver(receiver), testLoggerOption(), formatOption)
 			// Start it
 			_ = client.Start()
 			Expect(client.WaitConnected(context.Background())).NotTo(HaveOccurred())
@@ -309,7 +309,7 @@ var _ = Describe("Client", func() {
 			receiver := &simpleReceiver{}
 			var ctx context.Context
 			ctx, cancelClient = context.WithCancel(context.Background())
-			client, _ = NewClient(ctx, WithConnection(cliConn), Receiver(receiver), testLoggerOption(), formatOption)
+			client, _ = NewClient(ctx, WithConnection(cliConn), WithReceiver(receiver), testLoggerOption(), formatOption)
 			// Start it
 			_ = client.Start()
 			close(done)
@@ -379,7 +379,7 @@ var _ = Describe("Client", func() {
 			receiver := &simpleReceiver{}
 			var ctx context.Context
 			ctx, cancelClient = context.WithCancel(context.Background())
-			client, _ = NewClient(ctx, WithConnection(cliConn), Receiver(receiver), testLoggerOption(), formatOption)
+			client, _ = NewClient(ctx, WithConnection(cliConn), WithReceiver(receiver), testLoggerOption(), formatOption)
 			// Start it
 			_ = client.Start()
 			Expect(client.WaitConnected(context.Background())).NotTo(HaveOccurred())
@@ -435,7 +435,7 @@ var _ = Describe("Client", func() {
 			receiver := &simpleReceiver{}
 			var ctx context.Context
 			ctx, cancelClient = context.WithCancel(context.Background())
-			client, _ = NewClient(ctx, WithConnection(cliConn), Receiver(receiver), testLoggerOption(), formatOption)
+			client, _ = NewClient(ctx, WithConnection(cliConn), WithReceiver(receiver), testLoggerOption(), formatOption)
 			// Start it
 			_ = client.Start()
 			Expect(client.WaitConnected(context.Background())).NotTo(HaveOccurred())

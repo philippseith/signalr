@@ -34,8 +34,8 @@ func WithAutoReconnect(connectionFactory func() (Connection, error)) func(Party)
 	}
 }
 
-// Receiver sets the object which will receive server side calls to client methods (e.g. callbacks)
-func Receiver(receiver interface{}) func(Party) error {
+// WithReceiver sets the object which will receive server side calls to client methods (e.g. callbacks)
+func WithReceiver(receiver interface{}) func(Party) error {
 	return func(party Party) error {
 		if client, ok := party.(*client); ok {
 			client.receiver = receiver
@@ -44,7 +44,7 @@ func Receiver(receiver interface{}) func(Party) error {
 			}
 			return nil
 		}
-		return errors.New("option Receiver is client only")
+		return errors.New("option WithReceiver is client only")
 	}
 }
 

@@ -146,7 +146,7 @@ func runHTTPServer(address string, hub signalr.HubInterface) {
 
 func runHTTPClient(address string, receiver interface{}) error {
 	c, err := signalr.NewClient(context.Background(), nil,
-		signalr.Receiver(receiver),
+		signalr.WithReceiver(receiver),
 		signalr.WithAutoReconnect(func() (signalr.Connection, error) {
 			return signalr.NewHTTPConnection(context.Background(), address)
 		}),
@@ -160,7 +160,7 @@ func runHTTPClient(address string, receiver interface{}) error {
 }
 
 type receiver struct {
-	signalr.ClientHub
+	signalr.Receiver
 }
 
 func (r *receiver) Receive(msg string) {
