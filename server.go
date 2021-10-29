@@ -29,7 +29,7 @@ import (
 // Note that HubClients.Caller() returns nil, because there is no real caller which can be reached over a HubConnection.
 type Server interface {
 	Party
-	MapHTTP(mux MappableRouter, path string)
+	MapHTTP(routerFactory func() MappableRouter, path string)
 	Serve(conn Connection) error
 	HubClients() HubClients
 	availableTransports() []string
@@ -87,11 +87,12 @@ type MappableRouter interface {
 	Handle(string, http.Handler)
 }
 
-// MapHTTP maps the servers hub to an path in an http.ServeMux
-func (s *server) MapHTTP(mux MappableRouter, path string) {
+// MapHTTP maps the servers hub to a path in a MappableRouter
+func (s *server) MapHTTP(routerFactory func() MappableRouter, path string) {
 	httpMux := newHTTPMux(s)
-	mux.HandleFunc(fmt.Sprintf("%s/negotiate", path), httpMux.negotiate)
-	mux.Handle(path, httpMux)
+	router := routerFactory()
+	router.HandleFunc(fmt.Sprintf("%s/negotiate", path), httpMux.negotiate)
+	router.Handle(path, httpMux)
 }
 
 // Serve serves the hub of the server on one connection.
