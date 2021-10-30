@@ -1,4 +1,4 @@
-package mux
+package router
 
 import (
 	"net/http"
@@ -7,20 +7,22 @@ import (
 	"github.com/philippseith/signalr"
 )
 
-func WithGorillaRouter(router *mux.Router) func() signalr.MappableRouter {
+// WithGorillaRouter is a signalr.MappableRouter factory for signalr.Server.MapHTTP
+// which converts a mux.Router to a signalr.MappableRouter.
+func WithGorillaRouter(r *mux.Router) func() signalr.MappableRouter {
 	return func() signalr.MappableRouter {
-		return &gorillaMappableRouter{router: router}
+		return &gorillaMappableRouter{r: r}
 	}
 }
 
 type gorillaMappableRouter struct {
-	router *mux.Router
+	r *mux.Router
 }
 
 func (g *gorillaMappableRouter) Handle(path string, handler http.Handler) {
-	g.router.Handle(path, handler)
+	g.r.Handle(path, handler)
 }
 
 func (g *gorillaMappableRouter) HandleFunc(path string, handleFunc func(w http.ResponseWriter, r *http.Request)) {
-	g.router.HandleFunc(path, handleFunc)
+	g.r.HandleFunc(path, handleFunc)
 }

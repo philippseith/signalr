@@ -1,18 +1,19 @@
-module github.com/philippseith/signalr/mux
+module github.com/philippseith/signalr/router
 
 go 1.17
 
-// replace github.com/philippseith/signalr v0.4.1 => /Users/philipp/go/src/github.com/philippseith/signalr
-
 require (
 	github.com/go-chi/chi/v5 v5.0.5
+	github.com/go-kit/log v0.2.0
 	github.com/gorilla/mux v1.8.0
 	github.com/julienschmidt/httprouter v1.3.0
 	github.com/onsi/ginkgo v1.12.1
 	github.com/onsi/gomega v1.11.0
-	github.com/philippseith/signalr v0.4.1
+	github.com/philippseith/signalr v0.4.2-0.20211029170321-9b04bbc12782
+)
+
+require (
 	github.com/fsnotify/fsnotify v1.4.9 // indirect
-	github.com/go-kit/log v0.2.0 // indirect
 	github.com/go-logfmt/logfmt v0.5.1 // indirect
 	github.com/klauspost/compress v1.10.3 // indirect
 	github.com/nxadm/tail v1.4.8 // indirect

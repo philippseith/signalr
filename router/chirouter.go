@@ -1,4 +1,4 @@
-package mux
+package router
 
 import (
 	"net/http"
@@ -7,20 +7,22 @@ import (
 	"github.com/philippseith/signalr"
 )
 
-func WithChiRouter(router chi.Router) func() signalr.MappableRouter {
+// WithChiRouter is a signalr.MappableRouter factory for signalr.Server.MapHTTP
+// which converts a chi.Router to a signalr.MappableRouter.
+func WithChiRouter(r chi.Router) func() signalr.MappableRouter {
 	return func() signalr.MappableRouter {
-		return &chiRouter{router: router}
+		return &chiRouter{r: r}
 	}
 }
 
 type chiRouter struct {
-	router chi.Router
+	r chi.Router
 }
 
 func (j *chiRouter) HandleFunc(path string, handler func(w http.ResponseWriter, r *http.Request)) {
-	j.router.HandleFunc(path, handler)
+	j.r.HandleFunc(path, handler)
 }
 
 func (j *chiRouter) Handle(pattern string, handler http.Handler) {
-	j.router.Handle(pattern, handler)
+	j.r.Handle(pattern, handler)
 }

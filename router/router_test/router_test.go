@@ -1,78 +1,78 @@
-package mux_test
+package router_test
 
 import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"net"
 	"net/http"
+	"testing"
 	"time"
+
+	"github.com/go-kit/log"
 
 	"github.com/go-chi/chi/v5"
 
 	"github.com/julienschmidt/httprouter"
 
-	gmux "github.com/gorilla/mux"
-	"github.com/philippseith/signalr/mux"
+	"github.com/gorilla/mux"
 
 	"github.com/philippseith/signalr"
+	"github.com/philippseith/signalr/router"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
 
-func initHttpServeMux(server signalr.Server, port int) {
-	router := http.NewServeMux()
-	server.MapHTTP(mux.WithHttpServeMux(router), "/hub")
-	go func() {
-		_ = http.ListenAndServe(fmt.Sprintf("127.0.0.1:%v", port), router)
-	}()
+func TestRouter(t *testing.T) {
+	RegisterFailHandler(Fail)
+	RunSpecs(t, "signalr/mux Suite")
 }
 
 func initGorillaRouter(server signalr.Server, port int) {
-	router := gmux.NewRouter()
-	server.MapHTTP(mux.WithGorillaRouter(router), "/hub")
+	r := mux.NewRouter()
+	server.MapHTTP(router.WithGorillaRouter(r), "/hub")
 	go func() {
-		_ = http.ListenAndServe(fmt.Sprintf("127.0.0.1:%v", port), router)
+		_ = http.ListenAndServe(fmt.Sprintf("127.0.0.1:%v", port), r)
 	}()
 }
 
 func initHttpRouter(server signalr.Server, port int) {
-	router := httprouter.New()
-	server.MapHTTP(mux.WithHttpRouter(router), "/hub")
+	r := httprouter.New()
+	server.MapHTTP(router.WithHttpRouter(r), "/hub")
 	go func() {
-		_ = http.ListenAndServe(fmt.Sprintf("127.0.0.1:%v", port), router)
+		_ = http.ListenAndServe(fmt.Sprintf("127.0.0.1:%v", port), r)
 	}()
 }
 
 func initChiRouter(server signalr.Server, port int) {
-	router := chi.NewRouter()
-	server.MapHTTP(mux.WithChiRouter(router), "/hub")
+	r := chi.NewRouter()
+	server.MapHTTP(router.WithChiRouter(r), "/hub")
 	go func() {
-		_ = http.ListenAndServe(fmt.Sprintf("127.0.0.1:%v", port), router)
+		_ = http.ListenAndServe(fmt.Sprintf("127.0.0.1:%v", port), r)
 	}()
 }
 
-var _ = Describe("WithXXXRouter", func() {
+var _ = Describe("Router", func() {
 	for i, initFunc := range []func(server signalr.Server, port int){
-		initHttpServeMux,
 		initGorillaRouter,
 		initHttpRouter,
 		initChiRouter,
 	} {
 		routerNames := []string{
-			"http.ServeMux",
 			"gorilla/mux.Router",
 			"julienschmidt/httprouter",
 			"chi/Router",
 		}
 		Context(fmt.Sprintf("With %v", routerNames[i]), func() {
 			Context("A correct negotiation request is sent", func() {
-				It("should send a correct negotiation response", func() {
+				It("should send a correct negotiation response", func(done Done) {
 					// Start server
-					server, err := signalr.NewServer(context.TODO(), signalr.SimpleHubFactory(&addHub{}), signalr.HTTPTransports("WebSockets"))
+					ctx, serverCancel := context.WithCancel(context.Background())
+					server, err := signalr.NewServer(ctx, signalr.SimpleHubFactory(&addHub{}), signalr.HTTPTransports("WebSockets"))
 					Expect(err).NotTo(HaveOccurred())
 					port := freePort()
 					initFunc(server, port)
@@ -88,7 +88,42 @@ var _ = Describe("WithXXXRouter", func() {
 					tf := avtVal["transferFormats"].([]interface{})
 					Expect(tf).To(ContainElement("Text"))
 					Expect(tf).To(ContainElement("Binary"))
+					serverCancel()
+					close(done)
 				})
+			})
+			Context("Connection with client", func() {
+				It("should successfully handle an Invoke call", func(done Done) {
+					// Start server
+					server, err := signalr.NewServer(context.Background(),
+						signalr.SimpleHubFactory(&addHub{}),
+						signalr.Logger(log.NewNopLogger(), false),
+						signalr.HTTPTransports("WebSockets"))
+					Expect(err).NotTo(HaveOccurred())
+					port := freePort()
+					initFunc(server, port)
+					waitForPort(port)
+					// Start client
+					conn, err := signalr.NewHTTPConnection(context.Background(), fmt.Sprintf("http://127.0.0.1:%v/hub", port))
+					Expect(err).NotTo(HaveOccurred())
+					client, err := signalr.NewClient(context.Background(),
+						signalr.WithConnection(conn),
+						signalr.Logger(log.NewNopLogger(), false),
+						signalr.TransferFormat("Text"))
+					Expect(err).NotTo(HaveOccurred())
+					Expect(client).NotTo(BeNil())
+					errCh := client.Start()
+					Expect(client.WaitConnected(context.Background())).NotTo(HaveOccurred())
+					go func() {
+						defer GinkgoRecover()
+						Expect(errors.Is(<-errCh, context.Canceled)).To(BeTrue())
+					}()
+					Expect(err).NotTo(HaveOccurred())
+					result := <-client.Invoke("Add2", 1)
+					Expect(result.Error).NotTo(HaveOccurred())
+					Expect(result.Value).To(BeEquivalentTo(3))
+					close(done)
+				}, 10.0)
 			})
 		})
 	}
