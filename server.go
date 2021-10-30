@@ -87,6 +87,15 @@ type MappableRouter interface {
 	Handle(string, http.Handler)
 }
 
+// WithHttpServeMux is a MappableRouter factory for MapHTTP which converts a
+// http.ServeMux to a MappableRouter.
+// For factories for other routers, see github.com/philippseith/signalr/router
+func WithHttpServeMux(serveMux *http.ServeMux) func() MappableRouter {
+	return func() MappableRouter {
+		return serveMux
+	}
+}
+
 // MapHTTP maps the servers hub to a path in a MappableRouter
 func (s *server) MapHTTP(routerFactory func() MappableRouter, path string) {
 	httpMux := newHTTPMux(s)

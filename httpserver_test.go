@@ -44,9 +44,7 @@ var _ = Describe("HTTP server", func() {
 					server, err := NewServer(context.TODO(), SimpleHubFactory(&addHub{}), HTTPTransports(transport[0]), testLoggerOption())
 					Expect(err).NotTo(HaveOccurred())
 					router := http.NewServeMux()
-					server.MapHTTP(func() MappableRouter {
-						return router
-					}, "/hub")
+					server.MapHTTP(WithHttpServeMux(router), "/hub")
 					port := freePort()
 					go func() {
 						_ = http.ListenAndServe(fmt.Sprintf("127.0.0.1:%v", port), router)
@@ -76,9 +74,7 @@ var _ = Describe("HTTP server", func() {
 					server, err := NewServer(context.TODO(), SimpleHubFactory(&addHub{}), HTTPTransports(transport[0]), testLoggerOption())
 					Expect(err).NotTo(HaveOccurred())
 					router := http.NewServeMux()
-					server.MapHTTP(func() MappableRouter {
-						return router
-					}, "/hub")
+					server.MapHTTP(WithHttpServeMux(router), "/hub")
 					port := freePort()
 					go func() {
 						_ = http.ListenAndServe(fmt.Sprintf("127.0.0.1:%v", port), router)
@@ -102,9 +98,7 @@ var _ = Describe("HTTP server", func() {
 						Logger(logger, true))
 					Expect(err).NotTo(HaveOccurred())
 					router := http.NewServeMux()
-					server.MapHTTP(func() MappableRouter {
-						return router
-					}, "/hub")
+					server.MapHTTP(WithHttpServeMux(router), "/hub")
 					port := freePort()
 					go func() {
 						_ = http.ListenAndServe(fmt.Sprintf("127.0.0.1:%v", port), router)
@@ -143,7 +137,7 @@ var _ = Describe("HTTP server", func() {
 					Expect(err).NotTo(HaveOccurred())
 					Expect(client2).NotTo(BeNil())
 					_ = client2.Start()
-					Expect(client.WaitConnected(context.Background())).NotTo(HaveOccurred())
+					Expect(client2.WaitConnected(context.Background())).NotTo(HaveOccurred())
 					result = <-client2.Invoke("Add2", 2)
 					Expect(result.Error).NotTo(HaveOccurred())
 					Expect(result.Value).To(BeEquivalentTo(4))
@@ -166,9 +160,7 @@ var _ = Describe("HTTP server", func() {
 			server, err := NewServer(context.TODO(), SimpleHubFactory(&addHub{}), HTTPTransports("WebSockets"), testLoggerOption())
 			Expect(err).NotTo(HaveOccurred())
 			router := http.NewServeMux()
-			server.MapHTTP(func() MappableRouter {
-				return router
-			}, "/hub")
+			server.MapHTTP(WithHttpServeMux(router), "/hub")
 			port := freePort()
 			go func() {
 				_ = http.ListenAndServe(fmt.Sprintf("127.0.0.1:%v", port), router)
