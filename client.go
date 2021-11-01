@@ -344,30 +344,22 @@ func (c *client) waitForConnected() <-chan error {
 		defer close(ch)
 		switch c.State() {
 		case ClientConnected:
-			return
+		case ClientError:
+			ch <- c.Err()
 		case ClientCreated:
 			ch <- errors.New("client not started. Call client.Start() before using it")
-			return
 		case ClientClosed:
-			if c.connectionFactory == nil {
-				ch <- errors.New("client closed and no AutoReconnect option given. Cannot reconnect")
-			} else {
-				c.forwardWaitForClientStateConnected(ch)
-			}
+			ch <- errors.New("client closed and no AutoReconnect option given. Cannot reconnect")
 		case ClientConnecting:
-			c.forwardWaitForClientStateConnected(ch)
+			select {
+			case err := <-WaitForClientState(context.Background(), c, ClientConnected):
+				ch <- err
+			case <-c.context().Done():
+				ch <- c.context().Err()
+			}
 		}
 	}()
 	return ch
-}
-
-func (c *client) forwardWaitForClientStateConnected(ch chan error) {
-	select {
-	case err := <-WaitForClientState(context.Background(), c, ClientConnected):
-		ch <- err
-	case <-c.context().Done():
-		ch <- c.context().Err()
-	}
 }
 
 func createResultChansWithError(err error) (<-chan InvokeResult, chan error) {

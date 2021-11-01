@@ -2,6 +2,7 @@ package signalr
 
 import (
 	"context"
+	"errors"
 	"fmt"
 )
 
@@ -34,8 +35,14 @@ func WaitForClientState(ctx context.Context, client Client, waitFor ClientState)
 		for {
 			select {
 			case <-stateCh:
-				if client.State() == waitFor {
+				switch client.State() {
+				case waitFor:
 					return
+				case ClientCreated:
+					ch <- errors.New("client not started. Call client.Start() before using it")
+					return
+				case ClientClosed:
+					ch <- errors.New("client closed and no AutoReconnect option given. Cannot reconnect")
 				}
 			case <-ctx.Done():
 				ch <- ctx.Err()
