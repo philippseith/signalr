@@ -143,7 +143,7 @@ func (l *loop) PullStream(method, id string, arguments ...interface{}) <-chan In
 	return ch
 }
 
-func (l *loop) PushStreams(method, id string, arguments ...interface{}) <-chan error {
+func (l *loop) PushStreams(method, id string, arguments ...interface{}) (<-chan error, error) {
 	_, errChan := l.invokeClient.newInvocation(id)
 	invokeArgs := make([]interface{}, 0)
 	reflectedChannels := make([]reflect.Value, 0)
@@ -159,17 +159,14 @@ func (l *loop) PushStreams(method, id string, arguments ...interface{}) <-chan e
 	}
 	// Tell the server we are streaming now
 	if err := l.hubConn.SendStreamInvocation(l.GetNewID(), method, invokeArgs, streamIds); err != nil {
-		// When we get an error here, the loop is closed and the errChan might be already closed
-		// We create a new one to deliver our error
-		_, errChan = createResultChansWithError(err)
 		l.invokeClient.deleteInvocation(id)
-		return errChan
+		return nil, err
 	}
 	// Start streaming on all channels
 	for i, reflectedChannel := range reflectedChannels {
 		l.streamer.Start(streamIds[i], reflectedChannel)
 	}
-	return errChan
+	return errChan, nil
 }
 
 // GetNewID returns a new, connection-unique id for invocations and streams

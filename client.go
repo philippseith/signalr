@@ -310,7 +310,12 @@ func (c *client) PushStreams(method string, arguments ...interface{}) <-chan err
 			close(errCh)
 			return
 		}
-		pushCh := c.loop.PushStreams(method, c.loop.GetNewID(), arguments...)
+		pushCh, err := c.loop.PushStreams(method, c.loop.GetNewID(), arguments...)
+		if err != nil {
+			errCh <- err
+			close(errCh)
+			return
+		}
 		go func() {
 			for err := range pushCh {
 				errCh <- err
