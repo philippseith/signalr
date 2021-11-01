@@ -21,7 +21,7 @@ A Client can be used in client side code to access server methods. From an exist
 A special case is NewHTTPClient(), which creates a Client from a server address and negotiates with the server
 which kind of connection (Websockets, Server-Sent Events) will be used.
   // Configurable HTTP connection
-  conn, err := NewHTTPConnection(ctx, "http://example.com/hub", WithHTTPHeadersOption(..))
+  conn, err := NewHTTPConnection(ctx, "http://example.com/hub", WithHTTPHeaders(..))
   // Client with JSON encoding
   client, err := NewClient(ctx, conn, TransferFormat("Text"), WithReceiver(receiver))
   client.Start()
