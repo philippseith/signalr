@@ -14,7 +14,7 @@ import (
 )
 
 // Client is the signalR connection used on the client side.
-//   Start() <- chan error
+//   Start()
 // Start starts the client loop. After starting the client, the interaction with a server can be started.
 // The client loop will run until the server closes the connection. If WithAutoReconnect is used, Start will
 // start a new loop. To end the loop from the client side, the context passed to NewClient has to be canceled.
