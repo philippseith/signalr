@@ -222,6 +222,18 @@ func (c *client) setState(state ClientState) {
 
 func (c *client) castStateChange(ch chan<- struct{}) {
 	go func() {
+		defer func() {
+			if err := recover(); err != nil {
+				c.mx.Lock()
+				defer c.mx.Unlock()
+				for i, cch := range c.stateChangeChans {
+					if cch == ch {
+						c.stateChangeChans = append(c.stateChangeChans[:i], c.stateChangeChans[i+1:]...)
+						break
+					}
+				}
+			}
+		}()
 		select {
 		case ch <- struct{}{}:
 		case <-c.ctx.Done():
