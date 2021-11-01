@@ -137,16 +137,12 @@ var _ = Describe("Client", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(clientConn).NotTo(BeNil())
 			// Start it
-			errCh := clientConn.Start()
-			Expect(clientConn.WaitConnected(context.Background())).NotTo(HaveOccurred())
-			clientLoopDone := make(chan struct{})
-			go func() {
-				defer GinkgoRecover()
-				Expect(errors.Is(<-errCh, context.Canceled)).To(BeTrue())
-				close(clientLoopDone)
-			}()
+			clientConn.Start()
+			Expect(<-WaitForClientState(context.Background(), clientConn, ClientConnected)).NotTo(HaveOccurred())
 			cancelClient()
-			<-clientLoopDone
+			ch := make(chan struct{}, 1)
+			clientConn.PushStateChanged(ch)
+			<-ch
 			server.cancel()
 			close(done)
 		}, 1.0)
@@ -171,8 +167,8 @@ var _ = Describe("Client", func() {
 			ctx, cancelClient = context.WithCancel(context.Background())
 			client, _ = NewClient(ctx, WithConnection(cliConn), WithReceiver(simpleReceiver{}), testLoggerOption(), formatOption)
 			// Start it
-			_ = client.Start()
-			Expect(client.WaitConnected(context.Background())).NotTo(HaveOccurred())
+			client.Start()
+			Expect(<-WaitForClientState(context.Background(), client, ClientConnected)).NotTo(HaveOccurred())
 			close(done)
 		}, 2.0)
 		AfterEach(func(done Done) {
@@ -227,8 +223,8 @@ var _ = Describe("Client", func() {
 			ctx, cancelClient = context.WithCancel(context.Background())
 			client, _ = NewClient(ctx, WithConnection(cliConn), WithReceiver(receiver), testLoggerOption(), formatOption)
 			// Start it
-			_ = client.Start()
-			Expect(client.WaitConnected(context.Background())).NotTo(HaveOccurred())
+			client.Start()
+			Expect(<-WaitForClientState(context.Background(), client, ClientConnected)).NotTo(HaveOccurred())
 			close(done)
 		}, 2.0)
 		AfterEach(func(done Done) {
@@ -311,7 +307,8 @@ var _ = Describe("Client", func() {
 			ctx, cancelClient = context.WithCancel(context.Background())
 			client, _ = NewClient(ctx, WithConnection(cliConn), WithReceiver(receiver), testLoggerOption(), formatOption)
 			// Start it
-			_ = client.Start()
+			client.Start()
+			Expect(<-WaitForClientState(context.Background(), client, ClientConnected)).NotTo(HaveOccurred())
 			close(done)
 		}, 2.0)
 		AfterEach(func(done Done) {
@@ -381,8 +378,8 @@ var _ = Describe("Client", func() {
 			ctx, cancelClient = context.WithCancel(context.Background())
 			client, _ = NewClient(ctx, WithConnection(cliConn), WithReceiver(receiver), testLoggerOption(), formatOption)
 			// Start it
-			_ = client.Start()
-			Expect(client.WaitConnected(context.Background())).NotTo(HaveOccurred())
+			client.Start()
+			Expect(<-WaitForClientState(context.Background(), client, ClientConnected)).NotTo(HaveOccurred())
 			close(done)
 		}, 2.0)
 		AfterEach(func(done Done) {
@@ -437,8 +434,8 @@ var _ = Describe("Client", func() {
 			ctx, cancelClient = context.WithCancel(context.Background())
 			client, _ = NewClient(ctx, WithConnection(cliConn), WithReceiver(receiver), testLoggerOption(), formatOption)
 			// Start it
-			_ = client.Start()
-			Expect(client.WaitConnected(context.Background())).NotTo(HaveOccurred())
+			client.Start()
+			Expect(<-WaitForClientState(context.Background(), client, ClientConnected)).NotTo(HaveOccurred())
 			close(done)
 		}, 2.0)
 		AfterEach(func(done Done) {

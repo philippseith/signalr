@@ -2,7 +2,6 @@ package signalr_test
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net"
 	"testing"
@@ -54,10 +53,7 @@ var _ = Describe("NetConnection", func() {
 				}
 				time.Sleep(100 * time.Millisecond)
 			}
-			go func() {
-				defer GinkgoRecover()
-				Expect(errors.Is(<-client.Start(), context.Canceled)).To(BeTrue())
-			}()
+			client.Start()
 			result := <-client.Invoke("smoke")
 			Expect(result.Value).To(Equal("no smoke!"))
 			cancel()

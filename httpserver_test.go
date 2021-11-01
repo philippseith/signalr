@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io/ioutil"
 	"net"
@@ -106,7 +105,7 @@ var _ = Describe("HTTP server", func() {
 					waitForPort(port)
 
 					// Try first connection
-					conn, err := NewHTTPConnection(context.TODO(), fmt.Sprintf("http://127.0.0.1:%v/hub", port))
+					conn, err := NewHTTPConnection(context.Background(), fmt.Sprintf("http://127.0.0.1:%v/hub", port))
 					Expect(err).NotTo(HaveOccurred())
 					ctx, cancelClient := context.WithCancel(context.Background())
 					client, err := NewClient(ctx,
@@ -115,19 +114,14 @@ var _ = Describe("HTTP server", func() {
 						TransferFormat(transport[1]))
 					Expect(err).NotTo(HaveOccurred())
 					Expect(client).NotTo(BeNil())
-					errCh := client.Start()
-					Expect(client.WaitConnected(context.Background())).NotTo(HaveOccurred())
-					go func() {
-						defer GinkgoRecover()
-						Expect(errors.Is(<-errCh, context.Canceled)).To(BeTrue())
-					}()
-					Expect(err).NotTo(HaveOccurred())
+					client.Start()
+					Expect(<-WaitForClientState(context.Background(), client, ClientConnected)).NotTo(HaveOccurred())
 					result := <-client.Invoke("Add2", 1)
 					Expect(result.Error).NotTo(HaveOccurred())
 					Expect(result.Value).To(BeEquivalentTo(3))
 
 					// Try second connection
-					conn2, err := NewHTTPConnection(context.TODO(), fmt.Sprintf("http://127.0.0.1:%v/hub", port))
+					conn2, err := NewHTTPConnection(context.Background(), fmt.Sprintf("http://127.0.0.1:%v/hub", port))
 					Expect(err).NotTo(HaveOccurred())
 					ctx2, cancelClient2 := context.WithCancel(context.Background())
 					client2, err := NewClient(ctx2,
@@ -136,8 +130,8 @@ var _ = Describe("HTTP server", func() {
 						TransferFormat(transport[1]))
 					Expect(err).NotTo(HaveOccurred())
 					Expect(client2).NotTo(BeNil())
-					_ = client2.Start()
-					Expect(client.WaitConnected(context.Background())).NotTo(HaveOccurred())
+					client2.Start()
+					Expect(<-WaitForClientState(context.Background(), client2, ClientConnected)).NotTo(HaveOccurred())
 					result = <-client2.Invoke("Add2", 2)
 					Expect(result.Error).NotTo(HaveOccurred())
 					Expect(result.Value).To(BeEquivalentTo(4))
