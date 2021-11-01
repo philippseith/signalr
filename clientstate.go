@@ -20,10 +20,17 @@ const (
 // or nil if the ClientState waitFor was reached.
 func WaitForClientState(ctx context.Context, client Client, waitFor ClientState) <-chan error {
 	ch := make(chan error, 1)
-	stateCh := make(chan struct{})
+	if client.State() == waitFor {
+		close(ch)
+		return ch
+	}
+	stateCh := make(chan struct{}, 1)
 	client.PushStateChanged(stateCh)
 	go func() {
 		defer close(ch)
+		if client.State() == waitFor {
+			return
+		}
 		for {
 			select {
 			case <-stateCh:

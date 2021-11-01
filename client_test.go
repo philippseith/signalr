@@ -140,9 +140,6 @@ var _ = Describe("Client", func() {
 			clientConn.Start()
 			Expect(<-WaitForClientState(context.Background(), clientConn, ClientConnected)).NotTo(HaveOccurred())
 			cancelClient()
-			ch := make(chan struct{}, 1)
-			clientConn.PushStateChanged(ch)
-			<-ch
 			server.cancel()
 			close(done)
 		}, 1.0)
