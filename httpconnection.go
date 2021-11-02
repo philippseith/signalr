@@ -135,7 +135,7 @@ func NewHTTPConnection(ctx context.Context, address string, options ...func(*htt
 			return nil, err
 		}
 
-		conn, err = newClientSSEConnection(context.Background(), address, nr.ConnectionID, resp.Body)
+		conn, err = newClientSSEConnection(address, nr.ConnectionID, resp.Body)
 		if err != nil {
 			return nil, err
 		}
