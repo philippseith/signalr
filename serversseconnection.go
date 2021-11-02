@@ -10,8 +10,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-
-	"github.com/teivah/onecontext"
 )
 
 type serverSSEConnection struct {
@@ -25,13 +23,11 @@ type serverSSEConnection struct {
 	sseFlusher  http.Flusher
 }
 
-func newServerSSEConnection(parentContext context.Context, requestContext context.Context,
-	connectionID string, writer http.ResponseWriter) (*serverSSEConnection, error) {
+func newServerSSEConnection(ctx context.Context, connectionID string, writer http.ResponseWriter) (*serverSSEConnection, error) {
 	sseFlusher, ok := writer.(http.Flusher)
 	if !ok {
 		return nil, errors.New("connection over Server Sent Events not supported with http.ResponseWriter: http.Flusher not implemented")
 	}
-	ctx, _ := onecontext.Merge(parentContext, requestContext)
 	s := serverSSEConnection{
 		ConnectionBase: ConnectionBase{
 			ctx:          ctx,
