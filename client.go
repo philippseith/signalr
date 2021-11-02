@@ -13,8 +13,10 @@ import (
 	"github.com/go-kit/log"
 )
 
+// ClientState is the state of the client.
 type ClientState int
 
+// Client states
 const (
 	ClientCreated ClientState = iota
 	ClientConnecting
