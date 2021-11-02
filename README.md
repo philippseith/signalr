@@ -245,13 +245,16 @@ hub.Clients().Caller().Send("receive", message)
 
 The client itself might be used like that:
 ```go
-// Create a Connection
-conn, err := signalr.NewHTTPConnection(ctx, address)
+// Create a Connection (with timeout for the negotiation process)
+creationCtx, _ := context.WithTimeout(ctx, 2 * time.Second)
+conn, err := signalr.NewHTTPConnection(creationCtx, address)
 if err != nil {
     return err
 }
 // Create the client and set a receiver for callbacks from the server
-client, err := signalr.NewClient(ctx, conn, signalr.Receiver(receiver))
+client, err := signalr.NewClient(ctx, conn,
+	signalr.WithConnection(conn),
+	signalr.WithReceiver(receiver))
 if err != nil {
     return err
 }

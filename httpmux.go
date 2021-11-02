@@ -146,15 +146,15 @@ func (h *httpMux) handleWebsocket(writer http.ResponseWriter, request *http.Requ
 			// Connection is negotiated but not initiated
 			err = h.serveConnection(newWebSocketConnection(h.server.context(), request.Context(), c.ConnectionID(), websocketConn))
 			if err != nil {
-				_ = websocketConn.Close(500, err.Error())
+				_ = websocketConn.Close(1005, err.Error())
 			}
 		} else {
 			// Already initiated
-			_ = websocketConn.Close(409, "Bad request")
+			_ = websocketConn.Close(1002, "Bad request")
 		}
 	} else {
 		// Not negotiated
-		_ = websocketConn.Close(404, "Not found")
+		_ = websocketConn.Close(1002, "Not found")
 	}
 }
 

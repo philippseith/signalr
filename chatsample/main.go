@@ -148,7 +148,8 @@ func runHTTPClient(address string, receiver interface{}) error {
 	c, err := signalr.NewClient(context.Background(), nil,
 		signalr.WithReceiver(receiver),
 		signalr.WithAutoReconnect(func() (signalr.Connection, error) {
-			return signalr.NewHTTPConnection(context.Background(), address)
+			creationCtx, _ := context.WithTimeout(context.Background(), 2*time.Second)
+			return signalr.NewHTTPConnection(creationCtx, address)
 		}),
 		signalr.Logger(kitlog.NewLogfmtLogger(os.Stdout), false))
 	if err != nil {

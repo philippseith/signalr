@@ -16,14 +16,22 @@ Client
 A Client can be used in client side code to access server methods. From an existing connection, it can be created with NewClient().
   // NewClient with raw TCP connection and MessagePack encoding
   conn, err := net.Dial("tcp", "example.com:6502")
-  client := NewClient(ctx, NewNetConnection(ctx, conn), TransferFormat("Binary), WithReceiver(receiver))
+  client := NewClient(ctx,
+			WithConnection(NewNetConnection(ctx, conn)),
+			TransferFormat("Binary),
+			WithReceiver(receiver))
+
   client.Start()
 A special case is NewHTTPClient(), which creates a Client from a server address and negotiates with the server
 which kind of connection (Websockets, Server-Sent Events) will be used.
   // Configurable HTTP connection
-  conn, err := NewHTTPConnection(ctx, "http://example.com/hub", WithHTTPHeadersOption(..))
+  conn, err := NewHTTPConnection(ctx, "http://example.com/hub", WithHTTPHeaders(..))
   // Client with JSON encoding
-  client, err := NewClient(ctx, conn, TransferFormat("Text"), WithReceiver(receiver))
+  client, err := NewClient(ctx,
+			WithConnection(conn),
+			TransferFormat("Text"),
+			WithReceiver(receiver))
+
   client.Start()
 The object which will receive server callbacks is passed to NewClient() by using the WithReceiver option.
 After calling client.Start(), the client is ready to call server methods or to receive callbacks.
