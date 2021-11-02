@@ -140,7 +140,7 @@ var _ = Describe("Client", func() {
 				Expect(clientConn).NotTo(BeNil())
 				// Start it
 				clientConn.Start()
-				Expect(<-WaitForClientState(context.Background(), clientConn, ClientConnected)).NotTo(HaveOccurred())
+				Expect(<-clientConn.WaitForClientState(context.Background(), ClientConnected)).NotTo(HaveOccurred())
 				cancelClient()
 				server.cancel()
 				close(done)
@@ -337,7 +337,7 @@ var _ = Describe("Client", func() {
 				client, _ = NewClient(ctx, WithConnection(cliConn), WithReceiver(receiver), testLoggerOption(), formatOption)
 				// Start it
 				client.Start()
-				Expect(<-WaitForClientState(context.Background(), client, ClientConnected)).NotTo(HaveOccurred())
+				Expect(<-client.WaitForClientState(context.Background(), ClientConnected)).NotTo(HaveOccurred())
 				close(done)
 			}, 2.0)
 			AfterEach(func(done Done) {
@@ -395,7 +395,7 @@ var _ = Describe("Client", func() {
 				client, _ = NewClient(ctx, WithConnection(cliConn), WithReceiver(receiver), testLoggerOption(), formatOption)
 				// Start it
 				client.Start()
-				Expect(<-WaitForClientState(context.Background(), client, ClientConnected)).NotTo(HaveOccurred())
+				Expect(<-client.WaitForClientState(context.Background(), ClientConnected)).NotTo(HaveOccurred())
 				close(done)
 			}, 2.0)
 			AfterEach(func(done Done) {
