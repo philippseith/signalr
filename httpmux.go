@@ -33,14 +33,14 @@ func (h *httpMux) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 	case "GET":
 		h.handleGet(writer, request)
 	default:
-		writer.WriteHeader(400)
+		writer.WriteHeader(http.StatusBadRequest)
 	}
 }
 
 func (h *httpMux) handlePost(writer http.ResponseWriter, request *http.Request) {
 	connectionID := request.URL.Query().Get("id")
 	if connectionID == "" {
-		writer.WriteHeader(400) // Bad request
+		writer.WriteHeader(http.StatusBadRequest)
 		return
 	}
 	h.mx.Lock()
@@ -54,10 +54,10 @@ func (h *httpMux) handlePost(writer http.ResponseWriter, request *http.Request) 
 		// TODO case longPolling
 		default:
 			// ConnectionID for WebSocket or
-			writer.WriteHeader(409) // Conflict
+			writer.WriteHeader(http.StatusConflict)
 		}
 	} else {
-		writer.WriteHeader(404) // Not found
+		writer.WriteHeader(http.StatusNotFound)
 	}
 }
 
@@ -75,14 +75,14 @@ func (h *httpMux) handleGet(writer http.ResponseWriter, request *http.Request) {
 	} else if strings.ToLower(request.Header.Get("Accept")) == "text/event-stream" {
 		h.handleServerSentEvent(writer, request)
 	} else {
-		writer.WriteHeader(400) // Bad request
+		writer.WriteHeader(http.StatusBadRequest)
 	}
 }
 
 func (h *httpMux) handleServerSentEvent(writer http.ResponseWriter, request *http.Request) {
 	connectionID := request.URL.Query().Get("id")
 	if connectionID == "" {
-		writer.WriteHeader(400) // Bad request
+		writer.WriteHeader(http.StatusBadRequest)
 		return
 	}
 	h.mx.Lock()
@@ -92,7 +92,7 @@ func (h *httpMux) handleServerSentEvent(writer http.ResponseWriter, request *htt
 		if _, ok := c.(*negotiateConnection); ok {
 			sseConn, err := newServerSSEConnection(h.server.context(), request.Context(), c.ConnectionID(), writer)
 			if err != nil {
-				writer.WriteHeader(500)
+				writer.WriteHeader(http.StatusInternalServerError)
 				return
 			}
 			// Connection is negotiated but not initiated
@@ -100,7 +100,7 @@ func (h *httpMux) handleServerSentEvent(writer http.ResponseWriter, request *htt
 			writer.Header().Set("Content-Type", "text/event-stream")
 			writer.Header().Set("Connection", "keep-alive")
 			writer.Header().Set("Cache-Control", "no-cache")
-			writer.WriteHeader(200)
+			writer.WriteHeader(http.StatusOK)
 			// End this Server Sent Event (yes, your response now is one and the client will wait for this initial event to end)
 			_, _ = fmt.Fprint(writer, ":\r\n\r\n")
 			writer.(http.Flusher).Flush()
@@ -108,10 +108,10 @@ func (h *httpMux) handleServerSentEvent(writer http.ResponseWriter, request *htt
 			// We can't WriteHeader 500 if we get an error as we already wrote the header, so ignore it.
 		} else {
 			// connectionID in use
-			writer.WriteHeader(409) // Conflict
+			writer.WriteHeader(http.StatusConflict)
 		}
 	} else {
-		writer.WriteHeader(404) // Not found
+		writer.WriteHeader(http.StatusNotFound)
 	}
 }
 
@@ -160,7 +160,7 @@ func (h *httpMux) handleWebsocket(writer http.ResponseWriter, request *http.Requ
 
 func (h *httpMux) negotiate(w http.ResponseWriter, req *http.Request) {
 	if req.Method != "POST" {
-		w.WriteHeader(400)
+		w.WriteHeader(http.StatusBadRequest)
 	} else {
 		connectionID := newConnectionID()
 		connectionMapKey := connectionID
@@ -202,7 +202,7 @@ func (h *httpMux) negotiate(w http.ResponseWriter, req *http.Request) {
 			AvailableTransports: availableTransports,
 		}
 
-		w.WriteHeader(200)
+		w.WriteHeader(http.StatusOK)
 		_ = json.NewEncoder(w).Encode(response) // Can't imagine an error when encoding
 	}
 }
