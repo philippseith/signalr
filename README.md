@@ -84,7 +84,11 @@ func (c *chat) OnDisconnected(connectionID string) {
 #### Serve with http.ServeMux
 
 ```go
-import "net/http"
+import (
+    "net/http"
+	
+	"github.com/philippseith/signalr"
+)
 
 func runHTTPServer() {
     address := 'localhost:8080'
@@ -105,7 +109,7 @@ func runHTTPServer() {
     
     // ask the signalr server to map it's server
     // api routes to your custom baseurl
-    server.MapHTTP(router, "/chat")
+    server.MapHTTP(signalr.WithHttpServeMux(router), "/chat")
 
     // in addition to mapping the signalr routes
     // your mux will need to serve the static files

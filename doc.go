@@ -66,7 +66,7 @@ The server then automatically negotiates which kind of connection (Websockets, S
 
   // ask the signalr server to map it's server
   // api routes to your custom baseurl
-  server.MapHTTP(router, "/chat")
+  server.MapHTTP(signalr.WithHttpServeMux(router), "/chat")
 
   // in addition to mapping the signalr routes
   // your mux will need to serve the static files
