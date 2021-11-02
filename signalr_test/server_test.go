@@ -103,7 +103,7 @@ func runServer(t *testing.T, serverIsUp chan struct{}, quitServer chan struct{},
 		transports,
 		testLoggerOption())
 	router := http.NewServeMux()
-	sRServer.MapHTTP(router, "/hub")
+	sRServer.MapHTTP(signalr.WithHttpServeMux(router), "/hub")
 
 	server := &http.Server{
 		Addr:         "127.0.0.1:5001",

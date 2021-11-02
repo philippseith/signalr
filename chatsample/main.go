@@ -134,7 +134,7 @@ func runHTTPServer(address string, hub signalr.HubInterface) {
 		signalr.Logger(kitlog.NewLogfmtLogger(os.Stdout), false),
 		signalr.KeepAliveInterval(2*time.Second))
 	router := http.NewServeMux()
-	server.MapHTTP(router, "/chat")
+	server.MapHTTP(signalr.WithHttpServeMux(router), "/chat")
 
 	fmt.Printf("Serving public content from the embedded filesystem\n")
 	router.Handle("/", http.FileServer(http.FS(public.FS)))
