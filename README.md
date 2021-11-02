@@ -87,7 +87,7 @@ func (c *chat) OnDisconnected(connectionID string) {
 import (
     "net/http"
 	
-	"github.com/philippseith/signalr"
+    "github.com/philippseith/signalr"
 )
 
 func runHTTPServer() {
