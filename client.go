@@ -13,6 +13,16 @@ import (
 	"github.com/go-kit/log"
 )
 
+type ClientState int
+
+const (
+	ClientCreated ClientState = iota
+	ClientConnecting
+	ClientConnected
+	ClientClosed
+	ClientError
+)
+
 // Client is the signalR connection used on the client side.
 //   Start()
 // Start starts the client loop. After starting the client, the interaction with a server can be started.
@@ -27,6 +37,10 @@ import (
 //  Err() error
 // Err returns the last error occurred while running the client.
 // When the client goes to ClientConnecting, Err is set to nil
+//  WaitForClientState(ctx context.Context, waitFor ClientState) <-chan error
+// WaitForClientState returns a channel for waiting on the Client to reach a specific ClientState.
+// The channel either returns an error if ctx or the client has been canceled.
+// or nil if the ClientState waitFor was reached.
 //  Invoke(method string, arguments ...interface{}) <-chan InvokeResult
 // Invoke invokes a method on the server and returns a channel wich will return the InvokeResult.
 // When failing, InvokeResult.Error contains the client side error.
@@ -45,6 +59,7 @@ type Client interface {
 	State() ClientState
 	PushStateChanged(chan<- struct{})
 	Err() error
+	WaitForClientState(ctx context.Context, waitFor ClientState) <-chan error
 	Invoke(method string, arguments ...interface{}) <-chan InvokeResult
 	Send(method string, arguments ...interface{}) <-chan error
 	PullStream(method string, arguments ...interface{}) <-chan InvokeResult
@@ -211,6 +226,43 @@ func (c *client) Err() error {
 	return c.err
 }
 
+func (c *client) WaitForClientState(ctx context.Context, waitFor ClientState) <-chan error {
+	ch := make(chan error, 1)
+	if c.State() == waitFor {
+		close(ch)
+		return ch
+	}
+	stateCh := make(chan struct{}, 1)
+	c.PushStateChanged(stateCh)
+	go func() {
+		defer close(ch)
+		if c.State() == waitFor {
+			return
+		}
+		for {
+			select {
+			case <-stateCh:
+				switch c.State() {
+				case waitFor:
+					return
+				case ClientCreated:
+					ch <- errors.New("client not started. Call client.Start() before using it")
+					return
+				case ClientClosed:
+					ch <- errors.New("client closed and no AutoReconnect option given. Cannot reconnect")
+				}
+			case <-ctx.Done():
+				ch <- ctx.Err()
+				return
+			case <-c.context().Done():
+				ch <- fmt.Errorf("client canceled: %w", c.context().Err())
+				return
+			}
+		}
+	}()
+	return ch
+}
+
 func (c *client) setState(state ClientState) {
 	c.mx.Lock()
 	defer c.mx.Unlock()
@@ -352,7 +404,7 @@ func (c *client) waitForConnected() <-chan error {
 			ch <- errors.New("client closed and no AutoReconnect option given. Cannot reconnect")
 		case ClientConnecting:
 			select {
-			case err := <-WaitForClientState(context.Background(), c, ClientConnected):
+			case err := <-c.WaitForClientState(context.Background(), ClientConnected):
 				ch <- err
 			case <-c.context().Done():
 				ch <- c.context().Err()
