@@ -14,7 +14,7 @@ import (
 )
 
 type httpMux struct {
-	mx            sync.Mutex
+	mx            sync.RWMutex
 	connectionMap map[string]Connection
 	server        Server
 }
@@ -43,9 +43,9 @@ func (h *httpMux) handlePost(writer http.ResponseWriter, request *http.Request) 
 		writer.WriteHeader(http.StatusBadRequest)
 		return
 	}
-	h.mx.Lock()
+	h.mx.RLock()
 	c, ok := h.connectionMap[connectionID]
-	h.mx.Unlock()
+	h.mx.RUnlock()
 	if ok {
 		// Connection is initiated
 		switch conn := c.(type) {
@@ -85,9 +85,9 @@ func (h *httpMux) handleServerSentEvent(writer http.ResponseWriter, request *htt
 		writer.WriteHeader(http.StatusBadRequest)
 		return
 	}
-	h.mx.Lock()
+	h.mx.RLock()
 	c, ok := h.connectionMap[connectionID]
-	h.mx.Unlock()
+	h.mx.RUnlock()
 	if ok {
 		if _, ok := c.(*negotiateConnection); ok {
 			sseConn, err := newServerSSEConnection(h.server.context(), request.Context(), c.ConnectionID(), writer)
@@ -138,9 +138,9 @@ func (h *httpMux) handleWebsocket(writer http.ResponseWriter, request *http.Requ
 		}
 		h.mx.Unlock()
 	}
-	h.mx.Lock()
+	h.mx.RLock()
 	c, ok := h.connectionMap[connectionMapKey]
-	h.mx.Unlock()
+	h.mx.RUnlock()
 	if ok {
 		if _, ok := c.(*negotiateConnection); ok {
 			// Connection is negotiated but not initiated
