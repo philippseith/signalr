@@ -28,7 +28,6 @@ func (n *NetHub) Smoke() string {
 var _ = Describe("NetConnection", func() {
 	Context("Smoke", func() {
 		It("should transport a simple invocation over raw rcp", func(done Done) {
-			var ctx context.Context
 			ctx, cancel := context.WithCancel(context.Background())
 			server, err := signalr.NewServer(ctx, signalr.SimpleHubFactory(&NetHub{}), testLoggerOption())
 			Expect(err).NotTo(HaveOccurred())
@@ -48,19 +47,15 @@ var _ = Describe("NetConnection", func() {
 			for {
 				if clientConn, err := net.Dial("tcp",
 					fmt.Sprintf("localhost:%v", listener.Addr().(*net.TCPAddr).Port)); err == nil {
-					client, err = signalr.NewClient(ctx, signalr.NewNetConnection(ctx, clientConn), testLoggerOption())
+					client, err = signalr.NewClient(ctx, signalr.WithConnection(signalr.NewNetConnection(ctx, clientConn)), testLoggerOption())
 					Expect(err).NotTo(HaveOccurred())
-
 					break
 				}
 				time.Sleep(100 * time.Millisecond)
 			}
-			err = client.Start()
-			Expect(err).NotTo(HaveOccurred())
+			client.Start()
 			result := <-client.Invoke("smoke")
 			Expect(result.Value).To(Equal("no smoke!"))
-			err = client.Stop()
-			Expect(err).NotTo(HaveOccurred())
 			cancel()
 			close(done)
 		})

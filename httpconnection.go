@@ -21,23 +21,25 @@ type httpConnection struct {
 	headers func() http.Header
 }
 
-// WithHTTPClientOption sets the http client used to connect to the signalR server
-func WithHTTPClientOption(client Doer) func(*httpConnection) error {
+// WithHTTPClient sets the http client used to connect to the signalR server
+func WithHTTPClient(client Doer) func(*httpConnection) error {
 	return func(c *httpConnection) error {
 		c.client = client
 		return nil
 	}
 }
 
-// WithHTTPHeadersOption sets the function for providing request headers for HTTP and websocket requests
-func WithHTTPHeadersOption(headers func() http.Header) func(*httpConnection) error {
+// WithHTTPHeaders sets the function for providing request headers for HTTP and websocket requests
+func WithHTTPHeaders(headers func() http.Header) func(*httpConnection) error {
 	return func(c *httpConnection) error {
 		c.headers = headers
 		return nil
 	}
 }
 
-// NewHTTPConnection creates a signalR HTTP Connection
+// NewHTTPConnection creates a signalR HTTP Connection for usage with a Client.
+// ctx can be used to cancel the SignalR negotiation during the creation of the Connection
+// but not the Connection itself.
 func NewHTTPConnection(ctx context.Context, address string, options ...func(*httpConnection) error) (Connection, error) {
 	httpConn := &httpConnection{}
 
@@ -53,7 +55,7 @@ func NewHTTPConnection(ctx context.Context, address string, options ...func(*htt
 		httpConn.client = &http.Client{}
 	}
 
-	req, err := http.NewRequest("POST", fmt.Sprintf("%s/negotiate", address), nil)
+	req, err := http.NewRequestWithContext(ctx, "POST", fmt.Sprintf("%s/negotiate", address), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -66,7 +68,7 @@ func NewHTTPConnection(ctx context.Context, address string, options ...func(*htt
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != 200 {
 		return nil, fmt.Errorf("%v -> %v", req, resp.Status)
@@ -116,7 +118,7 @@ func NewHTTPConnection(ctx context.Context, address string, options ...func(*htt
 			return nil, err
 		}
 
-		conn = newWebSocketConnection(ctx, context.Background(), nr.ConnectionID, ws)
+		conn = newWebSocketConnection(context.Background(), context.Background(), nr.ConnectionID, ws)
 	} else if formats = nr.getTransferFormats("ServerSentEvents"); formats != nil {
 		req, err := http.NewRequest("GET", reqURL.String(), nil)
 		if err != nil {
@@ -133,7 +135,7 @@ func NewHTTPConnection(ctx context.Context, address string, options ...func(*htt
 			return nil, err
 		}
 
-		conn, err = newClientSSEConnection(ctx, address, nr.ConnectionID, resp.Body)
+		conn, err = newClientSSEConnection(address, nr.ConnectionID, resp.Body)
 		if err != nil {
 			return nil, err
 		}

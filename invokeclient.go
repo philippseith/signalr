@@ -71,6 +71,7 @@ func (i *invokeClient) handlesInvocationID(invocationID string) bool {
 }
 
 func (i *invokeClient) receiveCompletionItem(completion completionMessage) error {
+	defer i.deleteInvocation(completion.InvocationID)
 	i.mx.Lock()
 	ir, ok := i.resultChans[completion.InvocationID]
 	i.mx.Unlock()

@@ -88,7 +88,7 @@ var _ = Describe("Server options", func() {
 		})
 		Context("When UseHub is used on a client", func() {
 			It("should return an error", func(done Done) {
-				_, err := NewClient(context.TODO(), newTestingConnection(), testLoggerOption(), UseHub(&singleHub{}))
+				_, err := NewClient(context.TODO(), WithConnection(newTestingConnection()), testLoggerOption(), UseHub(&singleHub{}))
 				Expect(err).To(HaveOccurred())
 				close(done)
 			})
@@ -138,7 +138,7 @@ var _ = Describe("Server options", func() {
 		})
 		Context("When SimpleHubFactory is used on a client", func() {
 			It("should return an error", func(done Done) {
-				_, err := NewClient(context.TODO(), newTestingConnection(), testLoggerOption(), SimpleHubFactory(&singleHub{}))
+				_, err := NewClient(context.TODO(), WithConnection(newTestingConnection()), testLoggerOption(), SimpleHubFactory(&singleHub{}))
 				Expect(err).To(HaveOccurred())
 				close(done)
 			})
@@ -375,7 +375,7 @@ var _ = Describe("Server options", func() {
 		})
 		Context("When HTTPTransports is used on a client", func() {
 			It("should return an error", func(done Done) {
-				_, err := NewClient(context.TODO(), newTestingConnection(), HTTPTransports("ServerSentEvents"), testLoggerOption())
+				_, err := NewClient(context.TODO(), WithConnection(newTestingConnection()), HTTPTransports("ServerSentEvents"), testLoggerOption())
 				Expect(err).To(HaveOccurred())
 				close(done)
 			})

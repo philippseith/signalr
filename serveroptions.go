@@ -21,10 +21,10 @@ func UseHub(hub HubInterface) func(Party) error {
 // The function might create a new hub instance on every invocation.
 // If hub instances should be created and initialized by a DI framework,
 // the frameworks' factory method can be called here.
-func HubFactory(factoryFunc func() HubInterface) func(Party) error {
+func HubFactory(factory func() HubInterface) func(Party) error {
 	return func(p Party) error {
 		if s, ok := p.(*server); ok {
-			s.newHub = factoryFunc
+			s.newHub = factory
 			return nil
 		}
 		return errors.New("option HubFactory is server only")
