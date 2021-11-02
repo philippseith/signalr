@@ -68,7 +68,6 @@ type Client interface {
 
 // NewClient builds a new Client.
 // When ctx is canceled, the client loop and a possible auto reconnect loop are ended.
-// When the WithAutoReconnect option is given, conn must be nil.
 func NewClient(ctx context.Context, options ...func(Party) error) (Client, error) {
 	info, dbg := buildInfoDebugLogger(log.NewLogfmtLogger(os.Stderr), true)
 	c := &client{
