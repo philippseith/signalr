@@ -109,7 +109,7 @@ func runHTTPServer() {
     
     // ask the signalr server to map it's server
     // api routes to your custom baseurl
-    server.MapHTTP(signalr.WithHttpServeMux(router), "/chat")
+    server.MapHTTP(signalr.WithHTTPServeMux(router), "/chat")
 
     // in addition to mapping the signalr routes
     // your mux will need to serve the static files

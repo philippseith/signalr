@@ -147,16 +147,16 @@ func (m *messagePackHubProtocol) parseMessage(buf *bytes.Buffer) (interface{}, e
 		}
 		// StreamIds seem to be optional
 		if msgLen == 6 {
-			streamIdLen, err := decoder.DecodeArrayLen()
+			streamIDLen, err := decoder.DecodeArrayLen()
 			if err != nil {
 				return nil, err
 			}
-			for i := 0; i < streamIdLen; i++ {
-				streamId, err := decoder.DecodeString()
+			for i := 0; i < streamIDLen; i++ {
+				streamID, err := decoder.DecodeString()
 				if err != nil {
 					return nil, err
 				}
-				invocationMessage.StreamIds = append(invocationMessage.StreamIds, streamId)
+				invocationMessage.StreamIds = append(invocationMessage.StreamIds, streamID)
 			}
 		}
 		return invocationMessage, nil

@@ -87,10 +87,10 @@ type MappableRouter interface {
 	Handle(string, http.Handler)
 }
 
-// WithHttpServeMux is a MappableRouter factory for MapHTTP which converts a
+// WithHTTPServeMux is a MappableRouter factory for MapHTTP which converts a
 // http.ServeMux to a MappableRouter.
 // For factories for other routers, see github.com/philippseith/signalr/router
-func WithHttpServeMux(serveMux *http.ServeMux) func() MappableRouter {
+func WithHTTPServeMux(serveMux *http.ServeMux) func() MappableRouter {
 	return func() MappableRouter {
 		return serveMux
 	}
@@ -108,15 +108,16 @@ func (s *server) MapHTTP(routerFactory func() MappableRouter, path string) {
 // The same server might serve different connections in parallel. Serve does not return until the connection is closed
 // or the servers' context is canceled.
 func (s *server) Serve(conn Connection) error {
-	if protocol, err := s.processHandshake(conn); err != nil {
+	protocol, err := s.processHandshake(conn)
+	if err != nil {
 		info, _ := s.prefixLoggers("")
 		_ = info.Log(evt, "processHandshake", "connectionId", conn.ConnectionID(), "error", err, react, "do not connect")
 		return err
-	} else {
-		connected := make(chan struct{}, 1)
-		defer close(connected)
-		return newLoop(s, conn, protocol).Run(connected)
 	}
+
+	connected := make(chan struct{}, 1)
+	defer close(connected)
+	return newLoop(s, conn, protocol).Run(connected)
 }
 
 func (s *server) HubClients() HubClients {

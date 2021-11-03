@@ -94,11 +94,12 @@ func NewHTTPConnection(ctx context.Context, address string, options ...func(*htt
 	reqURL.RawQuery = q.Encode()
 
 	// Select the best connection
-	var formats []string
 	var conn Connection
-	if formats = nr.getTransferFormats("WebTransports"); formats != nil {
+	switch {
+	case nr.getTransferFormats("WebTransports") != nil:
 		// TODO
-	} else if formats = nr.getTransferFormats("WebSockets"); formats != nil {
+
+	case nr.getTransferFormats("WebSockets") != nil:
 		wsURL := reqURL
 
 		// switch to wss for secure connection
@@ -119,7 +120,8 @@ func NewHTTPConnection(ctx context.Context, address string, options ...func(*htt
 		}
 
 		conn = newWebSocketConnection(context.Background(), context.Background(), nr.ConnectionID, ws)
-	} else if formats = nr.getTransferFormats("ServerSentEvents"); formats != nil {
+
+	case nr.getTransferFormats("ServerSentEvents") != nil:
 		req, err := http.NewRequest("GET", reqURL.String(), nil)
 		if err != nil {
 			return nil, err
