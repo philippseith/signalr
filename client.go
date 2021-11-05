@@ -39,8 +39,8 @@ const (
 //  Err() error
 // Err returns the last error occurred while running the client.
 // When the client goes to ClientConnecting, Err is set to nil
-//  WaitForClientState(ctx context.Context, waitFor ClientState) <-chan error
-// WaitForClientState returns a channel for waiting on the Client to reach a specific ClientState.
+//  WaitForState(ctx context.Context, waitFor ClientState) <-chan error
+// WaitForState returns a channel for waiting on the Client to reach a specific ClientState.
 // The channel either returns an error if ctx or the client has been canceled.
 // or nil if the ClientState waitFor was reached.
 //  Invoke(method string, arguments ...interface{}) <-chan InvokeResult
@@ -61,7 +61,7 @@ type Client interface {
 	State() ClientState
 	PushStateChanged(chan<- struct{})
 	Err() error
-	WaitForClientState(ctx context.Context, waitFor ClientState) <-chan error
+	WaitForState(ctx context.Context, waitFor ClientState) <-chan error
 	Invoke(method string, arguments ...interface{}) <-chan InvokeResult
 	Send(method string, arguments ...interface{}) <-chan error
 	PullStream(method string, arguments ...interface{}) <-chan InvokeResult
@@ -227,7 +227,7 @@ func (c *client) Err() error {
 	return c.err
 }
 
-func (c *client) WaitForClientState(ctx context.Context, waitFor ClientState) <-chan error {
+func (c *client) WaitForState(ctx context.Context, waitFor ClientState) <-chan error {
 	ch := make(chan error, 1)
 	if c.State() == waitFor {
 		close(ch)
@@ -405,7 +405,7 @@ func (c *client) waitForConnected() <-chan error {
 			ch <- errors.New("client closed and no AutoReconnect option given. Cannot reconnect")
 		case ClientConnecting:
 			select {
-			case err := <-c.WaitForClientState(context.Background(), ClientConnected):
+			case err := <-c.WaitForState(context.Background(), ClientConnected):
 				ch <- err
 			case <-c.context().Done():
 				ch <- c.context().Err()
