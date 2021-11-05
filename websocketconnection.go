@@ -4,9 +4,9 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"github.com/teivah/onecontext"
-	"nhooyr.io/websocket"
 	"time"
+
+	"nhooyr.io/websocket"
 )
 
 type webSocketConnection struct {
@@ -16,8 +16,7 @@ type webSocketConnection struct {
 	watchDogChan chan dogFood
 }
 
-func newWebSocketConnection(parentContext context.Context, requestContext context.Context, connectionID string, conn *websocket.Conn) *webSocketConnection {
-	ctx, _ := onecontext.Merge(parentContext, requestContext)
+func newWebSocketConnection(ctx context.Context, connectionID string, conn *websocket.Conn) *webSocketConnection {
 	w := &webSocketConnection{
 		conn:         conn,
 		watchDogChan: make(chan dogFood, 1),

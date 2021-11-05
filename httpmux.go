@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/teivah/onecontext"
 	"nhooyr.io/websocket"
 )
 
@@ -90,7 +91,8 @@ func (h *httpMux) handleServerSentEvent(writer http.ResponseWriter, request *htt
 	h.mx.RUnlock()
 	if ok {
 		if _, ok := c.(*negotiateConnection); ok {
-			sseConn, err := newServerSSEConnection(h.server.context(), request.Context(), c.ConnectionID(), writer)
+			ctx, _ := onecontext.Merge(h.server.context(), request.Context())
+			sseConn, err := newServerSSEConnection(ctx, c.ConnectionID(), writer)
 			if err != nil {
 				writer.WriteHeader(http.StatusInternalServerError)
 				return
@@ -144,7 +146,8 @@ func (h *httpMux) handleWebsocket(writer http.ResponseWriter, request *http.Requ
 	if ok {
 		if _, ok := c.(*negotiateConnection); ok {
 			// Connection is negotiated but not initiated
-			err = h.serveConnection(newWebSocketConnection(h.server.context(), request.Context(), c.ConnectionID(), websocketConn))
+			ctx, _ := onecontext.Merge(h.server.context(), request.Context())
+			err = h.serveConnection(newWebSocketConnection(ctx, c.ConnectionID(), websocketConn))
 			if err != nil {
 				_ = websocketConn.Close(1005, err.Error())
 			}
