@@ -6,9 +6,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/cenkalti/backoff/v4"
 	"os"
 	"reflect"
 	"sync"
+	"time"
 
 	"github.com/go-kit/log"
 )
@@ -108,6 +110,7 @@ type client struct {
 
 func (c *client) Start() {
 	c.setState(ClientConnecting)
+	boff := backoff.NewExponentialBackOff()
 	go func() {
 		for {
 			c.mx.Lock()
@@ -150,6 +153,13 @@ func (c *client) Start() {
 				c.setState(ClientClosed)
 				return
 			}
+			// Reconnect after BackOff
+			select {
+			case <-time.After(boff.NextBackOff()):
+			case <-c.ctx.Done():
+				return
+			}
+
 		}
 	}()
 }
