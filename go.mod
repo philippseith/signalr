@@ -3,6 +3,7 @@ module github.com/philippseith/signalr
 go 1.16
 
 require (
+	github.com/cenkalti/backoff/v4 v4.1.1
 	github.com/dave/jennifer v1.4.1
 	github.com/go-kit/log v0.2.0
 	github.com/google/uuid v1.1.2
