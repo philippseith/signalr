@@ -74,7 +74,7 @@ func (w *webSocketConnection) setupWatchDog(ctx context.Context) {
 						<-c
 					}(w.dog.timer.C)
 				}
-				go w.dog.Cancel()
+				w.dog.Cancel()
 			}
 			w.dog = newDog
 			if w.dog != nil {
