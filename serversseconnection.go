@@ -73,7 +73,20 @@ func (s *serverSSEConnection) Read(p []byte) (n int, err error) {
 	if err := s.Context().Err(); err != nil {
 		return 0, fmt.Errorf("serverSSEConnection canceled: %w", s.ctx.Err())
 	}
-	return s.postReader.Read(p)
+	readResultChan := make(chan sseJobResult, 1)
+	go func() {
+		n, err := s.postReader.Read(p)
+		readResultChan <- sseJobResult{n: n, err: err}
+		close(readResultChan)
+	}()
+	select {
+	case <-s.Context().Done():
+		return 0, fmt.Errorf("serverSSEConnection canceled: %w", s.Context().Err())
+	case <-s.ContextWithTimeout().Done():
+		return 0, fmt.Errorf("serverSSEConnection write timeout %v", s.Timeout())
+	case r := <-readResultChan:
+		return r.n, r.err
+	}
 }
 
 func (s *serverSSEConnection) Write(p []byte) (n int, err error) {
@@ -92,6 +105,13 @@ func (s *serverSSEConnection) Write(p []byte) (n int, err error) {
 		return 0, fmt.Errorf("serverSSEConnection canceled: %w", s.Context().Err())
 	}
 	s.mx.Unlock()
-	r := <-s.jobResultChan
-	return r.n, r.err
+	select {
+	case <-s.Context().Done():
+		return 0, fmt.Errorf("serverSSEConnection canceled: %w", s.Context().Err())
+	case <-s.ContextWithTimeout().Done():
+		return 0, fmt.Errorf("serverSSEConnection write timeout %v", s.Timeout())
+	case r := <-s.jobResultChan:
+		return r.n, r.err
+	}
+
 }
