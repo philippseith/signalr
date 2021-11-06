@@ -115,9 +115,7 @@ func (s *server) Serve(conn Connection) error {
 		return err
 	}
 
-	connected := make(chan struct{}, 1)
-	defer close(connected)
-	return newLoop(s, conn, protocol).Run(connected)
+	return newLoop(s, conn, protocol).Run(make(chan struct{}, 1))
 }
 
 func (s *server) HubClients() HubClients {
