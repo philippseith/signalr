@@ -28,7 +28,7 @@ type sseJobResult struct {
 
 func newServerSSEConnection(ctx context.Context, connectionID string) (*serverSSEConnection, <-chan []byte, chan sseJobResult, error) {
 	s := serverSSEConnection{
-		ConnectionBase: NewConnectionBase(ctx, connectionID),
+		ConnectionBase: *NewConnectionBase(ctx, connectionID),
 		jobChan:        make(chan []byte, 1),
 		jobResultChan:  make(chan sseJobResult, 1),
 	}

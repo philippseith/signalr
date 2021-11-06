@@ -16,14 +16,13 @@ type ConnectionBase struct {
 }
 
 // NewConnectionBase creates a new ConnectionBase
-func NewConnectionBase(ctx context.Context, connectionID string) ConnectionBase {
-	cb := ConnectionBase{
+func NewConnectionBase(ctx context.Context, connectionID string) *ConnectionBase {
+	cb := &ConnectionBase{
 		ctx:           ctx,
 		connectionID:  connectionID,
 		watchDogQueue: newConnectionWatchDogQueue(),
 	}
 	go cb.watchDogQueue.Run(cb.Context())
-	//goland:noinspection GoVetCopyLock
 	return cb
 }
 

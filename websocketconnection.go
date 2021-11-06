@@ -17,7 +17,7 @@ type webSocketConnection struct {
 func newWebSocketConnection(ctx context.Context, connectionID string, conn *websocket.Conn) *webSocketConnection {
 	w := &webSocketConnection{
 		conn:           conn,
-		ConnectionBase: NewConnectionBase(ctx, connectionID),
+		ConnectionBase: *NewConnectionBase(ctx, connectionID),
 	}
 	return w
 }
