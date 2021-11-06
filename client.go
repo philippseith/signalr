@@ -352,6 +352,9 @@ func (c *client) PullStream(method string, arguments ...interface{}) <-chan Invo
 		go func() {
 			for ir := range pullCh {
 				irCh <- ir
+				if ir.Error != nil {
+					break
+				}
 			}
 			close(irCh)
 		}()
