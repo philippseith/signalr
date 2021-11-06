@@ -103,38 +103,39 @@ func (h *handshakeHub) Shake() {
 
 var shakeQueue = make(chan string, 10)
 
+func getTestBedHandshake() (*testingConnection, context.CancelFunc) {
+	ctx, cancel := context.WithCancel(context.Background())
+	server, _ := NewServer(ctx, SimpleHubFactory(&handshakeHub{}), testLoggerOption())
+	conn := newTestingConnection()
+	go func() { _ = server.Serve(conn) }()
+	return conn, cancel
+}
+
 var _ = Describe("Handshake", func() {
-	var server Server
-	var conn *testingConnection
-	BeforeEach(func(done Done) {
-		server, _ = NewServer(context.TODO(), SimpleHubFactory(&handshakeHub{}), testLoggerOption())
-		conn = newTestingConnection()
-		go func() { _ = server.Serve(conn) }()
-		close(done)
-	})
-	AfterEach(func(done Done) {
-		server.cancel()
-		close(done)
-	})
 	Context("When the handshake is sent as one message to the server", func() {
 		It("should be connected", func(done Done) {
+			conn, cancel := getTestBedHandshake()
 			conn.ClientSend(`{"protocol": "json","version": 1}`)
 			conn.ClientSend(`{"type":1,"invocationId": "123A","target":"shake"}`)
 			Expect(<-shakeQueue).To(Equal("Shake()"))
+			cancel()
 			close(done)
 		})
 	})
 	Context("When the handshake is sent as partial message to the server", func() {
 		It("should be connected", func(done Done) {
+			conn, cancel := getTestBedHandshake()
 			_, _ = conn.cliWriter.Write([]byte(`{"protocol"`))
 			conn.ClientSend(`: "json","version": 1}`)
 			conn.ClientSend(`{"type":1,"invocationId": "123B","target":"shake"}`)
 			Expect(<-shakeQueue).To(Equal("Shake()"))
+			cancel()
 			close(done)
 		})
 	})
 	Context("When an invalid handshake is sent as partial message to the server", func() {
 		It("should not be connected", func(done Done) {
+			conn, cancel := getTestBedHandshake()
 			_, _ = conn.cliWriter.Write([]byte(`{"protocol"`))
 			// Opening curly brace is invalid
 			conn.ClientSend(`{: "json","version": 1}`)
@@ -144,11 +145,13 @@ var _ = Describe("Handshake", func() {
 				Fail("server connected with invalid handshake")
 			case <-time.After(100 * time.Millisecond):
 			}
+			cancel()
 			close(done)
 		})
 	})
 	Context("When a handshake is sent with an unsupported protocol", func() {
 		It("should return an error handshake response and be not connected", func(done Done) {
+			conn, cancel := getTestBedHandshake()
 			conn.ClientSend(`{"protocol": "bson","version": 1}`)
 			response, err := conn.ClientReceive()
 			Expect(err).To(BeNil())
@@ -163,11 +166,13 @@ var _ = Describe("Handshake", func() {
 				Fail("server connected with invalid handshake")
 			case <-time.After(100 * time.Millisecond):
 			}
+			cancel()
 			close(done)
 		})
 	})
 	Context("When the connection fails before the server can receive handshake request", func() {
 		It("should not be connected", func(done Done) {
+			conn, cancel := getTestBedHandshake()
 			conn.SetFailRead("failed read in handshake")
 			conn.ClientSend(`{"protocol": "json","version": 1}`)
 			conn.ClientSend(`{"type":1,"invocationId": "123E","target":"shake"}`)
@@ -176,11 +181,13 @@ var _ = Describe("Handshake", func() {
 				Fail("server connected with fail before handshake")
 			case <-time.After(100 * time.Millisecond):
 			}
+			cancel()
 			close(done)
 		})
 	})
 	Context("When the handshake is received by the server but the connection fails when the response should be sent ", func() {
 		It("should not be connected", func(done Done) {
+			conn, cancel := getTestBedHandshake()
 			conn.SetFailWrite("failed write in handshake")
 			conn.ClientSend(`{"protocol": "json","version": 1}`)
 			conn.ClientSend(`{"type":1,"invocationId": "123F","target":"shake"}`)
@@ -189,11 +196,13 @@ var _ = Describe("Handshake", func() {
 				Fail("server connected with fail before handshake")
 			case <-time.After(100 * time.Millisecond):
 			}
+			cancel()
 			close(done)
 		})
 	})
 	Context("When the handshake with an unsupported protocol is received by the server but the connection fails when the response should be sent ", func() {
 		It("should not be connected", func(done Done) {
+			conn, cancel := getTestBedHandshake()
 			conn.SetFailWrite("failed write in handshake")
 			conn.ClientSend(`{"protocol": "bson","version": 1}`)
 			conn.ClientSend(`{"type":1,"invocationId": "123G","target":"shake"}`)
@@ -202,6 +211,7 @@ var _ = Describe("Handshake", func() {
 				Fail("server connected with fail before handshake")
 			case <-time.After(100 * time.Millisecond):
 			}
+			cancel()
 			close(done)
 		})
 	})
