@@ -83,7 +83,7 @@ func (s *serverSSEConnection) Read(p []byte) (n int, err error) {
 	case <-s.Context().Done():
 		return 0, fmt.Errorf("serverSSEConnection canceled: %w", s.Context().Err())
 	case <-s.ContextWithTimeout().Done():
-		return 0, fmt.Errorf("serverSSEConnection write timeout %v", s.Timeout())
+		return 0, fmt.Errorf("serverSSEConnection Read timeout %v", s.Timeout())
 	case r := <-readResultChan:
 		return r.n, r.err
 	}
@@ -109,7 +109,7 @@ func (s *serverSSEConnection) Write(p []byte) (n int, err error) {
 	case <-s.Context().Done():
 		return 0, fmt.Errorf("serverSSEConnection canceled: %w", s.Context().Err())
 	case <-s.ContextWithTimeout().Done():
-		return 0, fmt.Errorf("serverSSEConnection write timeout %v", s.Timeout())
+		return 0, fmt.Errorf("serverSSEConnection Write timeout %v", s.Timeout())
 	case r := <-s.jobResultChan:
 		return r.n, r.err
 	}
