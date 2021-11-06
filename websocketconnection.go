@@ -109,7 +109,7 @@ type watchDog struct {
 func newWatchDog(ctx context.Context, timeout time.Duration) (context.Context, *watchDog) {
 	dog := &watchDog{
 		timer:      time.NewTimer(timeout),
-		cancelChan: make(chan struct{}, 1),
+		cancelChan: make(chan struct{}),
 	}
 	var dogCtx context.Context
 	dogCtx, dog.bark = context.WithCancel(ctx)
@@ -117,7 +117,7 @@ func newWatchDog(ctx context.Context, timeout time.Duration) (context.Context, *
 }
 
 func (d *watchDog) Cancel() {
-	d.cancelChan <- struct{}{}
+	close(d.cancelChan)
 }
 
 func (d *watchDog) BarkOrDie() {
