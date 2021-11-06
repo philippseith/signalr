@@ -144,7 +144,7 @@ var _ = Describe("HTTP server", func() {
 					cancelClient()
 					cancelClient2()
 					close(done)
-				}, 10.0)
+				}, 5.0)
 			})
 		})
 	}
