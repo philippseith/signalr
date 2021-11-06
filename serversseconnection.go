@@ -78,7 +78,7 @@ func (s *serverSSEConnection) Read(p []byte) (n int, err error) {
 
 func (s *serverSSEConnection) Write(p []byte) (n int, err error) {
 	if err := s.Context().Err(); err != nil {
-		return 0, fmt.Errorf("serverSSEConnection canceled: %w", s.ctx.Err())
+		return 0, fmt.Errorf("serverSSEConnection canceled: %w", s.Context().Err())
 	}
 	payload := ""
 	for _, line := range strings.Split(strings.TrimRight(string(p), "\n"), "\n") {
@@ -89,7 +89,7 @@ func (s *serverSSEConnection) Write(p []byte) (n int, err error) {
 	if s.Context().Err() == nil {
 		s.jobChan <- []byte(payload + "\n")
 	} else {
-		return 0, fmt.Errorf("serverSSEConnection canceled: %w", s.ctx.Err())
+		return 0, fmt.Errorf("serverSSEConnection canceled: %w", s.Context().Err())
 	}
 	s.mx.Unlock()
 	r := <-s.jobResultChan
