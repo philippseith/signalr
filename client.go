@@ -6,11 +6,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/cenkalti/backoff/v4"
 	"os"
 	"reflect"
 	"sync"
+	"sync/atomic"
 	"time"
+
+	"github.com/cenkalti/backoff/v4"
 
 	"github.com/go-kit/log"
 )
@@ -119,32 +121,37 @@ func (c *client) Start() {
 			if c.State() != ClientConnecting {
 				c.setState(ClientConnecting)
 			}
-			
+			// Listen fo state changing to ClientConnected and signal backoff Reset then.
+			stateChangeChan := make(chan struct{}, 1)
+			var clientConnected int64 = 0
+			c.PushStateChanged(stateChangeChan)
+			go func() {
+				for range stateChangeChan {
+					if c.State() == ClientConnected {
+						atomic.StoreInt64(&clientConnected, 1)
+						return
+					}
+				}
+			}()
+
 			// RUN!
 			err := c.run()
+
 			c.mx.Lock()
 			c.err = err
 			c.mx.Unlock()
 			if c.err != nil {
 				c.setState(ClientError)
 			}
-			// Canceled?
-			if c.ctx.Err() != nil {
-				c.mx.Lock()
-				c.err = c.ctx.Err()
-				c.mx.Unlock()
-				c.setState(ClientError)
+
+			if c.shouldClientEnd() {
 				return
 			}
-			// Reconnecting not possible
-			if c.connectionFactory == nil {
-				c.setState(ClientClosed)
-				return
-			}
-			// Reconnecting not allowed
-			if c.loop != nil && c.loop.closeMessage != nil && !c.loop.closeMessage.AllowReconnect {
-				c.setState(ClientClosed)
-				return
+
+			close(stateChangeChan)
+			// When the client has connected, BackOff should be reseted
+			if atomic.LoadInt64(&clientConnected) == 1 {
+				boff.Reset()
 			}
 			// Reconnect after BackOff
 			select {
@@ -152,7 +159,6 @@ func (c *client) Start() {
 			case <-c.ctx.Done():
 				return
 			}
-
 		}
 	}()
 }
@@ -187,6 +193,28 @@ func (c *client) run() error {
 	c.mx.Unlock()
 
 	return err
+}
+
+func (c *client) shouldClientEnd() bool {
+	// Canceled?
+	if c.ctx.Err() != nil {
+		c.mx.Lock()
+		c.err = c.ctx.Err()
+		c.mx.Unlock()
+		c.setState(ClientError)
+		return true
+	}
+	// Reconnecting not possible
+	if c.connectionFactory == nil {
+		c.setState(ClientClosed)
+		return true
+	}
+	// Reconnecting not allowed
+	if c.loop != nil && c.loop.closeMessage != nil && !c.loop.closeMessage.AllowReconnect {
+		c.setState(ClientClosed)
+		return true
+	}
+	return false
 }
 
 func (c *client) setupConnectionAndProtocol() (hubProtocol, error) {
