@@ -35,11 +35,12 @@ func (nc *netConnection) Write(p []byte) (n int, err error) {
 		close(resultChan)
 	}()
 	select {
-	case <-nc.Context().Done():
-		_ = nc.conn.SetWriteDeadline(time.Now())
-		return 0, fmt.Errorf("connection canceled: %w", nc.Context().Err())
 	case <-nc.ContextWithTimeout().Done():
+		// Break potentially blocking Write
 		_ = nc.conn.SetWriteDeadline(time.Now())
+		if nc.Context().Err() != nil {
+			return 0, fmt.Errorf("connection canceled %w", nc.Context().Err())
+		}
 		return 0, fmt.Errorf("connection Write timeout %v", nc.Timeout())
 	case r := <-resultChan:
 		return r.n, r.err
@@ -54,11 +55,12 @@ func (nc *netConnection) Read(p []byte) (n int, err error) {
 		close(resultChan)
 	}()
 	select {
-	case <-nc.Context().Done():
-		_ = nc.conn.SetReadDeadline(time.Now())
-		return 0, fmt.Errorf("connection canceled: %w", nc.Context().Err())
 	case <-nc.ContextWithTimeout().Done():
+		// Break potentially blocking Read
 		_ = nc.conn.SetReadDeadline(time.Now())
+		if nc.Context().Err() != nil {
+			return 0, fmt.Errorf("connection canceled %w", nc.Context().Err())
+		}
 		return 0, fmt.Errorf("connection Read timeout %v", nc.Timeout())
 	case r := <-resultChan:
 		return r.n, r.err

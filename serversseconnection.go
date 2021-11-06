@@ -80,10 +80,12 @@ func (s *serverSSEConnection) Read(p []byte) (n int, err error) {
 		close(readResultChan)
 	}()
 	select {
-	case <-s.Context().Done():
-		return 0, fmt.Errorf("serverSSEConnection canceled: %w", s.Context().Err())
 	case <-s.ContextWithTimeout().Done():
-		return 0, fmt.Errorf("serverSSEConnection Read timeout %v", s.Timeout())
+		_, _ = s.postWriter.Write([]byte("\n"))
+		if s.Context().Err() != nil {
+			return 0, fmt.Errorf("serverSSEConnection canceled %w", s.Context().Err())
+		}
+		return 0, fmt.Errorf("serverSSEConnection Read timeout %v ", s.Timeout())
 	case r := <-readResultChan:
 		return r.n, r.err
 	}
@@ -106,9 +108,10 @@ func (s *serverSSEConnection) Write(p []byte) (n int, err error) {
 	}
 	s.mx.Unlock()
 	select {
-	case <-s.Context().Done():
-		return 0, fmt.Errorf("serverSSEConnection canceled: %w", s.Context().Err())
 	case <-s.ContextWithTimeout().Done():
+		if s.Context().Err() != nil {
+			return 0, fmt.Errorf("serverSSEConnection canceled %w", s.Context().Err())
+		}
 		return 0, fmt.Errorf("serverSSEConnection Write timeout %v", s.Timeout())
 	case r := <-s.jobResultChan:
 		return r.n, r.err
