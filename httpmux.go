@@ -92,8 +92,13 @@ func (h *httpMux) handleServerSentEvent(writer http.ResponseWriter, request *htt
 	if ok {
 		if _, ok := c.(*negotiateConnection); ok {
 			ctx, _ := onecontext.Merge(h.server.context(), request.Context())
-			sseConn, err := newServerSSEConnection(ctx, c.ConnectionID(), writer)
+			sseConn, jobChan, jobResultChan, err := newServerSSEConnection(ctx, c.ConnectionID())
 			if err != nil {
+				writer.WriteHeader(http.StatusInternalServerError)
+				return
+			}
+			flusher, ok := writer.(http.Flusher)
+			if !ok {
 				writer.WriteHeader(http.StatusInternalServerError)
 				return
 			}
@@ -106,8 +111,19 @@ func (h *httpMux) handleServerSentEvent(writer http.ResponseWriter, request *htt
 			// End this Server Sent Event (yes, your response now is one and the client will wait for this initial event to end)
 			_, _ = fmt.Fprint(writer, ":\r\n\r\n")
 			writer.(http.Flusher).Flush()
-			_ = h.serveConnection(sseConn)
-			// We can't WriteHeader 500 if we get an error as we already wrote the header, so ignore it.
+			go func() {
+				// We can't WriteHeader 500 if we get an error as we already wrote the header, so ignore it.
+				_ = h.serveConnection(sseConn)
+			}()
+			// Loop for write jobs from the sseServerConnection
+			for buf := range jobChan {
+				n, err := writer.Write(buf)
+				if err == nil {
+					flusher.Flush()
+				}
+				jobResultChan <- sseJobResult{n: n, err: err}
+			}
+			close(jobResultChan)
 		} else {
 			// connectionID in use
 			writer.WriteHeader(http.StatusConflict)
