@@ -133,11 +133,11 @@ msgLoop:
 func (l *loop) PullStream(method, id string, arguments ...interface{}) <-chan InvokeResult {
 	_, errChan := l.invokeClient.newInvocation(id)
 	upChan := l.streamClient.newUpstreamChannel(id)
-	ch := newInvokeResultChan(upChan, errChan)
+	ch := newInvokeResultChan(l.party.context(), upChan, errChan)
 	if err := l.hubConn.SendStreamInvocation(id, method, arguments, nil); err != nil {
 		// When we get an error here, the loop is closed and the errChan might be already closed
 		// We create a new one to deliver our error
-		ch, _ = createResultChansWithError(err)
+		ch, _ = createResultChansWithError(l.party.context(), err)
 		l.streamClient.deleteUpstreamChannel(id)
 		l.invokeClient.deleteInvocation(id)
 	}

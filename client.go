@@ -116,7 +116,7 @@ func (c *client) Start() {
 			if c.State() != ClientConnecting {
 				c.setState(ClientConnecting)
 			}
-			
+
 			// RUN!
 			err := c.run()
 			c.mx.Lock()
@@ -297,7 +297,7 @@ func (c *client) Invoke(method string, arguments ...interface{}) <-chan InvokeRe
 		}
 		id := c.loop.GetNewID()
 		resultCh, errCh := c.loop.invokeClient.newInvocation(id)
-		irCh := newInvokeResultChan(resultCh, errCh)
+		irCh := newInvokeResultChan(c.context(), resultCh, errCh)
 		if err := c.loop.hubConn.SendInvocation(id, method, arguments); err != nil {
 			c.loop.invokeClient.deleteInvocation(id)
 			ch <- InvokeResult{Error: err}
@@ -410,11 +410,11 @@ func (c *client) waitForConnected() <-chan error {
 	return ch
 }
 
-func createResultChansWithError(err error) (<-chan InvokeResult, chan error) {
+func createResultChansWithError(ctx context.Context, err error) (<-chan InvokeResult, chan error) {
 	resultCh := make(chan interface{}, 1)
 	errCh := make(chan error, 1)
 	errCh <- err
-	invokeResultChan := newInvokeResultChan(resultCh, errCh)
+	invokeResultChan := newInvokeResultChan(ctx, resultCh, errCh)
 	close(errCh)
 	close(resultCh)
 	return invokeResultChan, errCh
