@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/base64"
+	"fmt"
 	"net"
 	"time"
 )
@@ -14,13 +15,10 @@ type netConnection struct {
 }
 
 // NewNetConnection wraps net.Conn into a Connection
-func NewNetConnection(ctx context.Context, conn net.Conn) *netConnection {
+func NewNetConnection(ctx context.Context, conn net.Conn) Connection {
 	netConn := &netConnection{
-		ConnectionBase: ConnectionBase{
-			ctx:          ctx,
-			connectionID: getConnectionID(),
-		},
-		conn: conn,
+		ConnectionBase: *NewConnectionBase(ctx, getConnectionID()),
+		conn:           conn,
 	}
 	go func() {
 		<-ctx.Done()
@@ -30,19 +28,41 @@ func NewNetConnection(ctx context.Context, conn net.Conn) *netConnection {
 }
 
 func (nc *netConnection) Write(p []byte) (n int, err error) {
-	if nc.timeout > 0 {
-		defer func() { _ = nc.conn.SetWriteDeadline(time.Time{}) }()
-		_ = nc.conn.SetWriteDeadline(time.Now().Add(nc.timeout))
+	resultChan := make(chan rwJobResult, 1)
+	go func() {
+		n, err := nc.conn.Write(p)
+		resultChan <- rwJobResult{n: n, err: err}
+		close(resultChan)
+	}()
+	select {
+	case <-nc.Context().Done():
+		_ = nc.conn.SetWriteDeadline(time.Now())
+		return 0, fmt.Errorf("connection canceled: %w", nc.Context().Err())
+	case <-nc.ContextWithTimeout().Done():
+		_ = nc.conn.SetWriteDeadline(time.Now())
+		return 0, fmt.Errorf("connection Write timeout %v", nc.Timeout())
+	case r := <-resultChan:
+		return r.n, r.err
 	}
-	return nc.conn.Write(p)
 }
 
 func (nc *netConnection) Read(p []byte) (n int, err error) {
-	if nc.timeout > 0 {
-		defer func() { _ = nc.conn.SetReadDeadline(time.Time{}) }()
-		_ = nc.conn.SetReadDeadline(time.Now().Add(nc.timeout))
+	resultChan := make(chan rwJobResult, 1)
+	go func() {
+		n, err := nc.conn.Read(p)
+		resultChan <- rwJobResult{n: n, err: err}
+		close(resultChan)
+	}()
+	select {
+	case <-nc.Context().Done():
+		_ = nc.conn.SetReadDeadline(time.Now())
+		return 0, fmt.Errorf("connection canceled: %w", nc.Context().Err())
+	case <-nc.ContextWithTimeout().Done():
+		_ = nc.conn.SetReadDeadline(time.Now())
+		return 0, fmt.Errorf("connection Read timeout %v", nc.Timeout())
+	case r := <-resultChan:
+		return r.n, r.err
 	}
-	return nc.conn.Read(p)
 }
 
 func getConnectionID() string {
