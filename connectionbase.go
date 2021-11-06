@@ -49,7 +49,7 @@ func (cb *ConnectionBase) ConnectionID() string {
 // SetConnectionID sets the ConnectionID
 func (cb *ConnectionBase) SetConnectionID(id string) {
 	cb.mx.Lock()
-	cb.mx.Unlock()
+	defer cb.mx.Unlock()
 	cb.connectionID = id
 }
 
@@ -63,6 +63,6 @@ func (cb *ConnectionBase) Timeout() time.Duration {
 // SetTimeout sets the Timeout
 func (cb *ConnectionBase) SetTimeout(duration time.Duration) {
 	cb.mx.Lock()
-	cb.mx.Unlock()
+	defer cb.mx.Unlock()
 	cb.timeout = duration
 }
