@@ -28,12 +28,9 @@ type sseJobResult struct {
 
 func newServerSSEConnection(ctx context.Context, connectionID string) (*serverSSEConnection, <-chan []byte, chan sseJobResult, error) {
 	s := serverSSEConnection{
-		ConnectionBase: ConnectionBase{
-			ctx:          ctx,
-			connectionID: connectionID,
-		},
-		jobChan:       make(chan []byte, 1),
-		jobResultChan: make(chan sseJobResult, 1),
+		ConnectionBase: NewConnectionBase(ctx, connectionID),
+		jobChan:        make(chan []byte, 1),
+		jobResultChan:  make(chan sseJobResult, 1),
 	}
 	s.postReader, s.postWriter = io.Pipe()
 	go func() {
