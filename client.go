@@ -119,14 +119,7 @@ func (c *client) Start() {
 			if c.State() != ClientConnecting {
 				c.setState(ClientConnecting)
 			}
-			loopErrChan := make(chan error, 1)
-			go func() {
-				for err := range loopErrChan {
-					if err != nil {
-						c.err = err
-					}
-				}
-			}()
+			
 			// RUN!
 			err := c.run()
 			c.mx.Lock()
