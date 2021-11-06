@@ -165,18 +165,19 @@ func (c *client) run() error {
 	c.mx.Lock()
 	c.loop = loop
 	c.mx.Unlock()
+
 	// Broadcast when loop is connected
-	isLoopConnected := make(chan struct{}, 1)
+	isLoopConnected := make(chan struct{})
 	go func() {
 		<-isLoopConnected
-		close(isLoopConnected)
 		c.setState(ClientConnected)
 	}()
+
 	// Run the loop
-	err = loop.Run(isLoopConnected)
-	if err != nil {
+	if err = loop.Run(isLoopConnected); err != nil {
 		return err
 	}
+	
 	err = loop.hubConn.Close("", false) // allowReconnect value is ignored as servers never initiate a connection
 	// Reset conn to allow reconnecting
 	c.mx.Lock()

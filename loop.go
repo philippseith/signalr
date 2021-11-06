@@ -46,7 +46,8 @@ func newLoop(p Party, conn Connection, protocol hubProtocol) *loop {
 // Callers should pass a channel with buffer size 1 to allow the loop to run without waiting for the caller.
 func (l *loop) Run(connected chan<- struct{}) (err error) {
 	l.party.onConnected(l.hubConn)
-	connected <- struct{}{}
+	close(connected)
+
 	// Process messages
 	ch := make(chan receiveResult, 1)
 	go func() {

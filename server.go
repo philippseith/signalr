@@ -115,8 +115,7 @@ func (s *server) Serve(conn Connection) error {
 		return err
 	}
 
-	connected := make(chan struct{}, 1)
-	defer close(connected)
+	connected := make(chan struct{})
 	return newLoop(s, conn, protocol).Run(connected)
 }
 
