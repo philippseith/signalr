@@ -18,19 +18,19 @@ type serverSSEConnection struct {
 	postWriter    io.Writer
 	postReader    io.Reader
 	jobChan       chan []byte
-	jobResultChan chan sseJobResult
+	jobResultChan chan rwJobResult
 }
 
-type sseJobResult struct {
+type rwJobResult struct {
 	n   int
 	err error
 }
 
-func newServerSSEConnection(ctx context.Context, connectionID string) (*serverSSEConnection, <-chan []byte, chan sseJobResult, error) {
+func newServerSSEConnection(ctx context.Context, connectionID string) (*serverSSEConnection, <-chan []byte, chan rwJobResult, error) {
 	s := serverSSEConnection{
 		ConnectionBase: *NewConnectionBase(ctx, connectionID),
 		jobChan:        make(chan []byte, 1),
-		jobResultChan:  make(chan sseJobResult, 1),
+		jobResultChan:  make(chan rwJobResult, 1),
 	}
 	s.postReader, s.postWriter = io.Pipe()
 	go func() {
@@ -73,10 +73,10 @@ func (s *serverSSEConnection) Read(p []byte) (n int, err error) {
 	if err := s.Context().Err(); err != nil {
 		return 0, fmt.Errorf("serverSSEConnection canceled: %w", s.ctx.Err())
 	}
-	readResultChan := make(chan sseJobResult, 1)
+	readResultChan := make(chan rwJobResult, 1)
 	go func() {
 		n, err := s.postReader.Read(p)
-		readResultChan <- sseJobResult{n: n, err: err}
+		readResultChan <- rwJobResult{n: n, err: err}
 		close(readResultChan)
 	}()
 	select {
