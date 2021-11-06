@@ -169,7 +169,6 @@ func (c *client) run() error {
 	isLoopConnected := make(chan struct{}, 1)
 	go func() {
 		<-isLoopConnected
-		close(isLoopConnected)
 		c.setState(ClientConnected)
 	}()
 	// Run the loop
