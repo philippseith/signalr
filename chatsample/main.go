@@ -4,15 +4,16 @@ import (
 	"context"
 	_ "embed"
 	"fmt"
-	kitlog "github.com/go-kit/log"
-	"github.com/philippseith/signalr"
-	"github.com/philippseith/signalr/chatsample/middleware"
-	"github.com/philippseith/signalr/chatsample/public"
 	"log"
 	"net/http"
 	"os"
 	"strings"
 	"time"
+
+	kitlog "github.com/go-kit/log"
+	"github.com/philippseith/signalr"
+	"github.com/philippseith/signalr/chatsample/middleware"
+	"github.com/philippseith/signalr/chatsample/public"
 )
 
 type chat struct {
@@ -142,13 +143,13 @@ func runHTTPServer(address string, hub signalr.HubInterface) {
 //	c.Start()
 //}
 
-type client struct {
-	signalr.Hub
-}
-
-func (c *client) Receive(msg string) {
-	fmt.Println(msg)
-}
+//type client struct {
+//	signalr.Hub
+//}
+//
+//func (c *client) Receive(msg string) {
+//	fmt.Println(msg)
+//}
 
 func main() {
 	hub := &chat{}

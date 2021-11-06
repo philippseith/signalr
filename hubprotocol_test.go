@@ -3,9 +3,6 @@ package signalr
 import (
 	"bytes"
 	"fmt"
-	"github.com/dave/jennifer/jen"
-	. "github.com/onsi/ginkgo"
-	. "github.com/onsi/gomega"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -13,6 +10,10 @@ import (
 	"reflect"
 	"testing"
 	"time"
+
+	"github.com/dave/jennifer/jen"
+	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/gomega"
 )
 
 var _ = Describe("Protocol", func() {

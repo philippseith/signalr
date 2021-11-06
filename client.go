@@ -10,9 +10,10 @@ import (
 	"reflect"
 	"sync"
 
+
 	"github.com/teivah/onecontext"
 
-	"github.com/go-kit/log"
+  "github.com/go-kit/log"
 )
 
 // Client is the signalR connection used on the client side.

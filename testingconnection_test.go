@@ -6,10 +6,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/onsi/ginkgo"
 	"io"
 	"sync"
 	"time"
+
+	"github.com/onsi/ginkgo"
 )
 
 type testingConnection struct {

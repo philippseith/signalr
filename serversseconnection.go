@@ -4,13 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/teivah/onecontext"
 	"io"
 	"io/ioutil"
 	"net/http"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/teivah/onecontext"
 )
 
 type serverSSEConnection struct {

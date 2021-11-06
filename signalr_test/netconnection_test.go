@@ -3,12 +3,13 @@ package signalr_test
 import (
 	"context"
 	"fmt"
-	. "github.com/onsi/ginkgo"
-	. "github.com/onsi/gomega"
-	"github.com/philippseith/signalr"
 	"net"
 	"testing"
 	"time"
+
+	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/gomega"
+	"github.com/philippseith/signalr"
 )
 
 func TestSignalR(t *testing.T) {

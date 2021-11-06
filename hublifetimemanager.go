@@ -1,8 +1,9 @@
 package signalr
 
 import (
-	"github.com/go-kit/log"
 	"sync"
+
+	"github.com/go-kit/log"
 )
 
 // HubLifetimeManager is a lifetime manager abstraction for hub instances
