@@ -8,28 +8,18 @@ import (
 
 // ConnectionBase is a baseclass for implementers of the Connection interface.
 type ConnectionBase struct {
-	mx            sync.RWMutex
-	ctx           context.Context
-	connectionID  string
-	timeout       time.Duration
-	watchDogQueue connectionWatchDogQueue
+	mx           sync.RWMutex
+	ctx          context.Context
+	connectionID string
 }
 
 // NewConnectionBase creates a new ConnectionBase
 func NewConnectionBase(ctx context.Context, connectionID string) *ConnectionBase {
 	cb := &ConnectionBase{
-		ctx:           ctx,
-		connectionID:  connectionID,
-		watchDogQueue: newConnectionWatchDogQueue(),
+		ctx:          ctx,
+		connectionID: connectionID,
 	}
-	go cb.watchDogQueue.Run(cb.Context())
 	return cb
-}
-
-// ContextWithTimeout should be used by Read and Write operations to obtain a context which expires
-// when both Read and Write have timed out.
-func (cb *ConnectionBase) ContextWithTimeout() context.Context {
-	return cb.watchDogQueue.ChangeGuard(cb.Context(), cb.Timeout())
 }
 
 // Context can be used to wait for cancellation of the Connection
