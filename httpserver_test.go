@@ -179,20 +179,6 @@ func (n *nonProtocolLogger) Log(keyVals ...interface{}) error {
 	return n.logger.Log(keyVals...)
 }
 
-var _ = Describe("Websocket connection", func() {
-
-	Context("The timeout is set with SetTimeout()", func() {
-		It("should return the same value in Timeout()", func(done Done) {
-			c := &webSocketConnection{}
-			c.SetTimeout(time.Millisecond * 100)
-			Expect(c.Timeout()).To(Equal(time.Millisecond * 100))
-			c.SetTimeout(time.Millisecond * 200)
-			Expect(c.Timeout()).To(Equal(time.Millisecond * 200))
-			close(done)
-		})
-	})
-})
-
 func negotiateWebSocketTestServer(port int) map[string]interface{} {
 	waitForPort(port)
 	buf := bytes.Buffer{}
