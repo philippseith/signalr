@@ -42,6 +42,17 @@ func (cb *ConnectionBase) SetConnectionID(id string) {
 	cb.connectionID = id
 }
 
+// ReadWriteWithContext is a wrapper to make blocking io.Writer / io.Reader cancelable.
+// It can be used to implement cancellation of connections.
+// ReadWriteWithContext will return when either the Read/Write operation has ended or ctx has been canceled.
+//  doRW func() (int, error)
+// doRW should contain the Read/Write operation.
+//  unblockRW func()
+// unblockRW should contain the operation to unblock the Read/Write operation.
+// If there is no way to unblock the operation, one goroutine will leak when ctx is canceled.
+// As the standard use case when ReadWriteWithContext is canceled is the cancellation of a connection this leak
+// will be problematic on heavily used servers with uncommon connection types. Luckily, the standard connection types
+// for ServerSentEvents, Websockets and common net.Conn connections can be unblocked.
 func ReadWriteWithContext(ctx context.Context, doRW func() (int, error), unblockRW func()) (int, error) {
 	if ctx.Err() != nil {
 		return 0, ctx.Err()
@@ -61,6 +72,8 @@ func ReadWriteWithContext(ctx context.Context, doRW func() (int, error), unblock
 	}
 }
 
+// RWJobResult can be used to send the result of an io.Writer / io.Reader operation over a channel.
+// Use it for special connection types, where ReadWriteWithContext does not fit all needs.
 type RWJobResult struct {
 	n   int
 	err error
