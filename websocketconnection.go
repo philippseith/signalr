@@ -23,29 +23,39 @@ func newWebSocketConnection(ctx context.Context, connectionID string, conn *webs
 }
 
 func (w *webSocketConnection) Write(p []byte) (n int, err error) {
-	if err := w.Context().Err(); err != nil {
-		return 0, fmt.Errorf("webSocketConnection canceled: %w", w.ctx.Err())
-	}
 	messageType := websocket.MessageText
 	if w.transferMode == BinaryTransferMode {
 		messageType = websocket.MessageBinary
 	}
-	err = w.conn.Write(w.ContextWithTimeout(), messageType, p)
+	n, err = ReadWriteWithContext(w.Context(),
+		func() (int, error) {
+			err = w.conn.Write(w.Context(), messageType, p)
+			if err != nil {
+				return 0, err
+			}
+			return len(p), nil
+		},
+		func() {})
 	if err != nil {
-		return 0, err
+		err = fmt.Errorf("%T: %w", w, err)
 	}
-	return len(p), nil
+	return n, err
 }
 
 func (w *webSocketConnection) Read(p []byte) (n int, err error) {
-	if err := w.Context().Err(); err != nil {
-		return 0, fmt.Errorf("webSocketConnection canceled: %w", w.ctx.Err())
-	}
-	_, data, err := w.conn.Read(w.ContextWithTimeout())
+	n, err = ReadWriteWithContext(w.Context(),
+		func() (int, error) {
+			_, data, err := w.conn.Read(w.Context())
+			if err != nil {
+				return 0, err
+			}
+			return bytes.NewReader(data).Read(p)
+		},
+		func() {})
 	if err != nil {
-		return 0, err
+		err = fmt.Errorf("%T: %w", w, err)
 	}
-	return bytes.NewReader(data).Read(p)
+	return n, err
 }
 
 func (w *webSocketConnection) TransferMode() TransferMode {

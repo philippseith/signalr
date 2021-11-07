@@ -21,11 +21,11 @@ type serverSSEConnection struct {
 	jobResultChan chan RWJobResult
 }
 
-func newServerSSEConnection(ctx context.Context, connectionID string) (*serverSSEConnection, <-chan []byte, chan rwJobResult, error) {
+func newServerSSEConnection(ctx context.Context, connectionID string) (*serverSSEConnection, <-chan []byte, chan RWJobResult, error) {
 	s := serverSSEConnection{
 		ConnectionBase: *NewConnectionBase(ctx, connectionID),
 		jobChan:        make(chan []byte, 1),
-		jobResultChan:  make(chan rwJobResult, 1),
+		jobResultChan:  make(chan RWJobResult, 1),
 	}
 	s.postReader, s.postWriter = io.Pipe()
 	go func() {
@@ -65,30 +65,18 @@ func (s *serverSSEConnection) consumeRequest(request *http.Request) int {
 }
 
 func (s *serverSSEConnection) Read(p []byte) (n int, err error) {
-	if err := s.Context().Err(); err != nil {
-		return 0, fmt.Errorf("serverSSEConnection canceled: %w", s.ctx.Err())
+	n, err = ReadWriteWithContext(s.Context(),
+		func() (int, error) { return s.postReader.Read(p) },
+		func() { _, _ = s.postWriter.Write([]byte("\n")) })
+	if err != nil {
+		err = fmt.Errorf("%T: %w", s, err)
 	}
-	readResultChan := make(chan rwJobResult, 1)
-	go func() {
-		n, err := s.postReader.Read(p)
-		readResultChan <- rwJobResult{n: n, err: err}
-		close(readResultChan)
-	}()
-	select {
-	case <-s.ContextWithTimeout().Done():
-		_, _ = s.postWriter.Write([]byte("\n"))
-		if s.Context().Err() != nil {
-			return 0, fmt.Errorf("serverSSEConnection canceled %w", s.Context().Err())
-		}
-		return 0, fmt.Errorf("serverSSEConnection Read timeout %v ", s.Timeout())
-	case r := <-readResultChan:
-		return r.n, r.err
-	}
+	return n, err
 }
 
 func (s *serverSSEConnection) Write(p []byte) (n int, err error) {
 	if err := s.Context().Err(); err != nil {
-		return 0, fmt.Errorf("serverSSEConnection canceled: %w", s.Context().Err())
+		return 0, fmt.Errorf("%T: %w", s, s.Context().Err())
 	}
 	payload := ""
 	for _, line := range strings.Split(strings.TrimRight(string(p), "\n"), "\n") {
@@ -99,15 +87,12 @@ func (s *serverSSEConnection) Write(p []byte) (n int, err error) {
 	if s.Context().Err() == nil {
 		s.jobChan <- []byte(payload + "\n")
 	} else {
-		return 0, fmt.Errorf("serverSSEConnection canceled: %w", s.Context().Err())
+		return 0, fmt.Errorf("%T: %w", s, s.Context().Err())
 	}
 	s.mx.Unlock()
 	select {
-	case <-s.ContextWithTimeout().Done():
-		if s.Context().Err() != nil {
-			return 0, fmt.Errorf("serverSSEConnection canceled %w", s.Context().Err())
-		}
-		return 0, fmt.Errorf("serverSSEConnection Write timeout %v", s.Timeout())
+	case <-s.Context().Done():
+		return 0, fmt.Errorf("%T: %w", s, s.Context().Err())
 	case r := <-s.jobResultChan:
 		return r.n, r.err
 	}

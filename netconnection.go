@@ -28,43 +28,23 @@ func NewNetConnection(ctx context.Context, conn net.Conn) Connection {
 }
 
 func (nc *netConnection) Write(p []byte) (n int, err error) {
-	resultChan := make(chan rwJobResult, 1)
-	go func() {
-		n, err := nc.conn.Write(p)
-		resultChan <- rwJobResult{n: n, err: err}
-		close(resultChan)
-	}()
-	select {
-	case <-nc.ContextWithTimeout().Done():
-		// Break potentially blocking Write
-		_ = nc.conn.SetWriteDeadline(time.Now())
-		if nc.Context().Err() != nil {
-			return 0, fmt.Errorf("connection canceled %w", nc.Context().Err())
-		}
-		return 0, fmt.Errorf("connection Write timeout %v", nc.Timeout())
-	case r := <-resultChan:
-		return r.n, r.err
+	n, err = ReadWriteWithContext(nc.Context(),
+		func() (int, error) { return nc.conn.Write(p) },
+		func() { _ = nc.conn.SetWriteDeadline(time.Now()) })
+	if err != nil {
+		err = fmt.Errorf("%T: %w", nc, err)
 	}
+	return n, err
 }
 
 func (nc *netConnection) Read(p []byte) (n int, err error) {
-	resultChan := make(chan rwJobResult, 1)
-	go func() {
-		n, err := nc.conn.Read(p)
-		resultChan <- rwJobResult{n: n, err: err}
-		close(resultChan)
-	}()
-	select {
-	case <-nc.ContextWithTimeout().Done():
-		// Break potentially blocking Read
-		_ = nc.conn.SetReadDeadline(time.Now())
-		if nc.Context().Err() != nil {
-			return 0, fmt.Errorf("connection canceled %w", nc.Context().Err())
-		}
-		return 0, fmt.Errorf("connection Read timeout %v", nc.Timeout())
-	case r := <-resultChan:
-		return r.n, r.err
+	n, err = ReadWriteWithContext(nc.Context(),
+		func() (int, error) { return nc.conn.Read(p) },
+		func() { _ = nc.conn.SetReadDeadline(time.Now()) })
+	if err != nil {
+		err = fmt.Errorf("%T: %w", nc, err)
 	}
+	return n, err
 }
 
 func getConnectionID() string {
