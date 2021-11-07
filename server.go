@@ -108,6 +108,7 @@ func (s *server) MapHTTP(routerFactory func() MappableRouter, path string) {
 // The same server might serve different connections in parallel. Serve does not return until the connection is closed
 // or the servers' context is canceled.
 func (s *server) Serve(conn Connection) error {
+
 	protocol, err := s.processHandshake(conn)
 	if err != nil {
 		info, _ := s.prefixLoggers("")
@@ -189,29 +190,54 @@ func (s *server) newConnectionHubContext(hubConn hubConnection) HubContext {
 }
 
 func (s *server) processHandshake(conn Connection) (hubProtocol, error) {
-	var err error
-	var protocol hubProtocol
-	var ok bool
-	const handshakeResponse = "{}\u001e"
-	const errorHandshakeResponse = "{\"error\":\"%s\"}\u001e"
-	info, dbg := s.prefixLoggers(conn.ConnectionID())
+	if request, err := s.receiveHandshakeRequest(conn); err != nil {
+		return nil, err
+	} else {
+		return s.sendHandshakeResponse(conn, request)
+	}
+}
 
-	defer conn.SetTimeout(0)
-	conn.SetTimeout(s._handshakeTimeout)
-	var remainBuf bytes.Buffer
-	rawHandshake, err := readJSONFrames(conn, &remainBuf)
-	if err != nil {
-		return nil, err
-	}
-	_ = dbg.Log(evt, "handshake received", "msg", string(rawHandshake[0]))
+func (s *server) receiveHandshakeRequest(conn Connection) (handshakeRequest, error) {
+	_, dbg := s.prefixLoggers(conn.ConnectionID())
+	ctx, cancelRead := context.WithTimeout(s.context(), s.HandshakeTimeout())
+	defer cancelRead()
+	readJSONFramesChan := make(chan []interface{}, 1)
+	go func() {
+		var remainBuf bytes.Buffer
+		rawHandshake, err := readJSONFrames(conn, &remainBuf)
+		readJSONFramesChan <- []interface{}{rawHandshake, err}
+	}()
 	request := handshakeRequest{}
-	if err = json.Unmarshal(rawHandshake[0], &request); err != nil {
-		// Malformed handshake
-		return nil, err
+	select {
+	case result := <-readJSONFramesChan:
+		if result[1] != nil {
+			return request, result[1].(error)
+		}
+		rawHandshake := result[0].([][]byte)
+		_ = dbg.Log(evt, "handshake received", "msg", string(rawHandshake[0]))
+		if err := json.Unmarshal(rawHandshake[0], &request); err != nil {
+			// Malformed handshake
+			return request, err
+		} else {
+			return request, nil
+		}
+	case <-ctx.Done():
+		return request, ctx.Err()
 	}
+}
+
+func (s *server) sendHandshakeResponse(conn Connection, request handshakeRequest) (protocol hubProtocol, err error) {
+	info, dbg := s.prefixLoggers(conn.ConnectionID())
+	ctx, cancelWrite := context.WithTimeout(s.context(), s.HandshakeTimeout())
+	defer cancelWrite()
+	var ok bool
 	if protocol, ok = protocolMap[request.Protocol]; ok {
 		// Send the handshake response
-		if _, err = conn.Write([]byte(handshakeResponse)); err != nil {
+		const handshakeResponse = "{}\u001e"
+		if _, err = ReadWriteWithContext(ctx,
+			func() (int, error) {
+				return conn.Write([]byte(handshakeResponse))
+			}, func() {}); err != nil {
 			_ = dbg.Log(evt, "handshake sent", "error", err)
 		} else {
 			_ = dbg.Log(evt, "handshake sent", "msg", handshakeResponse)
@@ -219,7 +245,11 @@ func (s *server) processHandshake(conn Connection) (hubProtocol, error) {
 	} else {
 		err = fmt.Errorf("protocol %v not supported", request.Protocol)
 		_ = info.Log(evt, "protocol requested", "error", err)
-		if _, respErr := conn.Write([]byte(fmt.Sprintf(errorHandshakeResponse, err))); respErr != nil {
+		if _, respErr := ReadWriteWithContext(ctx,
+			func() (int, error) {
+				const errorHandshakeResponse = "{\"error\":\"%s\"}\u001e"
+				return conn.Write([]byte(fmt.Sprintf(errorHandshakeResponse, err)))
+			}, func() {}); respErr != nil {
 			_ = dbg.Log(evt, "handshake sent", "error", respErr)
 			err = respErr
 		}

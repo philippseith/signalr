@@ -455,41 +455,70 @@ func (c *client) prefixLoggers(connectionID string) (info StructuredLogger, dbg 
 }
 
 func (c *client) processHandshake() (hubProtocol, error) {
+	if err := c.sendHandshakeRequest(); err != nil {
+		return nil, err
+	}
+	return c.receiveHandshakeResponse()
+}
+
+func (c *client) sendHandshakeRequest() error {
 	info, dbg := c.prefixLoggers(c.conn.ConnectionID())
 	request := fmt.Sprintf("{\"protocol\":\"%v\",\"version\":1}\u001e", c.format)
-	_, err := c.conn.Write([]byte(request))
+	ctx, cancelWrite := context.WithTimeout(c.context(), c.HandshakeTimeout())
+	defer cancelWrite()
+	_, err := ReadWriteWithContext(ctx,
+		func() (int, error) {
+			return c.conn.Write([]byte(request))
+		}, func() {})
 	if err != nil {
 		_ = info.Log(evt, "handshake sent", "msg", request, "error", err)
-		return nil, err
+		return err
 	}
 	_ = dbg.Log(evt, "handshake sent", "msg", request)
-	var remainBuf bytes.Buffer
-	rawHandshake, err := readJSONFrames(c.conn, &remainBuf)
-	if err != nil {
-		return nil, err
+	return nil
+}
+
+func (c *client) receiveHandshakeResponse() (hubProtocol, error) {
+	info, dbg := c.prefixLoggers(c.conn.ConnectionID())
+	ctx, cancelRead := context.WithTimeout(c.context(), c.HandshakeTimeout())
+	defer cancelRead()
+	readJSONFramesChan := make(chan []interface{}, 1)
+	go func() {
+		var remainBuf bytes.Buffer
+		rawHandshake, err := readJSONFrames(c.conn, &remainBuf)
+		readJSONFramesChan <- []interface{}{rawHandshake, err}
+	}()
+	select {
+	case result := <-readJSONFramesChan:
+		if result[1] != nil {
+			return nil, result[1].(error)
+		}
+		rawHandshake := result[0].([][]byte)
+		response := handshakeResponse{}
+		if err := json.Unmarshal(rawHandshake[0], &response); err != nil {
+			// Malformed handshake
+			_ = info.Log(evt, "handshake received", "msg", string(rawHandshake[0]), "error", err)
+			return nil, err
+		} else {
+			if response.Error != "" {
+				_ = info.Log(evt, "handshake received", "error", response.Error)
+				return nil, errors.New(response.Error)
+			}
+			_ = dbg.Log(evt, "handshake received", "msg", fmtMsg(response))
+			var protocol hubProtocol
+			switch c.format {
+			case "json":
+				protocol = &jsonHubProtocol{}
+			case "messagepack":
+				protocol = &messagePackHubProtocol{}
+			}
+			if protocol != nil {
+				_, pDbg := c.loggers()
+				protocol.setDebugLogger(pDbg)
+			}
+			return protocol, nil
+		}
+	case <-ctx.Done():
+		return nil, ctx.Err()
 	}
-	response := handshakeResponse{}
-	if err = json.Unmarshal(rawHandshake[0], &response); err != nil {
-		// Malformed handshake
-		_ = info.Log(evt, "handshake received", "msg", string(rawHandshake[0]), "error", err)
-	} else {
-		if response.Error != "" {
-			_ = info.Log(evt, "handshake received", "error", response.Error)
-			return nil, errors.New(response.Error)
-		}
-		_ = dbg.Log(evt, "handshake received", "msg", fmtMsg(response))
-		var protocol hubProtocol
-		switch c.format {
-		case "json":
-			protocol = &jsonHubProtocol{}
-		case "messagepack":
-			protocol = &messagePackHubProtocol{}
-		}
-		if protocol != nil {
-			_, pDbg := c.loggers()
-			protocol.setDebugLogger(pDbg)
-		}
-		return protocol, nil
-	}
-	return nil, err
 }
