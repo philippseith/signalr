@@ -3,7 +3,6 @@ package signalr
 import (
 	"context"
 	"sync"
-	"time"
 )
 
 // ConnectionBase is a baseclass for implementers of the Connection interface.
@@ -43,16 +42,26 @@ func (cb *ConnectionBase) SetConnectionID(id string) {
 	cb.connectionID = id
 }
 
-// Timeout is the timeout of the Connection
-func (cb *ConnectionBase) Timeout() time.Duration {
-	cb.mx.RLock()
-	defer cb.mx.RUnlock()
-	return cb.timeout
+func ReadWriteWithContext(ctx context.Context, doRW func() (int, error), unblockRW func()) (int, error) {
+	if ctx.Err() != nil {
+		return 0, ctx.Err()
+	}
+	resultChan := make(chan RWJobResult, 1)
+	go func() {
+		n, err := doRW()
+		resultChan <- RWJobResult{n: n, err: err}
+		close(resultChan)
+	}()
+	select {
+	case <-ctx.Done():
+		unblockRW()
+		return 0, ctx.Err()
+	case r := <-resultChan:
+		return r.n, r.err
+	}
 }
 
-// SetTimeout sets the Timeout
-func (cb *ConnectionBase) SetTimeout(duration time.Duration) {
-	cb.mx.Lock()
-	defer cb.mx.Unlock()
-	cb.timeout = duration
+type RWJobResult struct {
+	n   int
+	err error
 }

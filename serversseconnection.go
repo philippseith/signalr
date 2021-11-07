@@ -18,12 +18,7 @@ type serverSSEConnection struct {
 	postWriter    io.Writer
 	postReader    io.Reader
 	jobChan       chan []byte
-	jobResultChan chan rwJobResult
-}
-
-type rwJobResult struct {
-	n   int
-	err error
+	jobResultChan chan RWJobResult
 }
 
 func newServerSSEConnection(ctx context.Context, connectionID string) (*serverSSEConnection, <-chan []byte, chan rwJobResult, error) {

@@ -121,7 +121,7 @@ func (h *httpMux) handleServerSentEvent(writer http.ResponseWriter, request *htt
 				if err == nil {
 					flusher.Flush()
 				}
-				jobResultChan <- rwJobResult{n: n, err: err}
+				jobResultChan <- RWJobResult{n: n, err: err}
 			}
 			close(jobResultChan)
 		} else {
