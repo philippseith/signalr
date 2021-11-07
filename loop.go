@@ -103,9 +103,9 @@ msgLoop:
 				if time.Since(l.hubConn.LastWriteStamp()) > l.party.keepAliveInterval() {
 					_ = l.hubConn.Ping()
 				}
-				// Don't break the pingLoop, it exists for this case
+				// Don't break the pingLoop when keepAlive is over, it exists for this case
 			case <-time.After(l.party.timeout()):
-				err = fmt.Errorf("client timeout interval elapsed (%v)", l.party.timeout())
+				err = fmt.Errorf("timeout interval elapsed (%v)", l.party.timeout())
 				break pingLoop
 			case <-l.hubConn.Context().Done():
 				err = fmt.Errorf("breaking loop. hubConnection canceled: %w", l.hubConn.Context().Err())
