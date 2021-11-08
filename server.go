@@ -215,12 +215,7 @@ func (s *server) receiveHandshakeRequest(conn Connection) (handshakeRequest, err
 		}
 		rawHandshake := result[0].([][]byte)
 		_ = dbg.Log(evt, "handshake received", "msg", string(rawHandshake[0]))
-		if err := json.Unmarshal(rawHandshake[0], &request); err != nil {
-			// Malformed handshake
-			return request, err
-		} else {
-			return request, nil
-		}
+		return request, json.Unmarshal(rawHandshake[0], &request)
 	case <-ctx.Done():
 		return request, ctx.Err()
 	}
