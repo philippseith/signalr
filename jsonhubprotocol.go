@@ -160,8 +160,7 @@ func readJSONFrames(reader io.Reader, remainBuf *bytes.Buffer) ([][]byte, error)
 	// Try getting data until at least one frame is available
 	for {
 		n, err := reader.Read(p)
-		// Some reader implementations return io.EOF additionally to n=0 if no data could be read
-		if err != nil && !errors.Is(err, io.EOF) {
+		if err != nil {
 			return nil, err
 		}
 		if n > 0 {
