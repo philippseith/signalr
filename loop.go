@@ -44,9 +44,10 @@ func newLoop(p Party, conn Connection, protocol hubProtocol) *loop {
 
 // Run runs the loop. After the startup sequence is done, this is signaled over the started channel.
 // Callers should pass a channel with buffer size 1 to allow the loop to run without waiting for the caller.
-func (l *loop) Run(connected chan<- struct{}) (err error) {
+func (l *loop) Run(connected chan struct{}) (err error) {
 	l.party.onConnected(l.hubConn)
 	connected <- struct{}{}
+	close(connected)
 	// Process messages
 	ch := make(chan receiveResult, 1)
 	go func() {
@@ -172,7 +173,7 @@ func (l *loop) PushStreams(method, id string, arguments ...interface{}) (<-chan 
 // GetNewID returns a new, connection-unique id for invocations and streams
 func (l *loop) GetNewID() string {
 	atomic.AddUint64(&l.lastID, 1)
-	return fmt.Sprint(l.lastID)
+	return fmt.Sprint(atomic.LoadUint64(&l.lastID))
 }
 
 func (l *loop) handleInvocationMessage(invocation invocationMessage) {

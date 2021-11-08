@@ -46,9 +46,9 @@ func (t *testingConnection) Timeout() time.Duration {
 }
 
 func (t *testingConnection) ConnectionID() string {
+	connNumMx.Lock()
+	defer connNumMx.Unlock()
 	if t.connectionID == "" {
-		defer connNumMx.Unlock()
-		connNumMx.Lock()
 		connNum++
 		t.connectionID = fmt.Sprintf("test%v", connNum)
 	}
