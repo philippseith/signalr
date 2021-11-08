@@ -17,12 +17,12 @@ import (
 // Server is a SignalR server for one type of hub.
 //
 // 	MapHTTP(mux *http.ServeMux, path string)
-// maps the servers hub to an path on an http.ServeMux.
+// maps the servers' hub to a path on a http.ServeMux.
 //
 // 	Serve(conn Connection)
 // serves the hub of the server on one connection.
 // The same server might serve different connections in parallel. Serve does not return until the connection is closed
-// or the servers context is canceled.
+// or the servers' context is canceled.
 //
 // HubClients()
 // allows to call all HubClients of the server from server-side, non-hub code.
