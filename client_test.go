@@ -145,26 +145,6 @@ var _ = Describe("Client", func() {
 				server.cancel()
 				close(done)
 			}, 1.0)
-			It("should not panic when a PushStateChanged channel is closed", func(done Done) {
-				server, _ := NewServer(context.TODO(), SimpleHubFactory(&simpleHub{}),
-					testLoggerOption(),
-					ChanReceiveTimeout(200*time.Millisecond),
-					StreamBufferCapacity(5))
-				// Create both ends of the connection
-				cliConn, srvConn := newClientServerConnections()
-				// Start the server
-				go func() { _ = server.Serve(srvConn) }()
-				// Create the Client
-				ctx, cancelClient := context.WithCancel(context.Background())
-				client, _ := NewClient(ctx, WithConnection(cliConn), testLoggerOption(), formatOption)
-				ch := make(chan struct{})
-				close(ch)
-				client.PushStateChanged(ch)
-				// Start it and provoke send on closed channel
-				client.Start()
-				cancelClient()
-				close(done)
-			})
 		})
 		Context("Invoke", func() {
 			It("should invoke a server method and return the result", func(done Done) {

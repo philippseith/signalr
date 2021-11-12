@@ -9,6 +9,10 @@ import (
 	"os"
 	"reflect"
 	"sync"
+	"sync/atomic"
+	"time"
+
+	"github.com/cenkalti/backoff/v4"
 
 	"github.com/go-kit/log"
 )
@@ -41,8 +45,9 @@ const (
 // State returns the current client state.
 // When WithAutoReconnect is set and the server allows reconnection, the client switches to ClientConnecting
 // and tries to reach ClientConnected after the last connection has ended.
-//  PushStateChanged(chan<- struct{})
-// PushStateChanged pushes a new item != nil to the channel when State has changed.
+//  ObserveStateChanged(chan struct{}) context.CancelFunc
+// ObserveStateChanged pushes a new item != nil to the channel when State has changed.
+// The returned CancelFunc ends the observation and closes the channel.
 //  Err() error
 // Err returns the last error occurred while running the client.
 // When the client goes to ClientConnecting, Err is set to nil.
@@ -66,7 +71,7 @@ type Client interface {
 	Party
 	Start()
 	State() ClientState
-	PushStateChanged(chan<- struct{})
+	ObserveStateChanged(chan struct{}) context.CancelFunc
 	Err() error
 	WaitForState(ctx context.Context, waitFor ClientState) <-chan error
 	Invoke(method string, arguments ...interface{}) <-chan InvokeResult
@@ -81,7 +86,7 @@ func NewClient(ctx context.Context, options ...func(Party) error) (Client, error
 	info, dbg := buildInfoDebugLogger(log.NewLogfmtLogger(os.Stderr), true)
 	c := &client{
 		state:            ClientCreated,
-		stateChangeChans: make([]chan<- struct{}, 0),
+		stateChangeChans: make([]chan struct{}, 0),
 		format:           "json",
 		partyBase:        newPartyBase(ctx, info, dbg),
 		lastID:           -1,
@@ -105,7 +110,7 @@ type client struct {
 	conn              Connection
 	connectionFactory func() (Connection, error)
 	state             ClientState
-	stateChangeChans  []chan<- struct{}
+	stateChangeChans  []chan struct{}
 	err               error
 	format            string
 	loop              *loop
@@ -115,30 +120,42 @@ type client struct {
 
 func (c *client) Start() {
 	c.setState(ClientConnecting)
+	boff := backoff.NewExponentialBackOff()
 	go func() {
 		for {
-			c.SetErr(nil)
+			c.setErr(nil)
+			// Listen for state change to ClientConnected and signal backoff Reset then.
+			stateChangeChan := make(chan struct{}, 1)
+			var connected atomic.Value
+			connected.Store(false)
+			cancelObserve := c.ObserveStateChanged(stateChangeChan)
+			go func() {
+				for range stateChangeChan {
+					if c.State() == ClientConnected {
+						connected.Store(true)
+						return
+					}
+				}
+			}()
 			// RUN!
 			err := c.run()
 			if err != nil {
-				c.SetErr(err)
+				c.setErr(err)
 			}
-			// Canceled?
-			if c.ctx.Err() != nil {
-				c.mx.Lock()
-				c.err = c.ctx.Err()
-				c.mx.Unlock()
-				// Even WithReconnect can't save the loop
+			shouldEnd := c.shouldClientEnd()
+			cancelObserve()
+			if shouldEnd {
 				return
 			}
-			// Reconnecting not possible
-			if c.connectionFactory == nil {
-				c.setState(ClientClosed)
-				return
+
+			// When the client has connected, BackOff should be reset
+			if connected.Load().(bool) {
+				boff.Reset()
 			}
-			// Reconnecting not allowed
-			if c.loop != nil && c.loop.closeMessage != nil && !c.loop.closeMessage.AllowReconnect {
-				c.setState(ClientClosed)
+			// Reconnect after BackOff
+			select {
+			case <-time.After(boff.NextBackOff()):
+			case <-c.ctx.Done():
 				return
 			}
 			c.setState(ClientConnecting)
@@ -177,6 +194,26 @@ func (c *client) run() error {
 	return err
 }
 
+func (c *client) shouldClientEnd() bool {
+	// Canceled?
+	if c.ctx.Err() != nil {
+		c.setErr(c.ctx.Err())
+		c.setState(ClientClosed)
+		return true
+	}
+	// Reconnecting not possible
+	if c.connectionFactory == nil {
+		c.setState(ClientClosed)
+		return true
+	}
+	// Reconnecting not allowed
+	if c.loop != nil && c.loop.closeMessage != nil && !c.loop.closeMessage.AllowReconnect {
+		c.setState(ClientClosed)
+		return true
+	}
+	return false
+}
+
 func (c *client) setupConnectionAndProtocol() (hubProtocol, error) {
 	return func() (hubProtocol, error) {
 		c.mx.Lock()
@@ -212,22 +249,54 @@ func (c *client) setState(state ClientState) {
 	defer c.mx.Unlock()
 	c.state = state
 	for _, ch := range c.stateChangeChans {
-		c.castStateChange(ch)
+		go func(ch chan struct{}) {
+			select {
+			case ch <- struct{}{}:
+				c.mx.RLock()
+				found := false
+				for _, cch := range c.stateChangeChans {
+					if cch == ch {
+						found = true
+						break
+					}
+				}
+				if !found {
+					close(ch)
+				}
+				c.mx.RUnlock()
+			case <-c.ctx.Done():
+			}
+		}(ch)
 	}
 }
 
-func (c *client) PushStateChanged(ch chan<- struct{}) {
+func (c *client) ObserveStateChanged(ch chan struct{}) context.CancelFunc {
 	c.mx.Lock()
 	defer c.mx.Unlock()
 	c.stateChangeChans = append(c.stateChangeChans, ch)
+	return func() {
+		c.cancelObserveStateChanged(ch)
+	}
 }
+
+func (c *client) cancelObserveStateChanged(ch chan struct{}) {
+	c.mx.Lock()
+	defer c.mx.Unlock()
+	for i, cch := range c.stateChangeChans {
+		if cch == ch {
+			c.stateChangeChans = append(c.stateChangeChans[:i], c.stateChangeChans[i+1:]...)
+			break
+		}
+	}
+}
+
 func (c *client) Err() error {
 	c.mx.RLock()
 	defer c.mx.RUnlock()
 	return c.err
 }
 
-func (c *client) SetErr(err error) {
+func (c *client) setErr(err error) {
 	c.mx.Lock()
 	defer c.mx.Unlock()
 	c.err = err
@@ -240,7 +309,7 @@ func (c *client) WaitForState(ctx context.Context, waitFor ClientState) <-chan e
 		return ch
 	}
 	stateCh := make(chan struct{}, 1)
-	c.PushStateChanged(stateCh)
+	c.ObserveStateChanged(stateCh)
 	go func() {
 		defer close(ch)
 		if c.waitingIsOver(waitFor, ch) {
@@ -276,27 +345,6 @@ func (c *client) waitingIsOver(waitFor ClientState, ch chan<- error) bool {
 		return true
 	}
 	return false
-}
-
-func (c *client) castStateChange(ch chan<- struct{}) {
-	go func() {
-		defer func() {
-			if err := recover(); err != nil {
-				c.mx.Lock()
-				defer c.mx.Unlock()
-				for i, cch := range c.stateChangeChans {
-					if cch == ch {
-						c.stateChangeChans = append(c.stateChangeChans[:i], c.stateChangeChans[i+1:]...)
-						break
-					}
-				}
-			}
-		}()
-		select {
-		case ch <- struct{}{}:
-		case <-c.ctx.Done():
-		}
-	}()
 }
 
 func (c *client) Invoke(method string, arguments ...interface{}) <-chan InvokeResult {
