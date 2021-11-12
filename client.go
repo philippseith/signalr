@@ -243,7 +243,7 @@ func (c *client) WaitForState(ctx context.Context, waitFor ClientState) <-chan e
 	c.PushStateChanged(stateCh)
 	go func() {
 		defer close(ch)
-		if c.State() == waitFor {
+		if c.waitingIsOver(waitFor, ch) {
 			return
 		}
 		for {
@@ -400,27 +400,7 @@ func (c *client) PushStreams(method string, arguments ...interface{}) <-chan err
 }
 
 func (c *client) waitForConnected() <-chan error {
-	ch := make(chan error, 1)
-	go func() {
-		defer close(ch)
-		switch c.State() {
-		case ClientConnected:
-		case ClientError:
-			ch <- c.Err()
-		case ClientCreated:
-			ch <- errors.New("client not started. Call client.Start() before using it")
-		case ClientClosed:
-			ch <- errors.New("client closed and no AutoReconnect option given. Cannot reconnect")
-		case ClientConnecting:
-			select {
-			case err := <-c.WaitForState(context.Background(), ClientConnected):
-				ch <- err
-			case <-c.context().Done():
-				ch <- c.context().Err()
-			}
-		}
-	}()
-	return ch
+	return c.WaitForState(context.Background(), ClientConnected)
 }
 
 func createResultChansWithError(ctx context.Context, err error) (<-chan InvokeResult, chan error) {
