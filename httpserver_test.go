@@ -8,6 +8,9 @@ import (
 	"io/ioutil"
 	"net"
 	"net/http"
+	"net/http/httptest"
+	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -45,10 +48,9 @@ var _ = Describe("HTTP server", func() {
 					Expect(err).NotTo(HaveOccurred())
 					router := http.NewServeMux()
 					server.MapHTTP(WithHTTPServeMux(router), "/hub")
-					port := freePort()
-					go func() {
-						_ = http.ListenAndServe(fmt.Sprintf("127.0.0.1:%v", port), router)
-					}()
+					testServer := httptest.NewServer(router)
+					url, _ := url.Parse(testServer.URL)
+					port, _ := strconv.Atoi(url.Port())
 					// Negotiate
 					negResp := negotiateWebSocketTestServer(port)
 					Expect(negResp["connectionId"]).NotTo(BeNil())
@@ -64,6 +66,7 @@ var _ = Describe("HTTP server", func() {
 					if transport[0] == "WebSockets" {
 						Expect(tf).To(ContainElement("Binary"))
 					}
+					testServer.Close()
 					close(done)
 				}, 2.0)
 			})
@@ -76,16 +79,16 @@ var _ = Describe("HTTP server", func() {
 					Expect(err).NotTo(HaveOccurred())
 					router := http.NewServeMux()
 					server.MapHTTP(WithHTTPServeMux(router), "/hub")
-					port := freePort()
-					go func() {
-						_ = http.ListenAndServe(fmt.Sprintf("127.0.0.1:%v", port), router)
-					}()
+					testServer := httptest.NewServer(router)
+					url, _ := url.Parse(testServer.URL)
+					port, _ := strconv.Atoi(url.Port())
 					waitForPort(port)
 					// Negotiate the wrong way
 					resp, err := http.Get(fmt.Sprintf("http://127.0.0.1:%v/hub/negotiate", port))
 					Expect(err).To(BeNil())
 					Expect(resp).NotTo(BeNil())
 					Expect(resp.StatusCode).ToNot(Equal(200))
+					testServer.Close()
 					close(done)
 				}, 2.0)
 			})
@@ -102,11 +105,9 @@ var _ = Describe("HTTP server", func() {
 					Expect(err).NotTo(HaveOccurred())
 					router := http.NewServeMux()
 					server.MapHTTP(WithHTTPServeMux(router), "/hub")
-					port := freePort()
-					httpServer := &http.Server{Addr: fmt.Sprintf("127.0.0.1:%v", port), Handler: router}
-					go func() {
-						_ = httpServer.ListenAndServe()
-					}()
+					testServer := httptest.NewServer(router)
+					url, _ := url.Parse(testServer.URL)
+					port, _ := strconv.Atoi(url.Port())
 					waitForPort(port)
 
 					// Try first connection
@@ -145,7 +146,7 @@ var _ = Describe("HTTP server", func() {
 					s := result.Value.(string)
 					Expect(s).To(Equal(hugo))
 					cancel()
-					_ = httpServer.Shutdown(ctx)
+					testServer.Close()
 					close(done)
 				}, 2.0)
 			})
@@ -158,12 +159,12 @@ var _ = Describe("HTTP server", func() {
 			Expect(err).NotTo(HaveOccurred())
 			router := http.NewServeMux()
 			server.MapHTTP(WithHTTPServeMux(router), "/hub")
-			port := freePort()
-			go func() {
-				_ = http.ListenAndServe(fmt.Sprintf("127.0.0.1:%v", port), router)
-			}()
+			testServer := httptest.NewServer(router)
+			url, _ := url.Parse(testServer.URL)
+			port, _ := strconv.Atoi(url.Port())
 			waitForPort(port)
 			handShakeAndCallWebSocketTestServer(port, "")
+			testServer.Close()
 			close(done)
 		}, 5.0)
 	})
@@ -235,18 +236,6 @@ func handShakeAndCallWebSocketTestServer(port int, connectionID string) {
 	case <-time.After(1000 * time.Millisecond):
 		Fail("timed out")
 	}
-}
-
-func freePort() int {
-	if addr, err := net.ResolveTCPAddr("tcp", "localhost:0"); err == nil {
-		if listener, err := net.ListenTCP("tcp", addr); err == nil {
-			defer func() {
-				_ = listener.Close()
-			}()
-			return listener.Addr().(*net.TCPAddr).Port
-		}
-	}
-	return 0
 }
 
 func waitForPort(port int) {
