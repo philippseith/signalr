@@ -29,7 +29,7 @@ func (w *webSocketConnection) Write(p []byte) (n int, err error) {
 	}
 	n, err = ReadWriteWithContext(w.Context(),
 		func() (int, error) {
-			err = w.conn.Write(w.Context(), messageType, p)
+			err := w.conn.Write(w.Context(), messageType, p)
 			if err != nil {
 				return 0, err
 			}
