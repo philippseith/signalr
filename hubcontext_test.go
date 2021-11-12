@@ -154,9 +154,6 @@ var _ = Describe("HubContext", func() {
 			close(didIt)
 		}, 5.0)
 	})
-})
-
-var _ = Describe("HubContext", func() {
 	Context("Clients().Caller()", func() {
 		It("should invoke only the caller", func(didIt Done) {
 			server, conns, _ := connectMany()
@@ -197,7 +194,6 @@ var _ = Describe("HubContext", func() {
 			close(didIt)
 		}, 4.0)
 	})
-
 	Context("Clients().Client()", func() {
 		It("should invoke only the client which was addressed", func(didIt Done) {
 			server, conns, _ := connectMany()
@@ -240,7 +236,6 @@ var _ = Describe("HubContext", func() {
 			close(didIt)
 		}, 4.0)
 	})
-
 	Context("Clients().Group()", func() {
 		It("should invoke only the clients in the group", func(ditIt Done) {
 			server, conns, _ := connectMany()
@@ -286,7 +281,6 @@ var _ = Describe("HubContext", func() {
 			close(ditIt)
 		}, 4.0)
 	})
-
 	Context("RemoveFromGroup should remove clients from the group", func() {
 		It("should invoke only the clients in the group", func(ditIt Done) {
 			server, conns, _ := connectMany()
@@ -359,9 +353,7 @@ var _ = Describe("HubContext", func() {
 			close(done)
 		}, 2.0)
 	})
-})
 
-var _ = Describe("HubContext", func() {
 	Context("ConnectionID", func() {
 		It("should be the ID of the connection", func() {
 			server, conns, _ := connectMany()
