@@ -17,6 +17,14 @@ import (
 type ClientState int
 
 // Client states
+//   ClientCreated
+// The Client has been created and is not started yet.
+//   ClientConnecting
+// The Client has been started and is negotiating the connection.
+//   ClientConnected
+// The Client has successfully negotiated the connection and can send and receive messages.
+//   ClientClosed
+// The Client is not able to send and receive messages anymore and has to be started again to be able to.
 const (
 	ClientCreated ClientState = iota
 	ClientConnecting
@@ -32,8 +40,8 @@ const (
 // start a new loop. To end the loop from the client side, the context passed to NewClient has to be canceled.
 //  State() ClientState
 // State returns the current client state.
-// When WithAutoReconnect is set, the client leaves ClientClosed and tries to reach ClientConnected after the last
-// connection has ended.
+// When WithAutoReconnect is set and the server allows reconnection, the client switches to ClientConnecting
+// and tries to reach ClientConnected after the last connection has ended.
 //  PushStateChanged(chan<- struct{})
 // PushStateChanged pushes a new item != nil to the channel when State has changed.
 //  Err() error
@@ -125,6 +133,7 @@ func (c *client) Start() {
 				c.err = c.ctx.Err()
 				c.mx.Unlock()
 				c.setState(ClientError)
+				// Even WithReconnect can't save the loop
 				return
 			}
 			// Reconnecting not possible
