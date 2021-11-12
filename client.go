@@ -30,7 +30,6 @@ const (
 	ClientConnecting
 	ClientConnected
 	ClientClosed
-	ClientError
 )
 
 // Client is the signalR connection used on the client side.
@@ -119,20 +118,16 @@ func (c *client) Start() {
 	go func() {
 		for {
 			c.SetErr(nil)
-			c.setState(ClientConnecting)
-
 			// RUN!
 			err := c.run()
 			if err != nil {
 				c.SetErr(err)
-				c.setState(ClientError)
 			}
 			// Canceled?
 			if c.ctx.Err() != nil {
 				c.mx.Lock()
 				c.err = c.ctx.Err()
 				c.mx.Unlock()
-				c.setState(ClientError)
 				// Even WithReconnect can't save the loop
 				return
 			}
@@ -146,6 +141,7 @@ func (c *client) Start() {
 				c.setState(ClientClosed)
 				return
 			}
+			c.setState(ClientConnecting)
 		}
 	}()
 }
