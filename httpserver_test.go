@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"strconv"
+
 	"strings"
 	"time"
 
@@ -42,7 +43,6 @@ var _ = Describe("HTTP server", func() {
 		Context(fmt.Sprintf("%v %v", transport[0], transport[1]), func() {
 			Context("A correct negotiation request is sent", func() {
 				It(fmt.Sprintf("should send a correct negotiation response with support for %v with text protocol", transport), func(done Done) {
-					<-time.After(100 * time.Millisecond)
 					// Start server
 					server, err := NewServer(context.TODO(), SimpleHubFactory(&addHub{}), HTTPTransports(transport[0]), testLoggerOption())
 					Expect(err).NotTo(HaveOccurred())
@@ -73,7 +73,6 @@ var _ = Describe("HTTP server", func() {
 
 			Context("A invalid negotiation request is sent", func() {
 				It(fmt.Sprintf("should send a correct negotiation response with support for %v with text protocol", transport), func(done Done) {
-					<-time.After(100 * time.Millisecond)
 					// Start server
 					server, err := NewServer(context.TODO(), SimpleHubFactory(&addHub{}), HTTPTransports(transport[0]), testLoggerOption())
 					Expect(err).NotTo(HaveOccurred())
@@ -95,7 +94,6 @@ var _ = Describe("HTTP server", func() {
 
 			Context("Connection with client", func() {
 				It("should successfully handle an Invoke call", func(done Done) {
-					<-time.After(100 * time.Millisecond)
 					logger := &nonProtocolLogger{testLogger()}
 					// Start server
 					ctx, cancel := context.WithCancel(context.Background())
@@ -109,7 +107,6 @@ var _ = Describe("HTTP server", func() {
 					url, _ := url.Parse(testServer.URL)
 					port, _ := strconv.Atoi(url.Port())
 					waitForPort(port)
-
 					// Try first connection
 					conn, err := NewHTTPConnection(context.Background(), fmt.Sprintf("http://127.0.0.1:%v/hub", port))
 					Expect(err).NotTo(HaveOccurred())
@@ -146,7 +143,7 @@ var _ = Describe("HTTP server", func() {
 					s := result.Value.(string)
 					Expect(s).To(Equal(hugo))
 					cancel()
-					testServer.Close()
+					go testServer.Close()
 					close(done)
 				}, 2.0)
 			})
