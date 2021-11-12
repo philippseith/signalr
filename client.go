@@ -45,8 +45,9 @@ const (
 // State returns the current client state.
 // When WithAutoReconnect is set and the server allows reconnection, the client switches to ClientConnecting
 // and tries to reach ClientConnected after the last connection has ended.
-//  PushStateChanged(chan<- struct{})
-// PushStateChanged pushes a new item != nil to the channel when State has changed.
+//  ObserveStateChanged(chan struct{}) context.CancelFunc
+// ObserveStateChanged pushes a new item != nil to the channel when State has changed.
+// The returned CancelFunc ends the observation and closes the channel.
 //  Err() error
 // Err returns the last error occurred while running the client.
 // When the client goes to ClientConnecting, Err is set to nil.
@@ -70,7 +71,7 @@ type Client interface {
 	Party
 	Start()
 	State() ClientState
-	PushStateChanged(chan<- struct{})
+	ObserveStateChanged(chan struct{}) context.CancelFunc
 	Err() error
 	WaitForState(ctx context.Context, waitFor ClientState) <-chan error
 	Invoke(method string, arguments ...interface{}) <-chan InvokeResult
@@ -85,7 +86,7 @@ func NewClient(ctx context.Context, options ...func(Party) error) (Client, error
 	info, dbg := buildInfoDebugLogger(log.NewLogfmtLogger(os.Stderr), true)
 	c := &client{
 		state:            ClientCreated,
-		stateChangeChans: make([]chan<- struct{}, 0),
+		stateChangeChans: make([]chan struct{}, 0),
 		format:           "json",
 		partyBase:        newPartyBase(ctx, info, dbg),
 		lastID:           -1,
@@ -109,7 +110,7 @@ type client struct {
 	conn              Connection
 	connectionFactory func() (Connection, error)
 	state             ClientState
-	stateChangeChans  []chan<- struct{}
+	stateChangeChans  []chan struct{}
 	err               error
 	format            string
 	loop              *loop
@@ -127,7 +128,7 @@ func (c *client) Start() {
 			stateChangeChan := make(chan struct{}, 1)
 			var connected atomic.Value
 			connected.Store(false)
-			c.PushStateChanged(stateChangeChan)
+			cancelObserve := c.ObserveStateChanged(stateChangeChan)
 			go func() {
 				for range stateChangeChan {
 					if c.State() == ClientConnected {
@@ -141,11 +142,11 @@ func (c *client) Start() {
 			if err != nil {
 				c.setErr(err)
 			}
-			if c.shouldClientEnd() {
-				close(stateChangeChan)
+			shouldEnd := c.shouldClientEnd()
+			cancelObserve()
+			if shouldEnd {
 				return
 			}
-			close(stateChangeChan)
 
 			// When the client has connected, BackOff should be reset
 			if connected.Load().(bool) {
@@ -248,15 +249,47 @@ func (c *client) setState(state ClientState) {
 	defer c.mx.Unlock()
 	c.state = state
 	for _, ch := range c.stateChangeChans {
-		c.castStateChange(ch)
+		go func(ch chan struct{}) {
+			select {
+			case ch <- struct{}{}:
+				c.mx.RLock()
+				found := false
+				for _, cch := range c.stateChangeChans {
+					if cch == ch {
+						found = true
+						break
+					}
+				}
+				if !found {
+					close(ch)
+				}
+				c.mx.RUnlock()
+			case <-c.ctx.Done():
+			}
+		}(ch)
 	}
 }
 
-func (c *client) PushStateChanged(ch chan<- struct{}) {
+func (c *client) ObserveStateChanged(ch chan struct{}) context.CancelFunc {
 	c.mx.Lock()
 	defer c.mx.Unlock()
 	c.stateChangeChans = append(c.stateChangeChans, ch)
+	return func() {
+		c.cancelObserveStateChanged(ch)
+	}
 }
+
+func (c *client) cancelObserveStateChanged(ch chan struct{}) {
+	c.mx.Lock()
+	defer c.mx.Unlock()
+	for i, cch := range c.stateChangeChans {
+		if cch == ch {
+			c.stateChangeChans = append(c.stateChangeChans[:i], c.stateChangeChans[i+1:]...)
+			break
+		}
+	}
+}
+
 func (c *client) Err() error {
 	c.mx.RLock()
 	defer c.mx.RUnlock()
@@ -276,7 +309,7 @@ func (c *client) WaitForState(ctx context.Context, waitFor ClientState) <-chan e
 		return ch
 	}
 	stateCh := make(chan struct{}, 1)
-	c.PushStateChanged(stateCh)
+	c.ObserveStateChanged(stateCh)
 	go func() {
 		defer close(ch)
 		if c.waitingIsOver(waitFor, ch) {
@@ -312,27 +345,6 @@ func (c *client) waitingIsOver(waitFor ClientState, ch chan<- error) bool {
 		return true
 	}
 	return false
-}
-
-func (c *client) castStateChange(ch chan<- struct{}) {
-	go func() {
-		defer func() {
-			if err := recover(); err != nil {
-				c.mx.Lock()
-				defer c.mx.Unlock()
-				for i, cch := range c.stateChangeChans {
-					if cch == ch {
-						c.stateChangeChans = append(c.stateChangeChans[:i], c.stateChangeChans[i+1:]...)
-						break
-					}
-				}
-			}
-		}()
-		select {
-		case ch <- struct{}{}:
-		case <-c.ctx.Done():
-		}
-	}()
 }
 
 func (c *client) Invoke(method string, arguments ...interface{}) <-chan InvokeResult {
