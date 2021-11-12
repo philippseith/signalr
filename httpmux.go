@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/teivah/onecontext"
 	"nhooyr.io/websocket"
@@ -44,21 +45,30 @@ func (h *httpMux) handlePost(writer http.ResponseWriter, request *http.Request) 
 		writer.WriteHeader(http.StatusBadRequest)
 		return
 	}
-	h.mx.RLock()
-	c, ok := h.connectionMap[connectionID]
-	h.mx.RUnlock()
-	if ok {
-		// Connection is initiated
-		switch conn := c.(type) {
-		case *serverSSEConnection:
-			writer.WriteHeader(conn.consumeRequest(request))
-		// TODO case longPolling
-		default:
-			// ConnectionID already used for WebSocket
-			writer.WriteHeader(http.StatusConflict)
+	info, _ := h.server.prefixLoggers("")
+	for {
+		h.mx.RLock()
+		c, ok := h.connectionMap[connectionID]
+		h.mx.RUnlock()
+		if ok {
+			// Connection is initiated
+			switch conn := c.(type) {
+			case *serverSSEConnection:
+				writer.WriteHeader(conn.consumeRequest(request))
+				return
+			case *negotiateConnection:
+				// connection start initiated but not completed
+			default:
+				// ConnectionID already used for WebSocket(?)
+				writer.WriteHeader(http.StatusConflict)
+				return
+			}
+		} else {
+			writer.WriteHeader(http.StatusNotFound)
+			return
 		}
-	} else {
-		writer.WriteHeader(http.StatusNotFound)
+		<-time.After(10 * time.Millisecond)
+		info.Log("event", "handlePost for SSE connection repeated")
 	}
 }
 
