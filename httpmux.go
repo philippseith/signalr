@@ -68,7 +68,7 @@ func (h *httpMux) handlePost(writer http.ResponseWriter, request *http.Request) 
 			return
 		}
 		<-time.After(10 * time.Millisecond)
-		info.Log("event", "handlePost for SSE connection repeated")
+		_ = info.Log("event", "handlePost for SSE connection repeated")
 	}
 }
 
