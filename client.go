@@ -21,12 +21,19 @@ import (
 type ClientState int
 
 // Client states
+//   ClientCreated
+// The Client has been created and is not started yet.
+//   ClientConnecting
+// The Client has been started and is negotiating the connection.
+//   ClientConnected
+// The Client has successfully negotiated the connection and can send and receive messages.
+//   ClientClosed
+// The Client is not able to send and receive messages anymore and has to be started again to be able to.
 const (
 	ClientCreated ClientState = iota
 	ClientConnecting
 	ClientConnected
 	ClientClosed
-	ClientError
 )
 
 // Client is the signalR connection used on the client side.
@@ -36,13 +43,13 @@ const (
 // start a new loop. To end the loop from the client side, the context passed to NewClient has to be canceled.
 //  State() ClientState
 // State returns the current client state.
-// When WithAutoReconnect is set, the client leaves ClientClosed and tries to reach ClientConnected after the last
-// connection has ended.
+// When WithAutoReconnect is set and the server allows reconnection, the client switches to ClientConnecting
+// and tries to reach ClientConnected after the last connection has ended.
 //  PushStateChanged(chan<- struct{})
 // PushStateChanged pushes a new item != nil to the channel when State has changed.
 //  Err() error
 // Err returns the last error occurred while running the client.
-// When the client goes to ClientConnecting, Err is set to nil
+// When the client goes to ClientConnecting, Err is set to nil.
 //  WaitForState(ctx context.Context, waitFor ClientState) <-chan error
 // WaitForState returns a channel for waiting on the Client to reach a specific ClientState.
 // The channel either returns an error if ctx or the client has been canceled.
@@ -98,7 +105,7 @@ func NewClient(ctx context.Context, options ...func(Party) error) (Client, error
 
 type client struct {
 	partyBase
-	mx                sync.Mutex
+	mx                sync.RWMutex
 	conn              Connection
 	connectionFactory func() (Connection, error)
 	state             ClientState
@@ -112,9 +119,9 @@ type client struct {
 
 func (c *client) Start() {
 	c.setState(ClientConnecting)
-	boff := backoff.NewExponentialBackOff()
 	go func() {
 		for {
+			c.SetErr(nil)
 			c.mx.Lock()
 			c.err = nil
 			c.mx.Unlock()
@@ -136,13 +143,15 @@ func (c *client) Start() {
 
 			// RUN!
 			err := c.run()
-
-			c.mx.Lock()
-			c.err = err
-			c.mx.Unlock()
-			if c.err != nil {
-				c.setState(ClientError)
+			if err != nil {
+				c.SetErr(err)
 			}
+			// Canceled?
+			if c.ctx.Err() != nil {
+				c.mx.Lock()
+				c.err = c.ctx.Err()
+				c.mx.Unlock()
+				// Even WithReconnect can't save the loop
 
 			if c.shouldClientEnd() {
 				return
@@ -159,6 +168,7 @@ func (c *client) Start() {
 			case <-c.ctx.Done():
 				return
 			}
+			c.setState(ClientConnecting)
 		}
 	}()
 }
@@ -241,9 +251,18 @@ func (c *client) setupConnectionAndProtocol() (hubProtocol, error) {
 }
 
 func (c *client) State() ClientState {
+	c.mx.RLock()
+	defer c.mx.RUnlock()
+	return c.state
+}
+
+func (c *client) setState(state ClientState) {
 	c.mx.Lock()
 	defer c.mx.Unlock()
-	return c.state
+	c.state = state
+	for _, ch := range c.stateChangeChans {
+		c.castStateChange(ch)
+	}
 }
 
 func (c *client) PushStateChanged(ch chan<- struct{}) {
@@ -252,14 +271,20 @@ func (c *client) PushStateChanged(ch chan<- struct{}) {
 	c.stateChangeChans = append(c.stateChangeChans, ch)
 }
 func (c *client) Err() error {
+	c.mx.RLock()
+	defer c.mx.RUnlock()
+	return c.err
+}
+
+func (c *client) SetErr(err error) {
 	c.mx.Lock()
 	defer c.mx.Unlock()
-	return c.err
+	c.err = err
 }
 
 func (c *client) WaitForState(ctx context.Context, waitFor ClientState) <-chan error {
 	ch := make(chan error, 1)
-	if c.State() == waitFor {
+	if c.waitingIsOver(waitFor, ch) {
 		close(ch)
 		return ch
 	}
@@ -267,20 +292,14 @@ func (c *client) WaitForState(ctx context.Context, waitFor ClientState) <-chan e
 	c.PushStateChanged(stateCh)
 	go func() {
 		defer close(ch)
-		if c.State() == waitFor {
+		if c.waitingIsOver(waitFor, ch) {
 			return
 		}
 		for {
 			select {
 			case <-stateCh:
-				switch c.State() {
-				case waitFor:
+				if c.waitingIsOver(waitFor, ch) {
 					return
-				case ClientCreated:
-					ch <- errors.New("client not started. Call client.Start() before using it")
-					return
-				case ClientClosed:
-					ch <- errors.New("client closed and no AutoReconnect option given. Cannot reconnect")
 				}
 			case <-ctx.Done():
 				ch <- ctx.Err()
@@ -294,13 +313,18 @@ func (c *client) WaitForState(ctx context.Context, waitFor ClientState) <-chan e
 	return ch
 }
 
-func (c *client) setState(state ClientState) {
-	c.mx.Lock()
-	defer c.mx.Unlock()
-	c.state = state
-	for _, ch := range c.stateChangeChans {
-		c.castStateChange(ch)
+func (c *client) waitingIsOver(waitFor ClientState, ch chan<- error) bool {
+	switch c.State() {
+	case waitFor:
+		return true
+	case ClientCreated:
+		ch <- errors.New("client not started. Call client.Start() before using it")
+		return true
+	case ClientClosed:
+		ch <- fmt.Errorf("client closed. %w", c.Err())
+		return true
 	}
+	return false
 }
 
 func (c *client) castStateChange(ch chan<- struct{}) {
@@ -335,7 +359,7 @@ func (c *client) Invoke(method string, arguments ...interface{}) <-chan InvokeRe
 		}
 		id := c.loop.GetNewID()
 		resultCh, errCh := c.loop.invokeClient.newInvocation(id)
-		irCh := newInvokeResultChan(resultCh, errCh)
+		irCh := newInvokeResultChan(c.context(), resultCh, errCh)
 		if err := c.loop.hubConn.SendInvocation(id, method, arguments); err != nil {
 			c.loop.invokeClient.deleteInvocation(id)
 			ch <- InvokeResult{Error: err}
@@ -390,6 +414,9 @@ func (c *client) PullStream(method string, arguments ...interface{}) <-chan Invo
 		go func() {
 			for ir := range pullCh {
 				irCh <- ir
+				if ir.Error != nil {
+					break
+				}
 			}
 			close(irCh)
 		}()
@@ -422,34 +449,14 @@ func (c *client) PushStreams(method string, arguments ...interface{}) <-chan err
 }
 
 func (c *client) waitForConnected() <-chan error {
-	ch := make(chan error, 1)
-	go func() {
-		defer close(ch)
-		switch c.State() {
-		case ClientConnected:
-		case ClientError:
-			ch <- c.Err()
-		case ClientCreated:
-			ch <- errors.New("client not started. Call client.Start() before using it")
-		case ClientClosed:
-			ch <- errors.New("client closed and no AutoReconnect option given. Cannot reconnect")
-		case ClientConnecting:
-			select {
-			case err := <-c.WaitForState(context.Background(), ClientConnected):
-				ch <- err
-			case <-c.context().Done():
-				ch <- c.context().Err()
-			}
-		}
-	}()
-	return ch
+	return c.WaitForState(context.Background(), ClientConnected)
 }
 
-func createResultChansWithError(err error) (<-chan InvokeResult, chan error) {
+func createResultChansWithError(ctx context.Context, err error) (<-chan InvokeResult, chan error) {
 	resultCh := make(chan interface{}, 1)
 	errCh := make(chan error, 1)
 	errCh <- err
-	invokeResultChan := newInvokeResultChan(resultCh, errCh)
+	invokeResultChan := newInvokeResultChan(ctx, resultCh, errCh)
 	close(errCh)
 	close(resultCh)
 	return invokeResultChan, errCh
@@ -490,41 +497,70 @@ func (c *client) prefixLoggers(connectionID string) (info StructuredLogger, dbg 
 }
 
 func (c *client) processHandshake() (hubProtocol, error) {
+	if err := c.sendHandshakeRequest(); err != nil {
+		return nil, err
+	}
+	return c.receiveHandshakeResponse()
+}
+
+func (c *client) sendHandshakeRequest() error {
 	info, dbg := c.prefixLoggers(c.conn.ConnectionID())
 	request := fmt.Sprintf("{\"protocol\":\"%v\",\"version\":1}\u001e", c.format)
-	_, err := c.conn.Write([]byte(request))
+	ctx, cancelWrite := context.WithTimeout(c.context(), c.HandshakeTimeout())
+	defer cancelWrite()
+	_, err := ReadWriteWithContext(ctx,
+		func() (int, error) {
+			return c.conn.Write([]byte(request))
+		}, func() {})
 	if err != nil {
 		_ = info.Log(evt, "handshake sent", "msg", request, "error", err)
-		return nil, err
+		return err
 	}
 	_ = dbg.Log(evt, "handshake sent", "msg", request)
-	var remainBuf bytes.Buffer
-	rawHandshake, err := readJSONFrames(c.conn, &remainBuf)
-	if err != nil {
-		return nil, err
+	return nil
+}
+
+func (c *client) receiveHandshakeResponse() (hubProtocol, error) {
+	info, dbg := c.prefixLoggers(c.conn.ConnectionID())
+	ctx, cancelRead := context.WithTimeout(c.context(), c.HandshakeTimeout())
+	defer cancelRead()
+	readJSONFramesChan := make(chan []interface{}, 1)
+	go func() {
+		var remainBuf bytes.Buffer
+		rawHandshake, err := readJSONFrames(c.conn, &remainBuf)
+		readJSONFramesChan <- []interface{}{rawHandshake, err}
+	}()
+	select {
+	case result := <-readJSONFramesChan:
+		if result[1] != nil {
+			return nil, result[1].(error)
+		}
+		rawHandshake := result[0].([][]byte)
+		response := handshakeResponse{}
+		if err := json.Unmarshal(rawHandshake[0], &response); err != nil {
+			// Malformed handshake
+			_ = info.Log(evt, "handshake received", "msg", string(rawHandshake[0]), "error", err)
+			return nil, err
+		} else {
+			if response.Error != "" {
+				_ = info.Log(evt, "handshake received", "error", response.Error)
+				return nil, errors.New(response.Error)
+			}
+			_ = dbg.Log(evt, "handshake received", "msg", fmtMsg(response))
+			var protocol hubProtocol
+			switch c.format {
+			case "json":
+				protocol = &jsonHubProtocol{}
+			case "messagepack":
+				protocol = &messagePackHubProtocol{}
+			}
+			if protocol != nil {
+				_, pDbg := c.loggers()
+				protocol.setDebugLogger(pDbg)
+			}
+			return protocol, nil
+		}
+	case <-ctx.Done():
+		return nil, ctx.Err()
 	}
-	response := handshakeResponse{}
-	if err = json.Unmarshal(rawHandshake[0], &response); err != nil {
-		// Malformed handshake
-		_ = info.Log(evt, "handshake received", "msg", string(rawHandshake[0]), "error", err)
-	} else {
-		if response.Error != "" {
-			_ = info.Log(evt, "handshake received", "error", response.Error)
-			return nil, errors.New(response.Error)
-		}
-		_ = dbg.Log(evt, "handshake received", "msg", fmtMsg(response))
-		var protocol hubProtocol
-		switch c.format {
-		case "json":
-			protocol = &jsonHubProtocol{}
-		case "messagepack":
-			protocol = &messagePackHubProtocol{}
-		}
-		if protocol != nil {
-			_, pDbg := c.loggers()
-			protocol.setDebugLogger(pDbg)
-		}
-		return protocol, nil
-	}
-	return nil, err
 }

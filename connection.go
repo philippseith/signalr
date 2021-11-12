@@ -3,7 +3,6 @@ package signalr
 import (
 	"context"
 	"io"
-	"time"
 )
 
 // Connection describes a connection between signalR client and server
@@ -13,8 +12,6 @@ type Connection interface {
 	Context() context.Context
 	ConnectionID() string
 	SetConnectionID(id string)
-	Timeout() time.Duration
-	SetTimeout(duration time.Duration)
 }
 
 // TransferMode is either TextTransferMode or BinaryTransferMode
