@@ -94,7 +94,7 @@ func NewClient(ctx context.Context, options ...func(Party) error) (Client, error
 
 type client struct {
 	partyBase
-	mx                sync.Mutex
+	mx                sync.RWMutex
 	conn              Connection
 	connectionFactory func() (Connection, error)
 	state             ClientState
@@ -110,19 +110,13 @@ func (c *client) Start() {
 	c.setState(ClientConnecting)
 	go func() {
 		for {
-			c.mx.Lock()
-			c.err = nil
-			c.mx.Unlock()
-			if c.State() != ClientConnecting {
-				c.setState(ClientConnecting)
-			}
+			c.SetErr(nil)
+			c.setState(ClientConnecting)
 
 			// RUN!
 			err := c.run()
-			c.mx.Lock()
-			c.err = err
-			c.mx.Unlock()
-			if c.err != nil {
+			if err != nil {
+				c.SetErr(err)
 				c.setState(ClientError)
 			}
 			// Canceled?
@@ -203,9 +197,18 @@ func (c *client) setupConnectionAndProtocol() (hubProtocol, error) {
 }
 
 func (c *client) State() ClientState {
+	c.mx.RLock()
+	defer c.mx.RUnlock()
+	return c.state
+}
+
+func (c *client) setState(state ClientState) {
 	c.mx.Lock()
 	defer c.mx.Unlock()
-	return c.state
+	c.state = state
+	for _, ch := range c.stateChangeChans {
+		c.castStateChange(ch)
+	}
 }
 
 func (c *client) PushStateChanged(ch chan<- struct{}) {
@@ -214,9 +217,15 @@ func (c *client) PushStateChanged(ch chan<- struct{}) {
 	c.stateChangeChans = append(c.stateChangeChans, ch)
 }
 func (c *client) Err() error {
+	c.mx.RLock()
+	defer c.mx.RUnlock()
+	return c.err
+}
+
+func (c *client) SetErr(err error) {
 	c.mx.Lock()
 	defer c.mx.Unlock()
-	return c.err
+	c.err = err
 }
 
 func (c *client) WaitForState(ctx context.Context, waitFor ClientState) <-chan error {
