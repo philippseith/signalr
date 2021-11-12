@@ -119,47 +119,36 @@ type client struct {
 
 func (c *client) Start() {
 	c.setState(ClientConnecting)
+	boff := backoff.NewExponentialBackOff()
 	go func() {
 		for {
-			c.SetErr(nil)
-			c.mx.Lock()
-			c.err = nil
-			c.mx.Unlock()
-			if c.State() != ClientConnecting {
-				c.setState(ClientConnecting)
-			}
-			// Listen fo state changing to ClientConnected and signal backoff Reset then.
+			c.setErr(nil)
+			// Listen for state change to ClientConnected and signal backoff Reset then.
 			stateChangeChan := make(chan struct{}, 1)
-			var clientConnected int64 = 0
+			var connected atomic.Value
+			connected.Store(false)
 			c.PushStateChanged(stateChangeChan)
 			go func() {
 				for range stateChangeChan {
 					if c.State() == ClientConnected {
-						atomic.StoreInt64(&clientConnected, 1)
+						connected.Store(true)
 						return
 					}
 				}
 			}()
-
 			// RUN!
 			err := c.run()
 			if err != nil {
-				c.SetErr(err)
+				c.setErr(err)
 			}
-			// Canceled?
-			if c.ctx.Err() != nil {
-				c.mx.Lock()
-				c.err = c.ctx.Err()
-				c.mx.Unlock()
-				// Even WithReconnect can't save the loop
-
 			if c.shouldClientEnd() {
+				close(stateChangeChan)
 				return
 			}
-
 			close(stateChangeChan)
-			// When the client has connected, BackOff should be reseted
-			if atomic.LoadInt64(&clientConnected) == 1 {
+
+			// When the client has connected, BackOff should be reset
+			if connected.Load().(bool) {
 				boff.Reset()
 			}
 			// Reconnect after BackOff
@@ -207,10 +196,8 @@ func (c *client) run() error {
 func (c *client) shouldClientEnd() bool {
 	// Canceled?
 	if c.ctx.Err() != nil {
-		c.mx.Lock()
-		c.err = c.ctx.Err()
-		c.mx.Unlock()
-		c.setState(ClientError)
+		c.setErr(c.ctx.Err())
+		c.setState(ClientClosed)
 		return true
 	}
 	// Reconnecting not possible
@@ -276,7 +263,7 @@ func (c *client) Err() error {
 	return c.err
 }
 
-func (c *client) SetErr(err error) {
+func (c *client) setErr(err error) {
 	c.mx.Lock()
 	defer c.mx.Unlock()
 	c.err = err
