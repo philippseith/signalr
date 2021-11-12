@@ -106,16 +106,9 @@ func connectMany() (Server, []*testingConnection, []string) {
 }
 
 var _ = Describe("HubContext", func() {
-	var server Server
-	var conns []*testingConnection
-	BeforeEach(func() {
-		server, conns, _ = connectMany()
-	})
-	AfterEach(func() {
-		server.cancel()
-	})
 	Context("Clients().All()", func() {
 		It("should invoke all clients", func(didIt Done) {
+			server, conns, _ := connectMany()
 			conns[0].ClientSend(`{"type":1,"invocationId": "123","target":"callall"}`)
 			callCount := make(chan int, 1)
 			callCount <- 0
@@ -157,6 +150,7 @@ var _ = Describe("HubContext", func() {
 			case <-time.After(3000 * time.Millisecond):
 				Fail("timed out")
 			}
+			server.cancel()
 			close(didIt)
 		}, 5.0)
 	})
@@ -368,21 +362,13 @@ var _ = Describe("HubContext", func() {
 })
 
 var _ = Describe("HubContext", func() {
-	var server Server
-	var conns []*testingConnection
-	BeforeEach(func(done Done) {
-		server, conns, _ = connectMany()
-		close(done)
-	})
-	AfterEach(func(done Done) {
-		server.cancel()
-		close(done)
-	})
 	Context("ConnectionID", func() {
 		It("should be the ID of the connection", func() {
+			server, conns, _ := connectMany()
 			conns[0].ClientSend(`{"type":1,"invocationId": "ABC","target":"testconnectionid"}`)
 			id := <-hubContextInvocationQueue
 			Expect(strings.Index(id, "test")).To(Equal(0))
+			server.cancel()
 		})
 	})
 })
