@@ -45,7 +45,7 @@ const (
 // PushStateChanged pushes a new item != nil to the channel when State has changed.
 //  Err() error
 // Err returns the last error occurred while running the client.
-// When the client goes to ClientConnecting, Err is set to nil
+// When the client goes to ClientConnecting, Err is set to nil.
 //  WaitForState(ctx context.Context, waitFor ClientState) <-chan error
 // WaitForState returns a channel for waiting on the Client to reach a specific ClientState.
 // The channel either returns an error if ctx or the client has been canceled.
@@ -235,7 +235,7 @@ func (c *client) SetErr(err error) {
 
 func (c *client) WaitForState(ctx context.Context, waitFor ClientState) <-chan error {
 	ch := make(chan error, 1)
-	if c.State() == waitFor {
+	if c.waitingIsOver(waitFor, ch) {
 		close(ch)
 		return ch
 	}
@@ -249,14 +249,8 @@ func (c *client) WaitForState(ctx context.Context, waitFor ClientState) <-chan e
 		for {
 			select {
 			case <-stateCh:
-				switch c.State() {
-				case waitFor:
+				if c.waitingIsOver(waitFor, ch) {
 					return
-				case ClientCreated:
-					ch <- errors.New("client not started. Call client.Start() before using it")
-					return
-				case ClientClosed:
-					ch <- errors.New("client closed and no AutoReconnect option given. Cannot reconnect")
 				}
 			case <-ctx.Done():
 				ch <- ctx.Err()
@@ -270,13 +264,18 @@ func (c *client) WaitForState(ctx context.Context, waitFor ClientState) <-chan e
 	return ch
 }
 
-func (c *client) setState(state ClientState) {
-	c.mx.Lock()
-	defer c.mx.Unlock()
-	c.state = state
-	for _, ch := range c.stateChangeChans {
-		c.castStateChange(ch)
+func (c *client) waitingIsOver(waitFor ClientState, ch chan<- error) bool {
+	switch c.State() {
+	case waitFor:
+		return true
+	case ClientCreated:
+		ch <- errors.New("client not started. Call client.Start() before using it")
+		return true
+	case ClientClosed:
+		ch <- fmt.Errorf("client closed. %w", c.Err())
+		return true
 	}
+	return false
 }
 
 func (c *client) castStateChange(ch chan<- struct{}) {
