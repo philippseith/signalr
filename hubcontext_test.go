@@ -163,19 +163,9 @@ var _ = Describe("HubContext", func() {
 })
 
 var _ = Describe("HubContext", func() {
-	var server Server
-	var conns []*testingConnection
-	BeforeEach(func(done Done) {
-		server, conns, _ = connectMany()
-		close(done)
-	})
-	AfterEach(func(done Done) {
-		server.cancel()
-		close(done)
-	})
-
 	Context("Clients().Caller()", func() {
 		It("should invoke only the caller", func(didIt Done) {
+			server, conns, _ := connectMany()
 			conns[0].ClientSend(`{"type":1,"invocationId": "123","target":"callcaller"}`)
 			done := make(chan bool)
 			callCount := make(chan int, 1)
@@ -209,12 +199,14 @@ var _ = Describe("HubContext", func() {
 			case <-time.After(3000 * time.Millisecond):
 				Fail("timed out")
 			}
+			server.cancel()
 			close(didIt)
 		}, 4.0)
 	})
 
 	Context("Clients().Client()", func() {
 		It("should invoke only the client which was addressed", func(didIt Done) {
+			server, conns, _ := connectMany()
 			conns[0].ClientSend(fmt.Sprintf(`{"type":1,"invocationId": "123","target":"callclient","arguments":["%v"]}`, conns[2].ConnectionID()))
 			done := make(chan bool)
 			go func(conns []*testingConnection) {
@@ -250,12 +242,14 @@ var _ = Describe("HubContext", func() {
 			case <-time.After(3000 * time.Millisecond):
 				Fail("timed out")
 			}
+			server.cancel()
 			close(didIt)
 		}, 4.0)
 	})
 
 	Context("Clients().Group()", func() {
 		It("should invoke only the clients in the group", func(ditIt Done) {
+			server, conns, _ := connectMany()
 			conns[0].ClientSend(fmt.Sprintf(`{"type":1,"invocationId": "123","target":"buildgroup","arguments":["%v","%v"]}`, conns[1].ConnectionID(), conns[2].ConnectionID()))
 			<-hubContextInvocationQueue
 			<-conns[0].received
@@ -294,12 +288,14 @@ var _ = Describe("HubContext", func() {
 			case <-time.After(3000 * time.Millisecond):
 				Fail("timed out")
 			}
+			server.cancel()
 			close(ditIt)
 		}, 4.0)
 	})
 
 	Context("RemoveFromGroup should remove clients from the group", func() {
 		It("should invoke only the clients in the group", func(ditIt Done) {
+			server, conns, _ := connectMany()
 			conns[0].ClientSend(fmt.Sprintf(`{"type":1,"invocationId": "123","target":"buildgroup","arguments":["%v","%v"]}`, conns[1].ConnectionID(), conns[2].ConnectionID()))
 			Expect(<-hubContextInvocationQueue).To(Equal("BuildGroup()"))
 			<-conns[0].received
@@ -339,12 +335,14 @@ var _ = Describe("HubContext", func() {
 			}(conns, done)
 			Expect(<-hubContextInvocationQueue).To(Equal("CallGroup()"))
 			<-done
+			server.cancel()
 			close(ditIt)
 		}, 4.0)
 	})
 
 	Context("Items()", func() {
 		It("should hold Items connection wise", func(done Done) {
+			server, conns, _ := connectMany()
 			conns[0].ClientSend(`{"type":1,"invocationId": "123","target":"additem","arguments":["first",1]}`)
 			// Wait for execution
 			Expect(<-hubContextInvocationQueue).To(Equal("AddItem()"))
@@ -363,6 +361,7 @@ var _ = Describe("HubContext", func() {
 			msg = <-conns[1].received
 			Expect(msg).To(BeAssignableToTypeOf(completionMessage{}))
 			Expect(msg.(completionMessage).Result).To(BeNil())
+			server.cancel()
 			close(done)
 		}, 2.0)
 	})

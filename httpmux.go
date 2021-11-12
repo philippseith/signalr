@@ -54,7 +54,7 @@ func (h *httpMux) handlePost(writer http.ResponseWriter, request *http.Request) 
 			writer.WriteHeader(conn.consumeRequest(request))
 		// TODO case longPolling
 		default:
-			// ConnectionID for WebSocket or
+			// ConnectionID already used for WebSocket
 			writer.WriteHeader(http.StatusConflict)
 		}
 	} else {

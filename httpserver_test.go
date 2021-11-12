@@ -92,22 +92,23 @@ var _ = Describe("HTTP server", func() {
 				It("should successfully handle an Invoke call", func(done Done) {
 					logger := &nonProtocolLogger{testLogger()}
 					// Start server
-					server, err := NewServer(context.TODO(),
+					ctx, cancel := context.WithCancel(context.Background())
+					server, err := NewServer(ctx,
 						SimpleHubFactory(&addHub{}), HTTPTransports(transport[0]),
 						Logger(logger, true))
 					Expect(err).NotTo(HaveOccurred())
 					router := http.NewServeMux()
 					server.MapHTTP(WithHTTPServeMux(router), "/hub")
 					port := freePort()
+					httpServer := &http.Server{Addr: fmt.Sprintf("127.0.0.1:%v", port), Handler: router}
 					go func() {
-						_ = http.ListenAndServe(fmt.Sprintf("127.0.0.1:%v", port), router)
+						_ = httpServer.ListenAndServe()
 					}()
 					waitForPort(port)
 
 					// Try first connection
 					conn, err := NewHTTPConnection(context.Background(), fmt.Sprintf("http://127.0.0.1:%v/hub", port))
 					Expect(err).NotTo(HaveOccurred())
-					ctx, cancelClient := context.WithCancel(context.Background())
 					client, err := NewClient(ctx,
 						WithConnection(conn),
 						Logger(logger, true),
@@ -123,8 +124,7 @@ var _ = Describe("HTTP server", func() {
 					// Try second connection
 					conn2, err := NewHTTPConnection(context.Background(), fmt.Sprintf("http://127.0.0.1:%v/hub", port))
 					Expect(err).NotTo(HaveOccurred())
-					ctx2, cancelClient2 := context.WithCancel(context.Background())
-					client2, err := NewClient(ctx2,
+					client2, err := NewClient(ctx,
 						WithConnection(conn2),
 						Logger(logger, true),
 						TransferFormat(transport[1]))
@@ -141,10 +141,10 @@ var _ = Describe("HTTP server", func() {
 					Expect(result.Error).NotTo(HaveOccurred())
 					s := result.Value.(string)
 					Expect(s).To(Equal(hugo))
-					cancelClient()
-					cancelClient2()
+					cancel()
+					_ = httpServer.Shutdown(ctx)
 					close(done)
-				}, 5.0)
+				}, 2.0)
 			})
 		})
 	}
