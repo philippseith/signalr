@@ -89,64 +89,62 @@ var _ = Describe("HTTP server", func() {
 			})
 
 			Context("Connection with client", func() {
-				for i := 0; i < 100; i++ {
-					FIt("should successfully handle an Invoke call", func(done Done) {
-						logger := &nonProtocolLogger{testLogger()}
-						// Start server
-						server, err := NewServer(context.TODO(),
-							SimpleHubFactory(&addHub{}), HTTPTransports(transport[0]),
-							Logger(logger, true))
-						Expect(err).NotTo(HaveOccurred())
-						router := http.NewServeMux()
-						server.MapHTTP(WithHTTPServeMux(router), "/hub")
-						port := freePort()
-						go func() {
-							_ = http.ListenAndServe(fmt.Sprintf("127.0.0.1:%v", port), router)
-						}()
-						waitForPort(port)
+				It("should successfully handle an Invoke call", func(done Done) {
+					logger := &nonProtocolLogger{testLogger()}
+					// Start server
+					server, err := NewServer(context.TODO(),
+						SimpleHubFactory(&addHub{}), HTTPTransports(transport[0]),
+						Logger(logger, true))
+					Expect(err).NotTo(HaveOccurred())
+					router := http.NewServeMux()
+					server.MapHTTP(WithHTTPServeMux(router), "/hub")
+					port := freePort()
+					go func() {
+						_ = http.ListenAndServe(fmt.Sprintf("127.0.0.1:%v", port), router)
+					}()
+					waitForPort(port)
 
-						// Try first connection
-						conn, err := NewHTTPConnection(context.Background(), fmt.Sprintf("http://127.0.0.1:%v/hub", port))
-						Expect(err).NotTo(HaveOccurred())
-						ctx, cancelClient := context.WithCancel(context.Background())
-						client, err := NewClient(ctx,
-							WithConnection(conn),
-							Logger(logger, true),
-							TransferFormat(transport[1]))
-						Expect(err).NotTo(HaveOccurred())
-						Expect(client).NotTo(BeNil())
-						client.Start()
-						Expect(<-client.WaitForState(context.Background(), ClientConnected)).NotTo(HaveOccurred())
-						result := <-client.Invoke("Add2", 1)
-						Expect(result.Error).NotTo(HaveOccurred())
-						Expect(result.Value).To(BeEquivalentTo(3))
+					// Try first connection
+					conn, err := NewHTTPConnection(context.Background(), fmt.Sprintf("http://127.0.0.1:%v/hub", port))
+					Expect(err).NotTo(HaveOccurred())
+					ctx, cancelClient := context.WithCancel(context.Background())
+					client, err := NewClient(ctx,
+						WithConnection(conn),
+						Logger(logger, true),
+						TransferFormat(transport[1]))
+					Expect(err).NotTo(HaveOccurred())
+					Expect(client).NotTo(BeNil())
+					client.Start()
+					Expect(<-client.WaitForState(context.Background(), ClientConnected)).NotTo(HaveOccurred())
+					result := <-client.Invoke("Add2", 1)
+					Expect(result.Error).NotTo(HaveOccurred())
+					Expect(result.Value).To(BeEquivalentTo(3))
 
-						// Try second connection
-						conn2, err := NewHTTPConnection(context.Background(), fmt.Sprintf("http://127.0.0.1:%v/hub", port))
-						Expect(err).NotTo(HaveOccurred())
-						ctx2, cancelClient2 := context.WithCancel(context.Background())
-						client2, err := NewClient(ctx2,
-							WithConnection(conn2),
-							Logger(logger, true),
-							TransferFormat(transport[1]))
-						Expect(err).NotTo(HaveOccurred())
-						Expect(client2).NotTo(BeNil())
-						client2.Start()
-						Expect(<-client2.WaitForState(context.Background(), ClientConnected)).NotTo(HaveOccurred())
-						result = <-client2.Invoke("Add2", 2)
-						Expect(result.Error).NotTo(HaveOccurred())
-						Expect(result.Value).To(BeEquivalentTo(4))
-						// Huge message
-						hugo := strings.Repeat("#", 2500)
-						result = <-client.Invoke("Echo", hugo)
-						Expect(result.Error).NotTo(HaveOccurred())
-						s := result.Value.(string)
-						Expect(s).To(Equal(hugo))
-						cancelClient()
-						cancelClient2()
-						close(done)
-					}, 5.0)
-				}
+					// Try second connection
+					conn2, err := NewHTTPConnection(context.Background(), fmt.Sprintf("http://127.0.0.1:%v/hub", port))
+					Expect(err).NotTo(HaveOccurred())
+					ctx2, cancelClient2 := context.WithCancel(context.Background())
+					client2, err := NewClient(ctx2,
+						WithConnection(conn2),
+						Logger(logger, true),
+						TransferFormat(transport[1]))
+					Expect(err).NotTo(HaveOccurred())
+					Expect(client2).NotTo(BeNil())
+					client2.Start()
+					Expect(<-client2.WaitForState(context.Background(), ClientConnected)).NotTo(HaveOccurred())
+					result = <-client2.Invoke("Add2", 2)
+					Expect(result.Error).NotTo(HaveOccurred())
+					Expect(result.Value).To(BeEquivalentTo(4))
+					// Huge message
+					hugo := strings.Repeat("#", 2500)
+					result = <-client.Invoke("Echo", hugo)
+					Expect(result.Error).NotTo(HaveOccurred())
+					s := result.Value.(string)
+					Expect(s).To(Equal(hugo))
+					cancelClient()
+					cancelClient2()
+					close(done)
+				}, 5.0)
 			})
 		})
 	}
