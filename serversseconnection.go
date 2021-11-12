@@ -2,7 +2,6 @@ package signalr
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -14,30 +13,28 @@ import (
 
 type serverSSEConnection struct {
 	ConnectionBase
-	mx          sync.Mutex
-	postWriting bool
-	postWriter  io.Writer
-	postReader  io.Reader
-	mxWriter    sync.Mutex
-	sseWriter   io.Writer
-	sseFlusher  http.Flusher
+	mx            sync.Mutex
+	postWriting   bool
+	postWriter    io.Writer
+	postReader    io.Reader
+	jobChan       chan []byte
+	jobResultChan chan RWJobResult
 }
 
-func newServerSSEConnection(ctx context.Context, connectionID string, writer http.ResponseWriter) (*serverSSEConnection, error) {
-	sseFlusher, ok := writer.(http.Flusher)
-	if !ok {
-		return nil, errors.New("connection over Server Sent Events not supported with http.ResponseWriter: http.Flusher not implemented")
-	}
+func newServerSSEConnection(ctx context.Context, connectionID string) (*serverSSEConnection, <-chan []byte, chan RWJobResult, error) {
 	s := serverSSEConnection{
-		ConnectionBase: ConnectionBase{
-			ctx:          ctx,
-			connectionID: connectionID,
-		},
-		sseWriter:  writer,
-		sseFlusher: sseFlusher,
+		ConnectionBase: *NewConnectionBase(ctx, connectionID),
+		jobChan:        make(chan []byte, 1),
+		jobResultChan:  make(chan RWJobResult, 1),
 	}
 	s.postReader, s.postWriter = io.Pipe()
-	return &s, nil
+	go func() {
+		<-s.Context().Done()
+		s.mx.Lock()
+		close(s.jobChan)
+		s.mx.Unlock()
+	}()
+	return &s, s.jobChan, s.jobResultChan, nil
 }
 
 func (s *serverSSEConnection) consumeRequest(request *http.Request) int {
@@ -68,26 +65,36 @@ func (s *serverSSEConnection) consumeRequest(request *http.Request) int {
 }
 
 func (s *serverSSEConnection) Read(p []byte) (n int, err error) {
-	if err := s.Context().Err(); err != nil {
-		return 0, fmt.Errorf("serverSSEConnection canceled: %w", s.ctx.Err())
+	n, err = ReadWriteWithContext(s.Context(),
+		func() (int, error) { return s.postReader.Read(p) },
+		func() { _, _ = s.postWriter.Write([]byte("\n")) })
+	if err != nil {
+		err = fmt.Errorf("%T: %w", s, err)
 	}
-	return s.postReader.Read(p)
+	return n, err
 }
 
 func (s *serverSSEConnection) Write(p []byte) (n int, err error) {
 	if err := s.Context().Err(); err != nil {
-		return 0, fmt.Errorf("serverSSEConnection canceled: %w", s.ctx.Err())
+		return 0, fmt.Errorf("%T: %w", s, s.Context().Err())
 	}
 	payload := ""
 	for _, line := range strings.Split(strings.TrimRight(string(p), "\n"), "\n") {
 		payload = payload + "data: " + line + "\n"
 	}
-	// The Write/Flush sequence might be called on different threads, so keep it atomic
-	s.mxWriter.Lock()
-	n, err = s.sseWriter.Write([]byte(payload + "\n"))
-	if err == nil {
-		s.sseFlusher.Flush()
+	// prevent race with goroutine closing the jobChan
+	s.mx.Lock()
+	if s.Context().Err() == nil {
+		s.jobChan <- []byte(payload + "\n")
+	} else {
+		return 0, fmt.Errorf("%T: %w", s, s.Context().Err())
 	}
-	s.mxWriter.Unlock()
-	return n, err
+	s.mx.Unlock()
+	select {
+	case <-s.Context().Done():
+		return 0, fmt.Errorf("%T: %w", s, s.Context().Err())
+	case r := <-s.jobResultChan:
+		return r.n, r.err
+	}
+
 }

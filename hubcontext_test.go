@@ -157,7 +157,6 @@ var _ = Describe("HubContext", func() {
 })
 
 var _ = Describe("HubContext", func() {
-
 	Context("Clients().Caller()", func() {
 		It("should invoke only the caller", func(didIt Done) {
 			server, conns, _ := connectMany()

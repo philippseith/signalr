@@ -28,7 +28,6 @@ func newLoop(p Party, conn Connection, protocol hubProtocol) *loop {
 	_, dbg := p.loggers()
 	protocol.setDebugLogger(dbg)
 	pInfo, pDbg := p.prefixLoggers(conn.ConnectionID())
-	conn.SetTimeout(p.timeout())
 	hubConn := newHubConnection(conn, protocol, p.maximumReceiveMessageSize(), pInfo)
 	return &loop{
 		party:        p,
@@ -104,9 +103,9 @@ msgLoop:
 				if time.Since(l.hubConn.LastWriteStamp()) > l.party.keepAliveInterval() {
 					_ = l.hubConn.Ping()
 				}
-				// Don't break the pingLoop, it exists for this case
+				// Don't break the pingLoop when keepAlive is over, it exists for this case
 			case <-time.After(l.party.timeout()):
-				err = fmt.Errorf("client timeout interval elapsed (%v)", l.party.timeout())
+				err = fmt.Errorf("timeout interval elapsed (%v)", l.party.timeout())
 				break pingLoop
 			case <-l.hubConn.Context().Done():
 				err = fmt.Errorf("breaking loop. hubConnection canceled: %w", l.hubConn.Context().Err())
@@ -133,11 +132,11 @@ msgLoop:
 func (l *loop) PullStream(method, id string, arguments ...interface{}) <-chan InvokeResult {
 	_, errChan := l.invokeClient.newInvocation(id)
 	upChan := l.streamClient.newUpstreamChannel(id)
-	ch := newInvokeResultChan(upChan, errChan)
+	ch := newInvokeResultChan(l.party.context(), upChan, errChan)
 	if err := l.hubConn.SendStreamInvocation(id, method, arguments, nil); err != nil {
 		// When we get an error here, the loop is closed and the errChan might be already closed
 		// We create a new one to deliver our error
-		ch, _ = createResultChansWithError(err)
+		ch, _ = createResultChansWithError(l.party.context(), err)
 		l.streamClient.deleteUpstreamChannel(id)
 		l.invokeClient.deleteInvocation(id)
 	}

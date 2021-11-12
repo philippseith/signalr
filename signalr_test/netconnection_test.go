@@ -25,6 +25,23 @@ func (n *NetHub) Smoke() string {
 	return "no smoke!"
 }
 
+func (n *NetHub) ContinuousSmoke() chan string {
+	ch := make(chan string, 1)
+	go func() {
+	loop:
+		for i := 0; i < 5; i++ {
+			select {
+			case ch <- "smoke...":
+			case <-n.Context().Done():
+				break loop
+			}
+			<-time.After(100 * time.Millisecond)
+		}
+		close(ch)
+	}()
+	return ch
+}
+
 var _ = Describe("NetConnection", func() {
 	Context("Smoke", func() {
 		It("should transport a simple invocation over raw rcp", func(done Done) {
@@ -59,6 +76,58 @@ var _ = Describe("NetConnection", func() {
 			cancel()
 			close(done)
 		})
+	})
+	Context("Stream and Timeout", func() {
+		It("Client and Server should timeout when no messages are exchanged, but message exchange should prevent timeout", func(done Done) {
+			ctx, cancel := context.WithCancel(context.Background())
+			server, err := signalr.NewServer(ctx, signalr.SimpleHubFactory(&NetHub{}), testLoggerOption(),
+				// Set KeepAlive and Timeout so KeepAlive can't keep it alive
+				signalr.TimeoutInterval(500*time.Millisecond), signalr.KeepAliveInterval(2*time.Second))
+			Expect(err).NotTo(HaveOccurred())
+			addr, err := net.ResolveTCPAddr("tcp", "localhost:0")
+			Expect(err).NotTo(HaveOccurred())
+			listener, err := net.ListenTCP("tcp", addr)
+			Expect(err).NotTo(HaveOccurred())
+			serverDone := make(chan struct{}, 1)
+			go func() {
+				tcpConn, err := listener.Accept()
+				Expect(err).NotTo(HaveOccurred())
+				go func() {
+					_ = server.Serve(signalr.NewNetConnection(ctx, tcpConn))
+					serverDone <- struct{}{}
+				}()
+			}()
+			var client signalr.Client
+			for {
+				if clientConn, err := net.Dial("tcp",
+					fmt.Sprintf("localhost:%v", listener.Addr().(*net.TCPAddr).Port)); err == nil {
+					client, err = signalr.NewClient(ctx, signalr.WithConnection(signalr.NewNetConnection(ctx, clientConn)), testLoggerOption(),
+						// Set KeepAlive and Timeout so KeepAlive can't keep it alive
+						signalr.TimeoutInterval(500*time.Millisecond), signalr.KeepAliveInterval(2*time.Second))
+					Expect(err).NotTo(HaveOccurred())
+					break
+				}
+				time.Sleep(100 * time.Millisecond)
+			}
+			client.Start()
+			// The Server will send values each 100ms, so this should keep the connection alive
+			i := 0
+			for range client.PullStream("continuoussmoke") {
+				i++
+			}
+			// 5 smoke messages and one error message when timed out
+			Expect(i).To(Equal(6))
+			// Wait for client and server to timeout
+			<-time.After(time.Second)
+			select {
+			case <-serverDone:
+				Expect(client.State() == signalr.ClientClosed)
+			case <-time.After(10 * time.Millisecond):
+				Fail("server not closed")
+			}
+			cancel()
+			close(done)
+		}, 5.0)
 	})
 	Context("SetConnectionID", func() {
 		It("should change the ConnectionID", func() {
@@ -96,48 +165,5 @@ var _ = Describe("NetConnection", func() {
 			}
 			close(done)
 		}, 2.0)
-	})
-	Context("Timeout", func() {
-		It("should be used when reading", func() {
-			clientConn, serverConn := net.Pipe()
-			// Server loop
-			go func() {
-				b := make([]byte, 5)
-				for {
-					if _, err := serverConn.Read(b); err != nil {
-						break
-					}
-					time.Sleep(100 * time.Millisecond)
-				}
-			}()
-			conn := signalr.NewNetConnection(context.Background(), clientConn)
-			conn.SetTimeout(50 * time.Millisecond)
-			Expect(conn.Timeout()).To(Equal(50 * time.Millisecond))
-			// Write more than the server could take in one step
-			_, err := conn.Write([]byte("foobar-barfoo"))
-			Expect(err).To(HaveOccurred())
-		})
-		It("should be used when reading", func(done Done) {
-			clientConn, serverConn := net.Pipe()
-			// Server loop
-			go func() {
-				for {
-					if _, err := serverConn.Write([]byte("foo")); err != nil {
-						break
-					}
-					time.Sleep(100 * time.Millisecond)
-				}
-			}()
-			conn := signalr.NewNetConnection(context.Background(), clientConn)
-			conn.SetTimeout(50 * time.Millisecond)
-			// Read some bytes
-			b := make([]byte, 50)
-			// This will read everything available
-			_, _ = conn.Read(b)
-			// Because the server is so slow, now an error will occur
-			_, err := conn.Read(b)
-			Expect(err).To(HaveOccurred())
-			close(done)
-		})
 	})
 })

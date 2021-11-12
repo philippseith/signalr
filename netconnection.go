@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/base64"
+	"fmt"
 	"net"
 	"time"
 )
@@ -14,13 +15,10 @@ type netConnection struct {
 }
 
 // NewNetConnection wraps net.Conn into a Connection
-func NewNetConnection(ctx context.Context, conn net.Conn) *netConnection {
+func NewNetConnection(ctx context.Context, conn net.Conn) Connection {
 	netConn := &netConnection{
-		ConnectionBase: ConnectionBase{
-			ctx:          ctx,
-			connectionID: getConnectionID(),
-		},
-		conn: conn,
+		ConnectionBase: *NewConnectionBase(ctx, getConnectionID()),
+		conn:           conn,
 	}
 	go func() {
 		<-ctx.Done()
@@ -30,19 +28,23 @@ func NewNetConnection(ctx context.Context, conn net.Conn) *netConnection {
 }
 
 func (nc *netConnection) Write(p []byte) (n int, err error) {
-	if nc.timeout > 0 {
-		defer func() { _ = nc.conn.SetWriteDeadline(time.Time{}) }()
-		_ = nc.conn.SetWriteDeadline(time.Now().Add(nc.timeout))
+	n, err = ReadWriteWithContext(nc.Context(),
+		func() (int, error) { return nc.conn.Write(p) },
+		func() { _ = nc.conn.SetWriteDeadline(time.Now()) })
+	if err != nil {
+		err = fmt.Errorf("%T: %w", nc, err)
 	}
-	return nc.conn.Write(p)
+	return n, err
 }
 
 func (nc *netConnection) Read(p []byte) (n int, err error) {
-	if nc.timeout > 0 {
-		defer func() { _ = nc.conn.SetReadDeadline(time.Time{}) }()
-		_ = nc.conn.SetReadDeadline(time.Now().Add(nc.timeout))
+	n, err = ReadWriteWithContext(nc.Context(),
+		func() (int, error) { return nc.conn.Read(p) },
+		func() { _ = nc.conn.SetReadDeadline(time.Now()) })
+	if err != nil {
+		err = fmt.Errorf("%T: %w", nc, err)
 	}
-	return nc.conn.Read(p)
+	return n, err
 }
 
 func getConnectionID() string {

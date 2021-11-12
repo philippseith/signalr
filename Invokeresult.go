@@ -1,5 +1,7 @@
 package signalr
 
+import "context"
+
 // InvokeResult is the combined value/error result for async invocations. Used as channel type.
 type InvokeResult struct {
 	Value interface{}
@@ -8,15 +10,17 @@ type InvokeResult struct {
 
 // newInvokeResultChan combines a value result and an error result channel into one InvokeResult channel
 // The InvokeResult channel is automatically closed when both input channels are closed.
-func newInvokeResultChan(resultChan <-chan interface{}, errChan <-chan error) <-chan InvokeResult {
+func newInvokeResultChan(ctx context.Context, resultChan <-chan interface{}, errChan <-chan error) <-chan InvokeResult {
 	ch := make(chan InvokeResult, 1)
-	go func(ch chan InvokeResult, resultChan <-chan interface{}, errChan <-chan error) {
-		for resultChan != nil || errChan != nil {
-			//goland:noinspection GoNilness
+	go func(ctx context.Context, ch chan InvokeResult, resultChan <-chan interface{}, errChan <-chan error) {
+	loop:
+		for {
 			select {
+			case <-ctx.Done():
+				break loop
 			case value, ok := <-resultChan:
 				if !ok {
-					resultChan = nil
+					break loop
 				} else {
 					ch <- InvokeResult{
 						Value: value,
@@ -24,7 +28,7 @@ func newInvokeResultChan(resultChan <-chan interface{}, errChan <-chan error) <-
 				}
 			case err, ok := <-errChan:
 				if !ok {
-					errChan = nil
+					break loop
 				} else {
 					ch <- InvokeResult{
 						Error: err,
@@ -33,6 +37,6 @@ func newInvokeResultChan(resultChan <-chan interface{}, errChan <-chan error) <-
 			}
 		}
 		close(ch)
-	}(ch, resultChan, errChan)
+	}(ctx, ch, resultChan, errChan)
 	return ch
 }
