@@ -119,7 +119,7 @@ type simpleReceiver struct {
 }
 
 func (s *simpleReceiver) OnCallback(result string) {
-	s.result.Store(result)
+	s.ch <- result
 }
 
 var _ = Describe("Client", func() {
