@@ -118,9 +118,9 @@ var _ = Describe("HubContext", func() {
 				msg := <-conns[0].received
 				if _, ok := msg.(completionMessage); ok {
 					msg = <-conns[0].received
-					expectInvocation(msg, callCount, done, 3)
+					Expect(expectInvocation(msg, callCount, done, 3)).NotTo(HaveOccurred())
 				} else {
-					expectInvocation(msg, callCount, done, 3)
+					Expect(expectInvocation(msg, callCount, done, 3)).NotTo(HaveOccurred())
 				}
 			}(conns, callCount, done)
 			go func(conns []*testingConnection, callCount chan int, done chan bool) {
@@ -128,9 +128,9 @@ var _ = Describe("HubContext", func() {
 				msg := <-conns[1].received
 				if _, ok := msg.(completionMessage); ok {
 					msg = <-conns[1].received
-					expectInvocation(msg, callCount, done, 3)
+					Expect(expectInvocation(msg, callCount, done, 3)).NotTo(HaveOccurred())
 				} else {
-					expectInvocation(msg, callCount, done, 3)
+					Expect(expectInvocation(msg, callCount, done, 3)).NotTo(HaveOccurred())
 				}
 			}(conns, callCount, done)
 			go func(conns []*testingConnection, callCount chan int, done chan bool) {
@@ -138,9 +138,9 @@ var _ = Describe("HubContext", func() {
 				msg := <-conns[2].received
 				if _, ok := msg.(completionMessage); ok {
 					msg = <-conns[2].received
-					expectInvocation(msg, callCount, done, 3)
+					Expect(expectInvocation(msg, callCount, done, 3)).NotTo(HaveOccurred())
 				} else {
-					expectInvocation(msg, callCount, done, 3)
+					Expect(expectInvocation(msg, callCount, done, 3)).NotTo(HaveOccurred())
 				}
 			}(conns, callCount, done)
 			Expect(<-hubContextInvocationQueue).To(Equal("CallAll()"))
@@ -166,9 +166,9 @@ var _ = Describe("HubContext", func() {
 				msg := <-conns[0].received
 				if _, ok := msg.(completionMessage); ok {
 					msg = <-conns[0].received
-					expectInvocation(msg, callCount, done, 1)
+					Expect(expectInvocation(msg, callCount, done, 1)).NotTo(HaveOccurred())
 				} else {
-					expectInvocation(msg, callCount, done, 1)
+					Expect(expectInvocation(msg, callCount, done, 1)).NotTo(HaveOccurred())
 				}
 			}(conns, done)
 			go func(conns []*testingConnection) {
@@ -263,12 +263,12 @@ var _ = Describe("HubContext", func() {
 			go func(conns []*testingConnection) {
 				defer GinkgoRecover()
 				msg := <-conns[1].received
-				expectInvocation(msg, callCount, done, 2)
+				Expect(expectInvocation(msg, callCount, done, 2)).NotTo(HaveOccurred())
 			}(conns)
 			go func(conns []*testingConnection, done chan bool) {
 				defer GinkgoRecover()
 				msg := <-conns[2].received
-				expectInvocation(msg, callCount, done, 2)
+				Expect(expectInvocation(msg, callCount, done, 2)).NotTo(HaveOccurred())
 			}(conns, done)
 			Expect(<-hubContextInvocationQueue).To(Equal("CallGroup()"))
 			select {
@@ -312,7 +312,7 @@ var _ = Describe("HubContext", func() {
 				msg := <-conns[1].received
 				callCount := make(chan int, 1)
 				callCount <- 0
-				expectInvocation(msg, callCount, done, 1)
+				Expect(expectInvocation(msg, callCount, done, 1)).NotTo(HaveOccurred())
 			}(conns)
 			go func(conns []*testingConnection, done chan bool) {
 				defer GinkgoRecover()
@@ -408,14 +408,22 @@ var _ = Describe("Abort()", func() {
 	}, 10.0)
 })
 
-func expectInvocation(msg interface{}, callCount chan int, done chan bool, doneCount int) {
-	Expect(msg).To(BeAssignableToTypeOf(invocationMessage{}), fmt.Sprintf("Expected invocationMessage, got %T %#v", msg, msg))
-	Expect(strings.ToLower(msg.(invocationMessage).Target)).To(Equal("clientfunc"))
-	d := <-callCount
-	d++
-	if d == doneCount {
-		done <- true
+func expectInvocation(msg interface{}, callCount chan int, done chan bool, doneCount int) error {
+	defer func() {
+		d := <-callCount
+		d++
+		if d == doneCount {
+			done <- true
+		} else {
+			callCount <- d
+		}
+	}()
+	if ivMsg, ok := msg.(invocationMessage); !ok {
+		return fmt.Errorf("expected invocationMessage, got %T %#v", msg, msg)
 	} else {
-		callCount <- d
+		if strings.ToLower(ivMsg.Target) != "clientfunc" {
+			return fmt.Errorf("expected clientfunc, got got %#v", ivMsg)
+		}
 	}
+	return nil
 }
