@@ -11,6 +11,7 @@ require (
 	github.com/klauspost/compress v1.13.6 // indirect
 	github.com/onsi/ginkgo v1.12.1
 	github.com/onsi/gomega v1.11.0
+	github.com/stretchr/testify v1.7.0 // indirect
 	github.com/teivah/onecontext v1.3.0
 	github.com/vmihailenco/msgpack/v5 v5.3.5
 	golang.org/x/net v0.0.0-20211111160137-58aab5ef257a // indirect

@@ -12,7 +12,7 @@
   <configuration default="false" name="go test signalr_test" type="GoTestRunConfiguration" factoryName="Go Test" nameIsGenerated="true">
     <module name="signalr" />
     <working_directory value="$PROJECT_DIR$/signalr_test" />
-    <go_parameters value="-race -count=1" />
+    <go_parameters value="-race -count=1 -v" />
     <kind value="DIRECTORY" />
     <package value="github.com/philippseith/signalr" />
     <directory value="$PROJECT_DIR$/signalr_test" />
