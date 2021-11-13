@@ -115,6 +115,7 @@ func (s *simpleHub) Abort() {
 
 type simpleReceiver struct {
 	result atomic.Value
+	ch     chan string
 }
 
 func (s *simpleReceiver) OnCallback(result string) {

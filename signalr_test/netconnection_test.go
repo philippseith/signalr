@@ -115,8 +115,8 @@ var _ = Describe("NetConnection", func() {
 			for range client.PullStream("continuoussmoke") {
 				i++
 			}
-			// 5 smoke messages and one error message when timed out
-			Expect(i).To(Equal(6))
+			// some smoke messages and one error message when timed out
+			Expect(i).To(BeNumerically(">", 1))
 			// Wait for client and server to timeout
 			<-time.After(time.Second)
 			select {

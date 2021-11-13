@@ -2,6 +2,7 @@ package signalr
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	. "github.com/onsi/ginkgo"
@@ -10,7 +11,8 @@ import (
 
 var _ = Describe("Server.HubClients", func() {
 	Context("All().Send()", func() {
-		It("should send clients", func(done Done) {
+		j := 1
+		It(fmt.Sprintf("should send clients %v", j), func(done Done) {
 			// Create a simple server
 			server, err := NewServer(context.TODO(), SimpleHubFactory(&simpleHub{}),
 				testLoggerOption(),
@@ -25,7 +27,7 @@ var _ = Describe("Server.HubClients", func() {
 			// Give the server some time. In contrast to the client, we have not connected state to query
 			<-time.After(100 * time.Millisecond)
 			// Create the Client
-			receiver := &simpleReceiver{}
+			receiver := &simpleReceiver{ch: make(chan string, 1)}
 			ctx, cancelClient := context.WithCancel(context.Background())
 			client, _ := NewClient(ctx,
 				WithConnection(cliConn),
@@ -38,24 +40,16 @@ var _ = Describe("Server.HubClients", func() {
 			// Wait for client running
 			Expect(<-client.WaitForState(context.Background(), ClientConnected)).NotTo(HaveOccurred())
 			// Send from the server to "all" clients
-			server.HubClients().All().Send("OnCallback", "All")
-			ch := make(chan string, 1)
-			go func() {
-				for {
-					if result, ok := receiver.result.Load().(string); ok {
-						ch <- result
-						close(ch)
-						break
-					}
-				}
-			}()
+			<-time.After(100 * time.Millisecond)
+			server.HubClients().All().Send("OnCallback", fmt.Sprintf("All%v", j))
 			// Did the receiver get what we did send?
-			Expect(<-ch).To(Equal("All"))
+			Expect(<-receiver.ch).To(Equal(fmt.Sprintf("All%v", j)))
 			cancelClient()
 			server.cancel()
 			close(done)
 		}, 1.0)
 	})
+
 	Context("Caller()", func() {
 		It("should return nil", func() {
 			server, _ := NewServer(context.TODO(), SimpleHubFactory(&simpleHub{}),
