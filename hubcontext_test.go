@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"testing"
 	"time"
 
 	. "github.com/onsi/ginkgo"
@@ -166,7 +167,7 @@ func makeServerAndClients(ctx context.Context, clientCount int) (Server, []Clien
 		cliConn[i], srvConn[i] = newClientServerConnections()
 		srvConn[i].SetConnectionID(fmt.Sprintf("%v", i))
 		receiver[i] = &SimpleReceiver{ch: make(chan struct{})}
-		client[i], err = NewClient(ctx, WithConnection(cliConn[i]), WithReceiver(receiver[i]), testLoggerOption())
+		client[i], err = NewClient(ctx, WithConnection(cliConn[i]), WithReceiver(receiver[i]), TransferFormat("Text"), testLoggerOption())
 		if err != nil {
 			return nil, nil, nil, nil, nil, err
 		}
@@ -380,67 +381,65 @@ var _ = Describe("HubContext", func() {
 			}
 		})
 	})
+})
 
-	Context("Items()", func() {
-		It("should hold Items connection wise", func() {
-			ctx, cancel := context.WithCancel(context.Background())
-			defer cancel()
-			_, client, _, _, _, err := makeServerAndClients(ctx, 2)
+func TestItemsShouldHoldItemsConnectionWise(t *testing.T) {
+	RegisterFailHandler(Fail)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	_, client, _, _, _, err := makeServerAndClients(ctx, 2)
+	Expect(err).NotTo(HaveOccurred())
+	select {
+	case ir := <-client[0].Invoke("additem", "first", 1):
+		Expect(ir.Error).NotTo(HaveOccurred())
+	case <-time.After(100 * time.Millisecond):
+		Fail("timeout in invoke")
+	}
+	select {
+	case ir := <-client[0].Invoke("getitem", "first"):
+		Expect(ir.Error).NotTo(HaveOccurred())
+		Expect(ir.Value).To(BeNumerically("~", 1))
+	case <-time.After(100 * time.Millisecond):
+		Fail("timeout in invoke")
+	}
+	select {
+	case ir := <-client[1].Invoke("getitem", "first"):
+		Expect(ir.Error).NotTo(HaveOccurred())
+		Expect(ir.Value).To(BeNil())
+	case <-time.After(100 * time.Millisecond):
+		Fail("timeout in invoke")
+	}
+}
+
+func TestAbortShouldAbortTheConnectionOfTheCurrentCaller(t *testing.T) {
+	RegisterFailHandler(Fail)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	_, client, _, _, _, err := makeServerAndClients(ctx, 2)
+	Expect(err).NotTo(HaveOccurred())
+	select {
+	case ir := <-client[0].Invoke("abort"):
+		Expect(ir.Error).To(HaveOccurred())
+		select {
+		case err := <-client[0].WaitForState(ctx, ClientClosed):
 			Expect(err).NotTo(HaveOccurred())
-			select {
-			case ir := <-client[0].Invoke("additem", "first", 1):
-				Expect(ir.Error).NotTo(HaveOccurred())
-			case <-time.After(100 * time.Millisecond):
-				Fail("timeout in invoke")
-			}
-			select {
-			case ir := <-client[0].Invoke("getitem", "first"):
-				Expect(ir.Error).NotTo(HaveOccurred())
-				Expect(ir.Value).To(Equal(1.0))
-			case <-time.After(100 * time.Millisecond):
-				Fail("timeout in invoke")
-			}
-			select {
-			case ir := <-client[1].Invoke("getitem", "first"):
-				Expect(ir.Error).NotTo(HaveOccurred())
-				Expect(ir.Value).To(BeNil())
-			case <-time.After(100 * time.Millisecond):
-				Fail("timeout in invoke")
-			}
-		})
-	})
-})
-
-var _ = Describe("Abort()", func() {
-	It("should abort the connection of the current caller", func() {
-		ctx, cancel := context.WithCancel(context.Background())
-		defer cancel()
-		_, client, _, _, _, err := makeServerAndClients(ctx, 2)
-		Expect(err).NotTo(HaveOccurred())
-		select {
-		case ir := <-client[0].Invoke("abort"):
-			Expect(ir.Error).To(HaveOccurred())
-			select {
-			case err := <-client[0].WaitForState(ctx, ClientClosed):
-				Expect(err).NotTo(HaveOccurred())
-			case <-time.After(100 * time.Millisecond):
-				Fail("timeout waiting for client close")
-			}
 		case <-time.After(100 * time.Millisecond):
-			Fail("timeout in invoke")
+			Fail("timeout waiting for client close")
 		}
-		select {
-		case ir := <-client[1].Invoke("additem", "first", 2):
-			Expect(ir.Error).NotTo(HaveOccurred())
-		case <-time.After(100 * time.Millisecond):
-			Fail("timeout in invoke")
-		}
-		select {
-		case ir := <-client[1].Invoke("getitem", "first"):
-			Expect(ir.Error).NotTo(HaveOccurred())
-			Expect(ir.Value).To(Equal(2.0))
-		case <-time.After(100 * time.Millisecond):
-			Fail("timeout in invoke")
-		}
-	}, 10.0)
-})
+	case <-time.After(100 * time.Millisecond):
+		Fail("timeout in invoke")
+	}
+	select {
+	case ir := <-client[1].Invoke("additem", "first", 2):
+		Expect(ir.Error).NotTo(HaveOccurred())
+	case <-time.After(100 * time.Millisecond):
+		Fail("timeout in invoke")
+	}
+	select {
+	case ir := <-client[1].Invoke("getitem", "first"):
+		Expect(ir.Error).NotTo(HaveOccurred())
+		Expect(ir.Value).To(Equal(2.0))
+	case <-time.After(100 * time.Millisecond):
+		Fail("timeout in invoke")
+	}
+}
