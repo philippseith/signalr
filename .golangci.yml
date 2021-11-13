@@ -1,3 +1,7 @@
 run:
   skip-dirs:
     - chatsample
+    - signalr_test
+    - router/router_test
+  skip-files:
+    - ".+_test\\.go$"
