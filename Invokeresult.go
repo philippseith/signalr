@@ -1,6 +1,8 @@
 package signalr
 
-import "context"
+import (
+	"context"
+)
 
 // InvokeResult is the combined value/error result for async invocations. Used as channel type.
 type InvokeResult struct {
@@ -13,14 +15,15 @@ type InvokeResult struct {
 func newInvokeResultChan(ctx context.Context, resultChan <-chan interface{}, errChan <-chan error) <-chan InvokeResult {
 	ch := make(chan InvokeResult, 1)
 	go func(ctx context.Context, ch chan InvokeResult, resultChan <-chan interface{}, errChan <-chan error) {
+		var resultChanClosed, errChanClosed bool
 	loop:
-		for {
+		for !resultChanClosed || !errChanClosed {
 			select {
 			case <-ctx.Done():
 				break loop
 			case value, ok := <-resultChan:
 				if !ok {
-					break loop
+					resultChanClosed = true
 				} else {
 					ch <- InvokeResult{
 						Value: value,
@@ -28,7 +31,7 @@ func newInvokeResultChan(ctx context.Context, resultChan <-chan interface{}, err
 				}
 			case err, ok := <-errChan:
 				if !ok {
-					break loop
+					errChanClosed = true
 				} else {
 					ch <- InvokeResult{
 						Error: err,
