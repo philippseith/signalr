@@ -382,81 +382,65 @@ var _ = Describe("HubContext", func() {
 	})
 
 	Context("Items()", func() {
-		It("should hold Items connection wise", func(done Done) {
-			server, conns, _ := connectMany()
-			conns[0].ClientSend(`{"type":1,"invocationId": "123","target":"additem","arguments":["first",1]}`)
-			// Wait for execution
-			Expect(<-hubContextInvocationQueue).To(Equal("AddItem()"))
-			// Read completion
-			<-conns[0].received
-			conns[0].ClientSend(`{"type":1,"invocationId": "123","target":"getitem","arguments":["first"]}`)
-			// Wait for execution
-			Expect(<-hubContextInvocationQueue).To(Equal("GetItem()"))
-			msg := <-conns[0].received
-			Expect(msg).To(BeAssignableToTypeOf(completionMessage{}))
-			Expect(msg.(completionMessage).Result).To(Equal(float64(1)))
-			// Ask on other connection
-			conns[1].ClientSend(`{"type":1,"invocationId": "123","target":"getitem","arguments":["first"]}`)
-			// Wait for execution
-			Expect(<-hubContextInvocationQueue).To(Equal("GetItem()"))
-			msg = <-conns[1].received
-			Expect(msg).To(BeAssignableToTypeOf(completionMessage{}))
-			Expect(msg.(completionMessage).Result).To(BeNil())
-			server.cancel()
-			close(done)
-		}, 2.0)
-	})
-
-	Context("ConnectionID", func() {
-		It("should be the ID of the connection", func() {
-			server, conns, _ := connectMany()
-			conns[0].ClientSend(`{"type":1,"invocationId": "ABC","target":"testconnectionid"}`)
-			id := <-hubContextInvocationQueue
-			Expect(strings.Index(id, "test")).To(Equal(0))
-			server.cancel()
+		It("should hold Items connection wise", func() {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			_, client, _, _, _, err := makeServerAndClients(ctx, 2)
+			Expect(err).NotTo(HaveOccurred())
+			select {
+			case ir := <-client[0].Invoke("additem", "first", 1):
+				Expect(ir.Error).NotTo(HaveOccurred())
+			case <-time.After(100 * time.Millisecond):
+				Fail("timeout in invoke")
+			}
+			select {
+			case ir := <-client[0].Invoke("getitem", "first"):
+				Expect(ir.Error).NotTo(HaveOccurred())
+				Expect(ir.Value).To(Equal(1.0))
+			case <-time.After(100 * time.Millisecond):
+				Fail("timeout in invoke")
+			}
+			select {
+			case ir := <-client[1].Invoke("getitem", "first"):
+				Expect(ir.Error).NotTo(HaveOccurred())
+				Expect(ir.Value).To(BeNil())
+			case <-time.After(100 * time.Millisecond):
+				Fail("timeout in invoke")
+			}
 		})
 	})
 })
 
 var _ = Describe("Abort()", func() {
-	It("should abort the connection of the current caller", func(done Done) {
-		server, err := NewServer(context.TODO(), SimpleHubFactory(&contextHub{}),
-			testLoggerOption(),
-			ChanReceiveTimeout(200*time.Millisecond),
-			StreamBufferCapacity(5))
+	It("should abort the connection of the current caller", func() {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		_, client, _, _, _, err := makeServerAndClients(ctx, 2)
 		Expect(err).NotTo(HaveOccurred())
-		conn0 := newTestingConnectionForServer()
-		go func() { _ = server.Serve(conn0) }()
-		conn1 := newTestingConnectionForServer()
-		go func() { _ = server.Serve(conn1) }()
-		conn0.ClientSend(`{"type":1,"invocationId": "ab0ab0","target":"abort"}`)
-		// Wait for execution
-		Expect(<-hubContextInvocationQueue).To(Equal("Abort()"))
-		// We get the completion and the close message, the order depends on server timing
-		msg := <-conn0.received
-		_, isClose := msg.(closeMessage)
-		Expect(isClose).To(Equal(true))
-		// This connection should not work anymore
-		conn0.ClientSend(`{"type":1,"invocationId": "ab123","target":"additem","arguments":["first",2]}`)
 		select {
-		case <-conn0.received:
-			Fail("closed connection still receives messages")
-		case <-time.After(10 * time.Millisecond):
-			// OK
+		case ir := <-client[0].Invoke("abort"):
+			Expect(ir.Error).To(HaveOccurred())
+			select {
+			case err := <-client[0].WaitForState(ctx, ClientClosed):
+				Expect(err).NotTo(HaveOccurred())
+			case <-time.After(100 * time.Millisecond):
+				Fail("timeout waiting for client close")
+			}
+		case <-time.After(100 * time.Millisecond):
+			Fail("timeout in invoke")
 		}
-		// Other connections should still work
-		conn1.ClientSend(`{"type":1,"invocationId": "ab123","target":"additem","arguments":["first",2]}`)
-		// Wait for execution
-		Expect(<-hubContextInvocationQueue).To(Equal("AddItem()"))
-		// Read completion
-		<-conn1.received
-		conn1.ClientSend(`{"type":1,"invocationId": "ab123","target":"getitem","arguments":["first"]}`)
-		// Wait for execution
-		Expect(<-hubContextInvocationQueue).To(Equal("GetItem()"))
-		msg = <-conn1.received
-		Expect(msg).To(BeAssignableToTypeOf(completionMessage{}))
-		Expect(msg.(completionMessage).Result).To(Equal(float64(2)))
-		server.cancel()
-		close(done)
+		select {
+		case ir := <-client[1].Invoke("additem", "first", 2):
+			Expect(ir.Error).NotTo(HaveOccurred())
+		case <-time.After(100 * time.Millisecond):
+			Fail("timeout in invoke")
+		}
+		select {
+		case ir := <-client[1].Invoke("getitem", "first"):
+			Expect(ir.Error).NotTo(HaveOccurred())
+			Expect(ir.Value).To(Equal(2.0))
+		case <-time.After(100 * time.Millisecond):
+			Fail("timeout in invoke")
+		}
 	}, 10.0)
 })
