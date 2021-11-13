@@ -105,94 +105,140 @@ func connectMany() (Server, []*testingConnection, []string) {
 	return server, conns, connIds
 }
 
+func expectInvocationMessageFromConnection(ctx context.Context, conn *testingConnection, i int, errCh chan error) {
+	var msg interface{}
+	select {
+	case msg = <-conn.received:
+		if _, ok := msg.(completionMessage); ok {
+			fmt.Printf("Skipped completion %#v\n", msg)
+			select {
+			case msg = <-conn.received:
+			case <-time.After(time.Second):
+				errCh <- fmt.Errorf("timeout client %v waiting for message", i)
+				return
+			case <-ctx.Done():
+				return
+			}
+		}
+	case <-time.After(time.Second):
+		errCh <- fmt.Errorf("timeout client %v waiting for message", i)
+		return
+	case <-ctx.Done():
+		return
+	}
+	if ivMsg, ok := msg.(invocationMessage); !ok {
+		errCh <- fmt.Errorf("client %v expected invocationMessage, got %T %#v", i, msg, msg)
+		return
+	} else {
+		if strings.ToLower(ivMsg.Target) != "clientfunc" {
+			errCh <- fmt.Errorf("client %v expected clientfunc, got got %#v", i, ivMsg)
+			return
+		}
+	}
+	errCh <- nil
+}
+
+func expectNoMessageFromConnection(ctx context.Context, conn *testingConnection, errCh chan error) {
+	select {
+	case msg := <-conn.received:
+		errCh <- fmt.Errorf("received unspected message %v", msg)
+	case <-ctx.Done():
+	}
+}
+
 var _ = Describe("HubContext", func() {
 	Context("Clients().All()", func() {
-		It("should invoke all clients", func(didIt Done) {
+		It("should invoke all clients", func() {
 			server, conns, _ := connectMany()
+			defer server.cancel()
 			conns[0].ClientSend(`{"type":1,"invocationId": "123","target":"callall"}`)
-			callCount := make(chan int, 1)
-			callCount <- 0
-			done := make(chan bool)
-			go func(conns []*testingConnection, callCount chan int, done chan bool) {
-				defer GinkgoRecover()
-				msg := <-conns[0].received
-				if _, ok := msg.(completionMessage); ok {
-					msg = <-conns[0].received
-					Expect(expectInvocation(msg, callCount, done, 3)).NotTo(HaveOccurred())
-				} else {
-					Expect(expectInvocation(msg, callCount, done, 3)).NotTo(HaveOccurred())
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			errCh1 := make(chan error, 1)
+			go expectInvocationMessageFromConnection(ctx, conns[0], 1, errCh1)
+			errCh2 := make(chan error, 1)
+			go expectInvocationMessageFromConnection(ctx, conns[1], 2, errCh2)
+			errCh3 := make(chan error, 1)
+			go expectInvocationMessageFromConnection(ctx, conns[2], 3, errCh3)
+			done := make(chan error, 1)
+			go func(ctx context.Context, done, errCh1, errCh2, errCh3 chan error) {
+				results := 0
+				for results < 3 {
+					select {
+					case err := <-errCh1:
+						if err != nil {
+							done <- err
+						}
+						results++
+					case err := <-errCh2:
+						if err != nil {
+							done <- err
+						}
+						results++
+					case err := <-errCh3:
+						if err != nil {
+							done <- err
+						}
+						results++
+					case <-ctx.Done():
+						done <- ctx.Err()
+						return
+					}
 				}
-			}(conns, callCount, done)
-			go func(conns []*testingConnection, callCount chan int, done chan bool) {
-				defer GinkgoRecover()
-				msg := <-conns[1].received
-				if _, ok := msg.(completionMessage); ok {
-					msg = <-conns[1].received
-					Expect(expectInvocation(msg, callCount, done, 3)).NotTo(HaveOccurred())
-				} else {
-					Expect(expectInvocation(msg, callCount, done, 3)).NotTo(HaveOccurred())
-				}
-			}(conns, callCount, done)
-			go func(conns []*testingConnection, callCount chan int, done chan bool) {
-				defer GinkgoRecover()
-				msg := <-conns[2].received
-				if _, ok := msg.(completionMessage); ok {
-					msg = <-conns[2].received
-					Expect(expectInvocation(msg, callCount, done, 3)).NotTo(HaveOccurred())
-				} else {
-					Expect(expectInvocation(msg, callCount, done, 3)).NotTo(HaveOccurred())
-				}
-			}(conns, callCount, done)
-			Expect(<-hubContextInvocationQueue).To(Equal("CallAll()"))
+				done <- nil
+			}(ctx, done, errCh1, errCh2, errCh3)
 			select {
-			case <-done:
-				break
-			case <-time.After(3000 * time.Millisecond):
-				Fail("timed out")
+			case err := <-done:
+				Expect(err).NotTo(HaveOccurred())
+			case <-time.After(2 * time.Second):
+				Fail("timeout waiting for clients getting results")
 			}
-			server.cancel()
-			close(didIt)
-		}, 5.0)
+		})
 	})
 	Context("Clients().Caller()", func() {
-		It("should invoke only the caller", func(didIt Done) {
+		It("should invoke only the caller", func() {
 			server, conns, _ := connectMany()
+			defer server.cancel()
 			conns[0].ClientSend(`{"type":1,"invocationId": "123","target":"callcaller"}`)
-			done := make(chan bool)
-			callCount := make(chan int, 1)
-			callCount <- 0
-			go func(conns []*testingConnection, done chan bool) {
-				defer GinkgoRecover()
-				msg := <-conns[0].received
-				if _, ok := msg.(completionMessage); ok {
-					msg = <-conns[0].received
-					Expect(expectInvocation(msg, callCount, done, 1)).NotTo(HaveOccurred())
-				} else {
-					Expect(expectInvocation(msg, callCount, done, 1)).NotTo(HaveOccurred())
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			errCh1 := make(chan error, 1)
+			go expectInvocationMessageFromConnection(ctx, conns[0], 1, errCh1)
+			errCh2 := make(chan error, 1)
+			go expectNoMessageFromConnection(ctx, conns[1], errCh2)
+			errCh3 := make(chan error, 1)
+			go expectNoMessageFromConnection(ctx, conns[2], errCh3)
+			done := make(chan error, 1)
+			go func(ctx context.Context, done, errCh1, errCh2, errCh3 chan error) {
+				for {
+					select {
+					case err := <-errCh1:
+						if err != nil {
+							done <- err
+							return
+						}
+					case err := <-errCh2:
+						done <- err
+						return
+					case err := <-errCh3:
+						done <- err
+						return
+					case <-time.After(100 * time.Millisecond):
+						done <- nil
+						return
+					case <-ctx.Done():
+						done <- ctx.Err()
+						return
+					}
 				}
-			}(conns, done)
-			go func(conns []*testingConnection) {
-				msg := <-conns[1].received
-				if _, ok := msg.(completionMessage); ok {
-					Fail(fmt.Sprintf("non caller received %v", msg))
-				}
-			}(conns)
-			go func(conns []*testingConnection) {
-				msg := <-conns[2].received
-				if _, ok := msg.(completionMessage); ok {
-					Fail(fmt.Sprintf("non caller received %v", msg))
-				}
-			}(conns)
-			Expect(<-hubContextInvocationQueue).To(Equal("CallCaller()"))
+			}(ctx, done, errCh1, errCh2, errCh3)
 			select {
-			case <-done:
-				break
-			case <-time.After(3000 * time.Millisecond):
-				Fail("timed out")
+			case err := <-done:
+				Expect(err).NotTo(HaveOccurred())
+			case <-time.After(1 * time.Second):
+				Fail("timeout waiting for clients getting results")
 			}
-			server.cancel()
-			close(didIt)
-		}, 4.0)
+		})
 	})
 	Context("Clients().Client()", func() {
 		It("should invoke only the client which was addressed", func(didIt Done) {
