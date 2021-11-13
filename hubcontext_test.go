@@ -77,7 +77,7 @@ func (c *contextHub) Abort() {
 var hubContextInvocationQueue = make(chan string, 10)
 
 func connectMany() (Server, []*testingConnection, []string) {
-	server, err := NewServer(context.TODO(), SimpleHubFactory(&contextHub{}),
+	s, err := NewServer(context.TODO(), SimpleHubFactory(&contextHub{}),
 		testLoggerOption())
 	if err != nil {
 		Fail(err.Error())
@@ -87,14 +87,13 @@ func connectMany() (Server, []*testingConnection, []string) {
 	connIds := make([]string, 0)
 	for i := 0; i < 3; i++ {
 		conns[i] = newTestingConnectionForServer()
-
 	}
 	var wg sync.WaitGroup
 	wg.Add(3)
 	for i := 0; i < 3; i++ {
 		go func(i int) {
 			wg.Done()
-			_ = server.Serve(conns[i])
+			_ = s.Serve(conns[i])
 		}(i)
 	}
 	wg.Wait()
@@ -102,7 +101,7 @@ func connectMany() (Server, []*testingConnection, []string) {
 		// Ensure to return all connection with connected hubs
 		connIds = append(connIds, <-hubContextOnConnectMsg)
 	}
-	return server, conns, connIds
+	return s, conns, connIds
 }
 
 func expectInvocationMessageFromConnection(ctx context.Context, conn *testingConnection, i int, errCh chan error) {
@@ -141,9 +140,50 @@ func expectInvocationMessageFromConnection(ctx context.Context, conn *testingCon
 func expectNoMessageFromConnection(ctx context.Context, conn *testingConnection, errCh chan error) {
 	select {
 	case msg := <-conn.received:
-		errCh <- fmt.Errorf("received unspected message %v", msg)
+		errCh <- fmt.Errorf("received unexpected message %T %#v", msg, msg)
 	case <-ctx.Done():
 	}
+}
+
+type SimpleReceiver struct {
+	ch chan struct{}
+}
+
+func (sr *SimpleReceiver) ClientFunc() {
+	close(sr.ch)
+}
+
+func makeServerAndClients(ctx context.Context, clientCount int) (Server, []Client, []*SimpleReceiver, []Connection, []Connection, error) {
+	server, err := NewServer(ctx, SimpleHubFactory(&contextHub{}), testLoggerOption())
+	if err != nil {
+		return nil, nil, nil, nil, nil, err
+	}
+	cliConn := make([]Connection, clientCount)
+	srvConn := make([]Connection, clientCount)
+	receiver := make([]*SimpleReceiver, clientCount)
+	client := make([]Client, clientCount)
+	for i := 0; i < clientCount; i++ {
+		cliConn[i], srvConn[i] = newClientServerConnections()
+		srvConn[i].SetConnectionID(fmt.Sprintf("%v", i))
+		receiver[i] = &SimpleReceiver{ch: make(chan struct{})}
+		client[i], err = NewClient(ctx, WithConnection(cliConn[i]), WithReceiver(receiver[i]), testLoggerOption())
+		if err != nil {
+			return nil, nil, nil, nil, nil, err
+		}
+		client[i].Start()
+		go func() {
+			_ = server.Serve(srvConn[i])
+		}()
+		select {
+		case err := <-client[i].WaitForState(ctx, ClientConnected):
+			if err != nil {
+				return nil, nil, nil, nil, nil, err
+			}
+		case <-ctx.Done():
+			return nil, nil, nil, nil, nil, ctx.Err()
+		}
+	}
+	return server, client, receiver, srvConn, cliConn, nil
 }
 
 var _ = Describe("HubContext", func() {
@@ -236,142 +276,109 @@ var _ = Describe("HubContext", func() {
 			case err := <-done:
 				Expect(err).NotTo(HaveOccurred())
 			case <-time.After(1 * time.Second):
-				Fail("timeout waiting for clients getting results")
+				Fail("timeout waiting for client getting result")
 			}
 		})
 	})
 	Context("Clients().Client()", func() {
-		It("should invoke only the client which was addressed", func(didIt Done) {
-			server, conns, _ := connectMany()
-			conns[0].ClientSend(fmt.Sprintf(`{"type":1,"invocationId": "123","target":"callclient","arguments":["%v"]}`, conns[2].ConnectionID()))
-			done := make(chan bool)
-			go func(conns []*testingConnection) {
-				msg := <-conns[0].received
-				if _, ok := msg.(completionMessage); ok {
-					msg = <-conns[0].received
-					if _, ok := msg.(completionMessage); ok {
-						Fail(fmt.Sprintf("wrong client received %v", msg))
-					}
-				} else {
-					if _, ok := msg.(completionMessage); ok {
-						Fail(fmt.Sprintf("wrong client received %v", msg))
-					}
-				}
-			}(conns)
-			go func(conns []*testingConnection) {
-				msg := <-conns[1].received
-				if _, ok := msg.(completionMessage); ok {
-					Fail(fmt.Sprintf("wrong client received %v", msg))
-				}
-			}(conns)
-			go func(conns []*testingConnection, done chan bool) {
-				defer GinkgoRecover()
-				msg := <-conns[2].received
-				Expect(msg).To(BeAssignableToTypeOf(invocationMessage{}))
-				Expect(strings.ToLower(msg.(invocationMessage).Target)).To(Equal("clientfunc"))
-				done <- true
-			}(conns, done)
-			Expect(<-hubContextInvocationQueue).To(Equal("CallClient()"))
+		It("should invoke only the client which was addressed", func() {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			_, client, receiver, srvConn, _, err := makeServerAndClients(ctx, 3)
+			Expect(err).NotTo(HaveOccurred())
+
 			select {
-			case <-done:
-				break
-			case <-time.After(3000 * time.Millisecond):
-				Fail("timed out")
+			case ir := <-client[0].Invoke("CallClient", srvConn[2].ConnectionID()):
+				Expect(ir.Error).NotTo(HaveOccurred())
+			case <-time.After(100 * time.Millisecond):
+				Fail("timeout in invoke")
 			}
-			server.cancel()
-			close(didIt)
-		}, 4.0)
+			gotCalled := false
+			select {
+			case <-receiver[0].ch:
+				Fail("client 1 received message for client 3")
+			case <-receiver[1].ch:
+				Fail("client 2 received message for client 3")
+			case <-receiver[2].ch:
+				gotCalled = true
+			case <-time.After(100 * time.Millisecond):
+				if !gotCalled {
+					Fail("timeout without client 3 got called")
+				}
+			}
+		})
 	})
 	Context("Clients().Group()", func() {
-		It("should invoke only the clients in the group", func(ditIt Done) {
-			server, conns, _ := connectMany()
-			conns[0].ClientSend(fmt.Sprintf(`{"type":1,"invocationId": "123","target":"buildgroup","arguments":["%v","%v"]}`, conns[1].ConnectionID(), conns[2].ConnectionID()))
-			<-hubContextInvocationQueue
-			<-conns[0].received
-			conns[0].ClientSend(`{"type":1,"invocationId": "123","target":"callgroup"}`)
-			callCount := make(chan int, 1)
-			callCount <- 0
-			done := make(chan bool)
-			go func(conns []*testingConnection) {
-				defer GinkgoRecover()
-				msg := <-conns[0].received
-				if _, ok := msg.(completionMessage); ok {
-					msg = <-conns[0].received
-					if _, ok := msg.(completionMessage); ok {
-						Fail(fmt.Sprintf("wrong client received %v", msg))
-					}
-				} else {
-					if _, ok := msg.(completionMessage); ok {
-						Fail(fmt.Sprintf("wrong client received %v", msg))
-					}
-				}
-			}(conns)
-			go func(conns []*testingConnection) {
-				defer GinkgoRecover()
-				msg := <-conns[1].received
-				Expect(expectInvocation(msg, callCount, done, 2)).NotTo(HaveOccurred())
-			}(conns)
-			go func(conns []*testingConnection, done chan bool) {
-				defer GinkgoRecover()
-				msg := <-conns[2].received
-				Expect(expectInvocation(msg, callCount, done, 2)).NotTo(HaveOccurred())
-			}(conns, done)
-			Expect(<-hubContextInvocationQueue).To(Equal("CallGroup()"))
+		It("should invoke only the clients in the group", func() {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			_, client, receiver, srvConn, _, err := makeServerAndClients(ctx, 3)
+			Expect(err).NotTo(HaveOccurred())
 			select {
-			case <-done:
-				break
-			case <-time.After(3000 * time.Millisecond):
-				Fail("timed out")
+			case ir := <-client[0].Invoke("buildgroup", srvConn[1].ConnectionID(), srvConn[2].ConnectionID()):
+				Expect(ir.Error).NotTo(HaveOccurred())
+			case <-time.After(100 * time.Millisecond):
+				Fail("timeout in invoke")
 			}
-			server.cancel()
-			close(ditIt)
-		}, 4.0)
+			select {
+			case ir := <-client[0].Invoke("callgroup"):
+				Expect(ir.Error).NotTo(HaveOccurred())
+			case <-time.After(100 * time.Millisecond):
+				Fail("timeout in invoke")
+			}
+			gotCalled := 0
+			select {
+			case <-receiver[0].ch:
+				Fail("client 1 received message for client 2, 3")
+			case <-receiver[1].ch:
+				gotCalled++
+			case <-receiver[2].ch:
+				gotCalled++
+			case <-time.After(100 * time.Millisecond):
+				if gotCalled < 2 {
+					Fail("timeout without client 2 and 3 got called")
+				}
+			}
+		})
 	})
 	Context("RemoveFromGroup should remove clients from the group", func() {
-		It("should invoke only the clients in the group", func(ditIt Done) {
-			server, conns, _ := connectMany()
-			conns[0].ClientSend(fmt.Sprintf(`{"type":1,"invocationId": "123","target":"buildgroup","arguments":["%v","%v"]}`, conns[1].ConnectionID(), conns[2].ConnectionID()))
-			Expect(<-hubContextInvocationQueue).To(Equal("BuildGroup()"))
-			<-conns[0].received
-			conns[2].ClientSend(fmt.Sprintf(`{"type":1,"invocationId": "123","target":"removefromgroup","arguments":["%v"]}`, conns[2].ConnectionID()))
-			Expect(<-hubContextInvocationQueue).To(Equal("RemoveFromGroup()"))
-			<-conns[2].received
-			// Now only conns[1] should be invoked
-			conns[0].ClientSend(`{"type":1,"invocationId": "123","target":"callgroup"}`)
-			done := make(chan bool)
-			go func(conns []*testingConnection) {
-				defer GinkgoRecover()
-				msg := <-conns[0].received
-				if _, ok := msg.(completionMessage); ok {
-					msg = <-conns[0].received
-					if _, ok := msg.(completionMessage); ok {
-						Fail(fmt.Sprintf("wrong client received %v", msg))
-					}
-				} else {
-					if _, ok := msg.(completionMessage); ok {
-						Fail(fmt.Sprintf("wrong client received %v", msg))
-					}
+		It("should invoke only the clients in the group", func() {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			_, client, receiver, srvConn, _, err := makeServerAndClients(ctx, 3)
+			Expect(err).NotTo(HaveOccurred())
+			select {
+			case ir := <-client[0].Invoke("buildgroup", srvConn[1].ConnectionID(), srvConn[2].ConnectionID()):
+				Expect(ir.Error).NotTo(HaveOccurred())
+			case <-time.After(100 * time.Millisecond):
+				Fail("timeout in invoke")
+			}
+			select {
+			case ir := <-client[0].Invoke("removefromgroup", srvConn[2].ConnectionID()):
+				Expect(ir.Error).NotTo(HaveOccurred())
+			case <-time.After(100 * time.Millisecond):
+				Fail("timeout in invoke")
+			}
+			select {
+			case ir := <-client[0].Invoke("callgroup"):
+				Expect(ir.Error).NotTo(HaveOccurred())
+			case <-time.After(100 * time.Millisecond):
+				Fail("timeout in invoke")
+			}
+			gotCalled := false
+			select {
+			case <-receiver[0].ch:
+				Fail("client 1 received message for client 2")
+			case <-receiver[1].ch:
+				gotCalled = true
+			case <-receiver[2].ch:
+				Fail("client 3 received message for client 2")
+			case <-time.After(100 * time.Millisecond):
+				if !gotCalled {
+					Fail("timeout without client 3 got called")
 				}
-			}(conns)
-			go func(conns []*testingConnection) {
-				defer GinkgoRecover()
-				msg := <-conns[1].received
-				callCount := make(chan int, 1)
-				callCount <- 0
-				Expect(expectInvocation(msg, callCount, done, 1)).NotTo(HaveOccurred())
-			}(conns)
-			go func(conns []*testingConnection, done chan bool) {
-				defer GinkgoRecover()
-				msg := <-conns[2].received
-				if _, ok := msg.(completionMessage); ok {
-					Fail(fmt.Sprintf("wrong client received %v", msg))
-				}
-			}(conns, done)
-			Expect(<-hubContextInvocationQueue).To(Equal("CallGroup()"))
-			<-done
-			server.cancel()
-			close(ditIt)
-		}, 4.0)
+			}
+		})
 	})
 
 	Context("Items()", func() {
@@ -453,23 +460,3 @@ var _ = Describe("Abort()", func() {
 		close(done)
 	}, 10.0)
 })
-
-func expectInvocation(msg interface{}, callCount chan int, done chan bool, doneCount int) error {
-	defer func() {
-		d := <-callCount
-		d++
-		if d == doneCount {
-			done <- true
-		} else {
-			callCount <- d
-		}
-	}()
-	if ivMsg, ok := msg.(invocationMessage); !ok {
-		return fmt.Errorf("expected invocationMessage, got %T %#v", msg, msg)
-	} else {
-		if strings.ToLower(ivMsg.Target) != "clientfunc" {
-			return fmt.Errorf("expected clientfunc, got got %#v", ivMsg)
-		}
-	}
-	return nil
-}

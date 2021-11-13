@@ -14,10 +14,11 @@ import (
 )
 
 type pipeConnection struct {
-	reader  io.Reader
-	writer  io.Writer
-	timeout time.Duration
-	fail    atomic.Value
+	reader       io.Reader
+	writer       io.Writer
+	timeout      time.Duration
+	fail         atomic.Value
+	connectionID string
 }
 
 func (pc *pipeConnection) Context() context.Context {
@@ -39,10 +40,12 @@ func (pc *pipeConnection) Write(p []byte) (n int, err error) {
 }
 
 func (pc *pipeConnection) ConnectionID() string {
-	return "X"
+	return pc.connectionID
 }
 
-func (pc *pipeConnection) SetConnectionID(string) {}
+func (pc *pipeConnection) SetConnectionID(cID string) {
+	pc.connectionID = cID
+}
 
 func (pc *pipeConnection) SetTimeout(timeout time.Duration) {
 	pc.timeout = timeout
@@ -56,12 +59,14 @@ func newClientServerConnections() (cliConn *pipeConnection, svrConn *pipeConnect
 	cliReader, srvWriter := io.Pipe()
 	srvReader, cliWriter := io.Pipe()
 	cliConn = &pipeConnection{
-		reader: cliReader,
-		writer: cliWriter,
+		reader:       cliReader,
+		writer:       cliWriter,
+		connectionID: "X",
 	}
 	svrConn = &pipeConnection{
-		reader: srvReader,
-		writer: srvWriter,
+		reader:       srvReader,
+		writer:       srvWriter,
+		connectionID: "X",
 	}
 	return cliConn, svrConn
 }
