@@ -158,10 +158,6 @@ func (c *client) Start() {
 			case <-c.ctx.Done():
 				return
 			}
-			// Clear last connection
-			c.mx.Lock()
-			c.conn = nil
-			c.mx.Unlock()
 			c.setState(ClientConnecting)
 		}
 	}()
@@ -186,14 +182,16 @@ func (c *client) run() error {
 	}()
 	// Run the loop
 	err = loop.Run(isLoopConnected)
-	if err != nil {
-		return err
-	}
-	err = loop.hubConn.Close("", false) // allowReconnect value is ignored as servers never initiate a connection
+
 	// Reset conn to allow reconnecting
 	c.mx.Lock()
 	c.conn = nil
 	c.mx.Unlock()
+
+	if err != nil {
+		return err
+	}
+	err = loop.hubConn.Close("", false) // allowReconnect value is ignored as servers never initiate a connection
 
 	return err
 }
@@ -254,21 +252,15 @@ func (c *client) setState(state ClientState) {
 	c.state = state
 	for _, ch := range c.stateChangeChans {
 		go func(ch chan struct{}) {
-			select {
-			case ch <- struct{}{}:
-				c.mx.RLock()
-				found := false
-				for _, cch := range c.stateChangeChans {
-					if cch == ch {
-						found = true
-						break
+			c.mx.Lock()
+			defer c.mx.Unlock()
+			for _, cch := range c.stateChangeChans {
+				if cch == ch {
+					select {
+					case ch <- struct{}{}:
+					case <-c.ctx.Done():
 					}
 				}
-				if !found {
-					close(ch)
-				}
-				c.mx.RUnlock()
-			case <-c.ctx.Done():
 			}
 		}(ch)
 	}
@@ -289,6 +281,7 @@ func (c *client) cancelObserveStateChanged(ch chan struct{}) {
 	for i, cch := range c.stateChangeChans {
 		if cch == ch {
 			c.stateChangeChans = append(c.stateChangeChans[:i], c.stateChangeChans[i+1:]...)
+			close(ch)
 			break
 		}
 	}
