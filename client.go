@@ -314,7 +314,7 @@ func (c *client) WaitForState(ctx context.Context, waitFor ClientState) <-chan e
 	}
 	stateCh := make(chan struct{}, 1)
 	c.ObserveStateChanged(stateCh)
-	go func() {
+	go func(waitFor ClientState) {
 		defer close(ch)
 		if c.waitingIsOver(waitFor, ch) {
 			return
@@ -333,7 +333,7 @@ func (c *client) WaitForState(ctx context.Context, waitFor ClientState) <-chan e
 				return
 			}
 		}
-	}()
+	}(waitFor)
 	return ch
 }
 

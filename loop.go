@@ -2,6 +2,7 @@ package signalr
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"reflect"
 	"runtime/debug"
@@ -89,6 +90,9 @@ msgLoop:
 					case closeMessage:
 						_ = l.dbg.Log(evt, msgRecv, msg, fmtMsg(message))
 						l.closeMessage = &message
+						if message.Error != "" {
+							err = errors.New(message.Error)
+						}
 					case hubMessage:
 						// Mostly ping
 						err = l.handleOtherMessage(message)
