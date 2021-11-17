@@ -158,6 +158,10 @@ func (c *client) Start() {
 			case <-c.ctx.Done():
 				return
 			}
+			// Clear last connection
+			c.mx.Lock()
+			c.conn = nil
+			c.mx.Unlock()
 			c.setState(ClientConnecting)
 		}
 	}()
