@@ -122,18 +122,9 @@ func (c *clientStreamHub) UploadErrorArray(u <-chan []error) {
 var _ = Describe("ClientStreaming", func() {
 
 	Describe("Simple stream invocation", func() {
-		var server Server
-		var conn *testingConnection
-		BeforeEach(func(done Done) {
-			server, conn = connect(&clientStreamHub{})
-			close(done)
-		})
-		AfterEach(func(done Done) {
-			server.cancel()
-			close(done)
-		})
 		Context("When invoked by the client with streamIds", func() {
 			It("should be invoked on the server, and receive stream items until the caller sends a completion", func(done Done) {
+				server, conn := connect(&clientStreamHub{})
 				conn.ClientSend(fmt.Sprintf(
 					`{"type":1,"invocationId":"upstream","target":"uploadstreamsmoke","arguments":[%v],"streamIds":["123","456"]}`, 5))
 				Expect(<-clientStreamingInvocationQueue).To(Equal(fmt.Sprintf("f: %v", 5)))
@@ -177,6 +168,7 @@ var _ = Describe("ClientStreaming", func() {
 						}
 					}
 				}
+				server.cancel()
 				close(done)
 			}, 2.0)
 		})
@@ -207,18 +199,9 @@ var _ = Describe("ClientStreaming", func() {
 	})
 
 	Describe("Stream invocation to the StreamBufferCapacity", func() {
-		var server Server
-		var conn *testingConnection
-		BeforeEach(func(done Done) {
-			server, conn = connect(&clientStreamHub{})
-			close(done)
-		})
-		AfterEach(func(done Done) {
-			server.cancel()
-			close(done)
-		})
 		Context(" When hub method is called as streaming receiver but does not handle channel input", func() {
 			It("should send a completion with error, but wait at least ChanReceiveTimeout", func(done Done) {
+				server, conn := connect(&clientStreamHub{})
 				conn.ClientSend(`{"type":1,"invocationId":"upstream","target":"uploadhang","streamIds":["hang"]}`)
 				Expect(<-clientStreamingInvocationQueue).To(Equal("UploadHang()"))
 				// connect() sets StreamBufferCapacity to 5, so 6 messages should be send to make it hang
@@ -231,22 +214,16 @@ var _ = Describe("ClientStreaming", func() {
 				Expect(message.(completionMessage).Error).NotTo(BeNil())
 				// ChanReceiveTimeout 200 ms should be over
 				Expect(time.Now().UnixNano()).To(BeNumerically(">", sent.Add(200*time.Millisecond).UnixNano()))
+				server.cancel()
 				close(done)
 			})
 		})
 	})
 
 	Describe("Stream invocation with wrong streamId", func() {
-		var server Server
-		var conn *testingConnection
-		BeforeEach(func() {
-			server, conn = connect(&clientStreamHub{})
-		})
-		AfterEach(func() {
-			server.cancel()
-		})
 		Context("When invoked by the client with streamIds", func() {
 			It("should be invoked on the server, and receive stream items until the caller sends a completion. Unknown streamIds should be ignored", func(done Done) {
+				server, conn := connect(&clientStreamHub{})
 				conn.ClientSend(fmt.Sprintf(
 					`{"type":1,"invocationId":"upstream","target":"uploadstreamsmoke","arguments":[%v],"streamIds":["123","456"]}`, 5))
 				Expect(<-clientStreamingInvocationQueue).To(Equal(fmt.Sprintf("f: %v", 5)))
@@ -267,6 +244,7 @@ var _ = Describe("ClientStreaming", func() {
 				}
 				// Read finished value from queue
 				<-clientStreamingInvocationQueue
+				server.cancel()
 				close(done)
 			})
 		})
@@ -306,18 +284,9 @@ var _ = Describe("ClientStreaming", func() {
 	})
 
 	Describe("Panic in invoked stream client func", func() {
-		var server Server
-		var conn *testingConnection
-		BeforeEach(func(done Done) {
-			server, conn = connect(&clientStreamHub{})
-			close(done)
-		})
-		AfterEach(func(done Done) {
-			server.cancel()
-			close(done)
-		})
 		Context("When a func is invoked by the client and panics", func() {
 			It("should return a completion with error", func(done Done) {
+				server, conn := connect(&clientStreamHub{})
 				conn.ClientSend(`{"type":1,"invocationId":"upstreampanic","target":"uploadpanic","streamIds":["123"]}`)
 				wasInvoked := false
 				gotMsg := false
@@ -343,6 +312,7 @@ var _ = Describe("ClientStreaming", func() {
 						break loop
 					}
 				}
+				server.cancel()
 				close(done)
 			})
 		})
