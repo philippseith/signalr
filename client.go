@@ -305,9 +305,10 @@ func (c *client) WaitForState(ctx context.Context, waitFor ClientState) <-chan e
 		return ch
 	}
 	stateCh := make(chan struct{}, 1)
-	c.ObserveStateChanged(stateCh)
+	cancel := c.ObserveStateChanged(stateCh)
 	go func(waitFor ClientState) {
 		defer close(ch)
+		defer cancel()
 		if c.waitingIsOver(waitFor, ch) {
 			return
 		}
