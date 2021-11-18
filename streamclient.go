@@ -33,7 +33,7 @@ func (c *streamClient) buildChannelArgument(invocation invocationMessage, argTyp
 	if argType.Kind() != reflect.Chan || argType.ChanDir() == reflect.SendDir {
 		return reflect.Value{}, false, nil
 	} else if len(invocation.StreamIds) > chanCount {
-		// MakeChan does only accept bidirectional channels and we need to Send to this channel anyway
+		// MakeChan does only accept bidirectional channels, and we need to Send to this channel anyway
 		arg = reflect.MakeChan(reflect.ChanOf(reflect.BothDir, argType.Elem()), int(c.streamBufferCapacity))
 		c.upstreamChannels[invocation.StreamIds[chanCount]] = arg
 		return arg, true, nil
@@ -64,7 +64,7 @@ func (c *streamClient) receiveStreamItem(streamItem streamItemMessage) error {
 	c.mx.Lock()
 	defer c.mx.Unlock()
 	if upChan, ok := c.upstreamChannels[streamItem.InvocationID]; ok {
-		// Mark stream as running to detect illegal completion with result on this id
+		// Mark the stream as running to detect illegal completion with result on this id
 		c.runningStreams[streamItem.InvocationID] = true
 		chanVal := reflect.New(upChan.Type().Elem())
 		err := c.protocol.UnmarshalArgument(streamItem.Item, chanVal.Interface())
