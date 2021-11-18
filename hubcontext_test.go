@@ -146,6 +146,7 @@ func makePipeClientsAndReceivers() ([]Client, []*SimpleReceiver, context.CancelF
 		receiver[i] = &SimpleReceiver{ch: make(chan struct{})}
 		client[i], _ = NewClient(ctx, WithConnection(cliConn[i]), WithReceiver(receiver[i]), testLoggerOption())
 		client[i].Start()
+		<-client[i].WaitForState(ctx, ClientConnected)
 	}
 	return client, receiver, cancel
 }

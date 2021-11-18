@@ -83,7 +83,7 @@ func (s *simpleHub) InvokeMe(arg1 string, arg2 int) string {
 }
 
 func (s *simpleHub) Callback(arg1 string) {
-	s.Hub.context.Clients().Caller().Send("OnCallback", strings.ToUpper(arg1))
+	s.Hub.Clients().Caller().Send("OnCallback", strings.ToUpper(arg1))
 }
 
 func (s *simpleHub) ReadStream(i int) chan string {
