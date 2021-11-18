@@ -183,15 +183,14 @@ func (c *client) run() error {
 	// Run the loop
 	err = loop.Run(isLoopConnected)
 
+	if err == nil {
+		err = loop.hubConn.Close("", false) // allowReconnect value is ignored as servers never initiate a connection
+	}
+
 	// Reset conn to allow reconnecting
 	c.mx.Lock()
 	c.conn = nil
 	c.mx.Unlock()
-
-	if err != nil {
-		return err
-	}
-	err = loop.hubConn.Close("", false) // allowReconnect value is ignored as servers never initiate a connection
 
 	return err
 }
