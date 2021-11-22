@@ -98,12 +98,6 @@ func NewClient(ctx context.Context, options ...func(Party) error) (Client, error
 			}
 		}
 	}
-	// Wrap logging with timestamps
-	info, dbg = c.loggers()
-	c.setLoggers(
-		log.WithPrefix(info, "ts", log.DefaultTimestampUTC),
-		log.WithPrefix(dbg, "ts", log.DefaultTimestampUTC),
-	)
 	if c.conn == nil && c.connectionFactory == nil {
 		return nil, errors.New("neither WithConnection nor WithAutoReconnect option was given")
 	}
