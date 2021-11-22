@@ -71,7 +71,7 @@ func NewHTTPConnection(ctx context.Context, address string, options ...func(*htt
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("%v -> %v", req, resp.Status)
+		return nil, fmt.Errorf("%v %v -> %v", req.Method, req.URL.String(), resp.Status)
 	}
 
 	body, err := io.ReadAll(resp.Body)
