@@ -140,6 +140,7 @@ func (c *client) Start() {
 			// RUN!
 			err := c.run()
 			if err != nil {
+				_ = c.info.Log("error", fmt.Sprintf("%v", err))
 				c.setErr(err)
 			}
 			shouldEnd := c.shouldClientEnd()
@@ -249,6 +250,7 @@ func (c *client) setState(state ClientState) {
 	c.mx.Lock()
 	defer c.mx.Unlock()
 	c.state = state
+	_ = c.dbg.Log("state", state)
 	for _, ch := range c.stateChangeChans {
 		go func(ch chan struct{}) {
 			c.mx.Lock()
