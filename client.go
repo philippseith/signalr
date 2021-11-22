@@ -98,6 +98,12 @@ func NewClient(ctx context.Context, options ...func(Party) error) (Client, error
 			}
 		}
 	}
+	// Wrap logging with timestamps
+	info, dbg = c.loggers()
+	c.setLoggers(
+		log.WithPrefix(info, "ts", log.DefaultTimestampUTC),
+		log.WithPrefix(dbg, "ts", log.DefaultTimestampUTC),
+	)
 	if c.conn == nil && c.connectionFactory == nil {
 		return nil, errors.New("neither WithConnection nor WithAutoReconnect option was given")
 	}
@@ -140,7 +146,7 @@ func (c *client) Start() {
 			// RUN!
 			err := c.run()
 			if err != nil {
-				_ = c.info.Log("error", fmt.Sprintf("%v", err))
+				_ = c.info.Log("connect", fmt.Sprintf("%v", err))
 				c.setErr(err)
 			}
 			shouldEnd := c.shouldClientEnd()
