@@ -45,7 +45,7 @@ const (
 // State returns the current client state.
 // When WithAutoReconnect is set and the server allows reconnection, the client switches to ClientConnecting
 // and tries to reach ClientConnected after the last connection has ended.
-//  ObserveStateChanged(chan struct{}) context.CancelFunc
+//  ObserveStateChanged(chan ClientState) context.CancelFunc
 // ObserveStateChanged pushes a new item != nil to the channel when State has changed.
 // The returned CancelFunc ends the observation and closes the channel.
 //  Err() error
