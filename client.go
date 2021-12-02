@@ -39,11 +39,11 @@ const (
 // Client is the signalR connection used on the client side.
 //   Start()
 // Start starts the client loop. After starting the client, the interaction with a server can be started.
-// The client loop will run until the server closes the connection. If WithAutoReconnect is used, Start will
+// The client loop will run until the server closes the connection. If WithConnector is used, Start will
 // start a new loop. To end the loop from the client side, the context passed to NewClient has to be canceled.
 //  State() ClientState
 // State returns the current client state.
-// When WithAutoReconnect is set and the server allows reconnection, the client switches to ClientConnecting
+// When WithConnector is set and the server allows reconnection, the client switches to ClientConnecting
 // and tries to reach ClientConnected after the last connection has ended.
 //  ObserveStateChanged(chan struct{}) context.CancelFunc
 // ObserveStateChanged pushes a new item != nil to the channel when State has changed.
@@ -80,6 +80,8 @@ type Client interface {
 	PushStreams(method string, arguments ...interface{}) <-chan error
 }
 
+var ErrUnableToConnect = errors.New("neither WithConnection nor WithConnector option was given")
+
 // NewClient builds a new Client.
 // When ctx is canceled, the client loop and a possible auto reconnect loop are ended.
 func NewClient(ctx context.Context, options ...func(Party) error) (Client, error) {
@@ -105,7 +107,7 @@ func NewClient(ctx context.Context, options ...func(Party) error) (Client, error
 		log.WithPrefix(dbg, "ts", log.DefaultTimestampUTC),
 	)
 	if c.conn == nil && c.connectionFactory == nil {
-		return nil, errors.New("neither WithConnection nor WithAutoReconnect option was given")
+		return nil, ErrUnableToConnect
 	}
 	return c, nil
 }
@@ -229,7 +231,7 @@ func (c *client) setupConnectionAndProtocol() (hubProtocol, error) {
 
 		if c.conn == nil {
 			if c.connectionFactory == nil {
-				return nil, errors.New("neither Connection nor WithAutoReconnect connectionFactory set")
+				return nil, ErrUnableToConnect
 			}
 			var err error
 			c.conn, err = c.connectionFactory()
