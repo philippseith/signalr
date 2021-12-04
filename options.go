@@ -2,6 +2,7 @@ package signalr
 
 import (
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/go-kit/log"
@@ -105,7 +106,21 @@ func Logger(logger StructuredLogger, debug bool) func(Party) error {
 	}
 }
 
+type recoverLogger struct {
+	logger log.Logger
+}
+
+func (r *recoverLogger) Log(keyVals ...interface{}) error {
+	defer func() {
+		if err := recover(); err != nil {
+			fmt.Printf("recovering from panic in logger: %v\n", err)
+		}
+	}()
+	return r.logger.Log(keyVals)
+}
+
 func buildInfoDebugLogger(logger log.Logger, debug bool) (log.Logger, log.Logger) {
+	logger = &recoverLogger{logger: logger}
 	if debug {
 		logger = level.NewFilter(logger, level.AllowDebug())
 	} else {
