@@ -45,7 +45,7 @@ const (
 // State returns the current client state.
 // When WithConnector is set and the server allows reconnection, the client switches to ClientConnecting
 // and tries to reach ClientConnected after the last connection has ended.
-//  ObserveStateChanged(chan struct{}) context.CancelFunc
+//  ObserveStateChanged(chan ClientState) context.CancelFunc
 // ObserveStateChanged pushes a new item != nil to the channel when State has changed.
 // The returned CancelFunc ends the observation and closes the channel.
 //  Err() error
@@ -71,7 +71,7 @@ type Client interface {
 	Party
 	Start()
 	State() ClientState
-	ObserveStateChanged(chan struct{}) context.CancelFunc
+	ObserveStateChanged(chan ClientState) context.CancelFunc
 	Err() error
 	WaitForState(ctx context.Context, waitFor ClientState) <-chan error
 	Invoke(method string, arguments ...interface{}) <-chan InvokeResult
@@ -88,7 +88,7 @@ func NewClient(ctx context.Context, options ...func(Party) error) (Client, error
 	info, dbg := buildInfoDebugLogger(log.NewLogfmtLogger(os.Stderr), true)
 	c := &client{
 		state:            ClientCreated,
-		stateChangeChans: make([]chan struct{}, 0),
+		stateChangeChans: make([]chan ClientState, 0),
 		format:           "json",
 		partyBase:        newPartyBase(ctx, info, dbg),
 		lastID:           -1,
@@ -118,7 +118,7 @@ type client struct {
 	conn              Connection
 	connectionFactory func() (Connection, error)
 	state             ClientState
-	stateChangeChans  []chan struct{}
+	stateChangeChans  []chan ClientState
 	err               error
 	format            string
 	loop              *loop
@@ -133,7 +133,7 @@ func (c *client) Start() {
 		for {
 			c.setErr(nil)
 			// Listen for state change to ClientConnected and signal backoff Reset then.
-			stateChangeChan := make(chan struct{}, 1)
+			stateChangeChan := make(chan ClientState, 1)
 			var connected atomic.Value
 			connected.Store(false)
 			cancelObserve := c.ObserveStateChanged(stateChangeChan)
@@ -257,34 +257,39 @@ func (c *client) State() ClientState {
 func (c *client) setState(state ClientState) {
 	c.mx.Lock()
 	defer c.mx.Unlock()
+
 	c.state = state
 	_ = c.dbg.Log("state", state)
+
 	for _, ch := range c.stateChangeChans {
-		go func(ch chan struct{}) {
+		go func(ch chan ClientState, state ClientState) {
 			c.mx.Lock()
 			defer c.mx.Unlock()
+
 			for _, cch := range c.stateChangeChans {
 				if cch == ch {
 					select {
-					case ch <- struct{}{}:
+					case ch <- state:
 					case <-c.ctx.Done():
 					}
 				}
 			}
-		}(ch)
+		}(ch, state)
 	}
 }
 
-func (c *client) ObserveStateChanged(ch chan struct{}) context.CancelFunc {
+func (c *client) ObserveStateChanged(ch chan ClientState) context.CancelFunc {
 	c.mx.Lock()
 	defer c.mx.Unlock()
+
 	c.stateChangeChans = append(c.stateChangeChans, ch)
+
 	return func() {
 		c.cancelObserveStateChanged(ch)
 	}
 }
 
-func (c *client) cancelObserveStateChanged(ch chan struct{}) {
+func (c *client) cancelObserveStateChanged(ch chan ClientState) {
 	c.mx.Lock()
 	defer c.mx.Unlock()
 	for i, cch := range c.stateChangeChans {
@@ -314,7 +319,7 @@ func (c *client) WaitForState(ctx context.Context, waitFor ClientState) <-chan e
 		close(ch)
 		return ch
 	}
-	stateCh := make(chan struct{}, 1)
+	stateCh := make(chan ClientState, 1)
 	cancel := c.ObserveStateChanged(stateCh)
 	go func(waitFor ClientState) {
 		defer close(ch)
