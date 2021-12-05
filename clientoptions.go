@@ -10,7 +10,7 @@ func WithConnection(connection Connection) func(party Party) error {
 	return func(party Party) error {
 		if client, ok := party.(*client); ok {
 			if client.connectionFactory != nil {
-				return errors.New("options WithConnection and WithAutoReconnect can not be used together")
+				return errors.New("options WithConnection and WithConnector can not be used together")
 			}
 			client.conn = connection
 			return nil
@@ -19,18 +19,19 @@ func WithConnection(connection Connection) func(party Party) error {
 	}
 }
 
-// WithAutoReconnect makes the Client to auto reconnect
+// WithConnector allows the Client to establish a connection
 // using the Connection build by the connectionFactory.
-func WithAutoReconnect(connectionFactory func() (Connection, error)) func(Party) error {
+// It is also used for auto reconnect if the connection is lost.
+func WithConnector(connectionFactory func() (Connection, error)) func(Party) error {
 	return func(party Party) error {
 		if client, ok := party.(*client); ok {
 			if client.conn != nil {
-				return errors.New("options WithConnection and WithAutoReconnect can not be used together")
+				return errors.New("options WithConnection and WithConnector can not be used together")
 			}
 			client.connectionFactory = connectionFactory
 			return nil
 		}
-		return errors.New("option WithAutoReconnect is client only")
+		return errors.New("option WithConnector is client only")
 	}
 }
 
