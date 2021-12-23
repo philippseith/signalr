@@ -13,7 +13,7 @@ Historically it was tied to ASP.NET Core but the
 This repository contains an implementation of a SignalR server and a SignalR client in go. 
 The implementation is based on the work of David Fowler at https://github.com/davidfowl/signalr-ports.
 Client and server support transport over WebSockets, Server Sent Events and raw TCP.
-Protocol encoding in JSON is fully supported, and there is MessagePack support for basic types.
+Protocol encoding in JSON and MessagePack is fully supported.
 
 - [Install](#install)
 - [Getting Started](#getting-started)
