@@ -120,11 +120,12 @@ func (r *recoverLogger) Log(keyVals ...interface{}) error {
 }
 
 func buildInfoDebugLogger(logger log.Logger, debug bool) (log.Logger, log.Logger) {
-	logger = &recoverLogger{logger: logger}
 	if debug {
 		logger = level.NewFilter(logger, level.AllowDebug())
 	} else {
 		logger = level.NewFilter(logger, level.AllowInfo())
 	}
-	return level.Info(logger), log.With(level.Debug(logger), "caller", log.DefaultCaller)
+	infologger := &recoverLogger{level.Info(logger)}
+	debuglogger := &recoverLogger{log.With(level.Debug(logger), "caller", log.DefaultCaller)}
+	return infologger, debuglogger
 }
