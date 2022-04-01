@@ -10,13 +10,15 @@ type ConnectionBase struct {
 	mx           sync.RWMutex
 	ctx          context.Context
 	connectionID string
+	remoteAddr   string
 }
 
 // NewConnectionBase creates a new ConnectionBase
-func NewConnectionBase(ctx context.Context, connectionID string) *ConnectionBase {
+func NewConnectionBase(ctx context.Context, connectionID string, remoteAddr string) *ConnectionBase {
 	cb := &ConnectionBase{
 		ctx:          ctx,
 		connectionID: connectionID,
+		remoteAddr:   remoteAddr,
 	}
 	return cb
 }
@@ -33,6 +35,13 @@ func (cb *ConnectionBase) ConnectionID() string {
 	cb.mx.RLock()
 	defer cb.mx.RUnlock()
 	return cb.connectionID
+}
+
+// RemoteAddr is the ip of the remote host.
+func (cb *ConnectionBase) RemoteAddr() string {
+	cb.mx.RLock()
+	defer cb.mx.RUnlock()
+	return cb.remoteAddr
 }
 
 // SetConnectionID sets the ConnectionID

@@ -17,7 +17,7 @@ type netConnection struct {
 // NewNetConnection wraps net.Conn into a Connection
 func NewNetConnection(ctx context.Context, conn net.Conn) Connection {
 	netConn := &netConnection{
-		ConnectionBase: *NewConnectionBase(ctx, getConnectionID()),
+		ConnectionBase: *NewConnectionBase(ctx, getConnectionID(), conn.RemoteAddr().String()),
 		conn:           conn,
 	}
 	go func() {

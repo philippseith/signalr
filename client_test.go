@@ -19,6 +19,11 @@ type pipeConnection struct {
 	timeout      time.Duration
 	fail         atomic.Value
 	connectionID string
+	remoteAddr   string
+}
+
+func (pc *pipeConnection) RemoteAddr() string {
+	return pc.remoteAddr
 }
 
 func (pc *pipeConnection) Context() context.Context {
@@ -62,11 +67,13 @@ func newClientServerConnections() (cliConn *pipeConnection, svrConn *pipeConnect
 		reader:       cliReader,
 		writer:       cliWriter,
 		connectionID: "X",
+		remoteAddr:   "127.0.0.1",
 	}
 	svrConn = &pipeConnection{
 		reader:       srvReader,
 		writer:       srvWriter,
 		connectionID: "X",
+		remoteAddr:   "127.0.0.1",
 	}
 	return cliConn, svrConn
 }

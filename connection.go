@@ -12,6 +12,7 @@ type Connection interface {
 	Context() context.Context
 	ConnectionID() string
 	SetConnectionID(id string)
+	RemoteAddr() string
 }
 
 // TransferMode is either TextTransferMode or BinaryTransferMode

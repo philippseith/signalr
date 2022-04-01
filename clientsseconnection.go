@@ -17,7 +17,7 @@ type clientSSEConnection struct {
 	sseWriter io.Writer
 }
 
-func newClientSSEConnection(address string, connectionID string, body io.ReadCloser) (*clientSSEConnection, error) {
+func newClientSSEConnection(address string, connectionID string, remoteAddr string, body io.ReadCloser) (*clientSSEConnection, error) {
 	// Setup request
 	reqURL, err := url.Parse(address)
 	if err != nil {
@@ -30,6 +30,7 @@ func newClientSSEConnection(address string, connectionID string, body io.ReadClo
 		ConnectionBase: ConnectionBase{
 			ctx:          context.Background(),
 			connectionID: connectionID,
+			remoteAddr:   remoteAddr,
 		},
 		reqURL: reqURL.String(),
 	}

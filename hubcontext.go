@@ -17,6 +17,7 @@ type HubContext interface {
 	Groups() GroupManager
 	Items() *sync.Map
 	ConnectionID() string
+	RemoteAddr() string
 	Context() context.Context
 	Abort()
 	Logger() (info StructuredLogger, dbg StructuredLogger)
@@ -45,6 +46,10 @@ func (c *connectionHubContext) Items() *sync.Map {
 
 func (c *connectionHubContext) ConnectionID() string {
 	return c.connection.ConnectionID()
+}
+
+func (c *connectionHubContext) RemoteAddr() string {
+	return c.connection.RemoteAddr()
 }
 
 func (c *connectionHubContext) Context() context.Context {

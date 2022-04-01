@@ -53,6 +53,13 @@ func (h *Hub) ConnectionID() string {
 	return h.context.ConnectionID()
 }
 
+// ConnectionID gets the ID of the current connection
+func (h *Hub) RemoteAddr() string {
+	h.cm.RLock()
+	defer h.cm.RUnlock()
+	return h.context.RemoteAddr()
+}
+
 // Context is the context.Context of the current connection
 func (h *Hub) Context() context.Context {
 	h.cm.RLock()

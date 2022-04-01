@@ -16,6 +16,7 @@ import (
 type testingConnection struct {
 	timeout      time.Duration
 	connectionID string
+	remoteAddr   string
 	srvWriter    io.Writer
 	srvReader    io.Reader
 	cliWriter    io.Writer
@@ -28,6 +29,10 @@ type testingConnection struct {
 	failRead     string
 	failWrite    string
 	failMx       sync.Mutex
+}
+
+func (t *testingConnection) RemoteAddr() string {
+	return t.remoteAddr
 }
 
 func (t *testingConnection) Context() context.Context {

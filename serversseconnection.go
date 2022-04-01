@@ -21,9 +21,9 @@ type serverSSEConnection struct {
 	jobResultChan chan RWJobResult
 }
 
-func newServerSSEConnection(ctx context.Context, connectionID string) (*serverSSEConnection, <-chan []byte, chan RWJobResult, error) {
+func newServerSSEConnection(ctx context.Context, connectionID string, remoteAddr string) (*serverSSEConnection, <-chan []byte, chan RWJobResult, error) {
 	s := serverSSEConnection{
-		ConnectionBase: *NewConnectionBase(ctx, connectionID),
+		ConnectionBase: *NewConnectionBase(ctx, connectionID, remoteAddr),
 		jobChan:        make(chan []byte, 1),
 		jobResultChan:  make(chan RWJobResult, 1),
 	}
