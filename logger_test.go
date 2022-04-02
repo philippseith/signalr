@@ -45,10 +45,26 @@ func testLogger() StructuredLogger {
 }
 
 type panicLogger struct {
+	log log.Logger
 }
 
-func (p panicLogger) Log(...interface{}) error {
+func (p *panicLogger) Log(keyVals ...interface{}) error {
+	_ = p.log.Log(keyVals...)
 	panic("panic as expected")
+}
+
+type testLogWriter struct {
+	p []byte
+	t *testing.T
+}
+
+func (t *testLogWriter) Write(p []byte) (n int, err error) {
+	t.p = append(t.p, p...)
+	if len(p) > 0 && p[len(p)-1] == 10 { // Will not work on Windows, but doesn't matter. This is only to check if the logger output still looks as expected
+		t.t.Log(string(t.p))
+		t.p = nil
+	}
+	return len(p), nil
 }
 
 func Test_PanicLogger(t *testing.T) {
@@ -59,7 +75,7 @@ func Test_PanicLogger(t *testing.T) {
 	}()
 	ctx, cancel := context.WithCancel(context.Background())
 	server, _ := NewServer(ctx, SimpleHubFactory(&simpleHub{}),
-		Logger(panicLogger{}, true),
+		Logger(&panicLogger{log: log.NewLogfmtLogger(&testLogWriter{t: t})}, true),
 		ChanReceiveTimeout(200*time.Millisecond),
 		StreamBufferCapacity(5))
 	// Create both ends of the connection
@@ -67,7 +83,7 @@ func Test_PanicLogger(t *testing.T) {
 	// Start the server
 	go func() { _ = server.Serve(srvConn) }()
 	// Create the Client
-	client, _ := NewClient(ctx, WithConnection(cliConn), Logger(panicLogger{}, true))
+	client, _ := NewClient(ctx, WithConnection(cliConn), Logger(&panicLogger{log: log.NewLogfmtLogger(&testLogWriter{t: t})}, true))
 	// Start it
 	client.Start()
 	// Do something

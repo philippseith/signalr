@@ -116,7 +116,7 @@ func (r *recoverLogger) Log(keyVals ...interface{}) error {
 			fmt.Printf("recovering from panic in logger: %v\n", err)
 		}
 	}()
-	return r.logger.Log(keyVals)
+	return r.logger.Log(keyVals...)
 }
 
 func buildInfoDebugLogger(logger log.Logger, debug bool) (log.Logger, log.Logger) {
@@ -125,7 +125,7 @@ func buildInfoDebugLogger(logger log.Logger, debug bool) (log.Logger, log.Logger
 	} else {
 		logger = level.NewFilter(logger, level.AllowInfo())
 	}
-	infologger := &recoverLogger{level.Info(logger)}
-	debuglogger := &recoverLogger{log.With(level.Debug(logger), "caller", log.DefaultCaller)}
-	return infologger, debuglogger
+	infoLogger := &recoverLogger{level.Info(logger)}
+	debugLogger := log.With(&recoverLogger{level.Debug(logger)}, "caller", log.DefaultCaller)
+	return infoLogger, debugLogger
 }
