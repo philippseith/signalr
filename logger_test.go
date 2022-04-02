@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"io/ioutil"
 	"os"
+	"sync"
 	"testing"
 	"time"
 
@@ -54,11 +55,14 @@ func (p *panicLogger) Log(keyVals ...interface{}) error {
 }
 
 type testLogWriter struct {
-	p []byte
-	t *testing.T
+	mx sync.Mutex
+	p  []byte
+	t  *testing.T
 }
 
 func (t *testLogWriter) Write(p []byte) (n int, err error) {
+	t.mx.Lock()
+	defer t.mx.Unlock()
 	t.p = append(t.p, p...)
 	if len(p) > 0 && p[len(p)-1] == 10 { // Will not work on Windows, but doesn't matter. This is only to check if the logger output still looks as expected
 		t.t.Log(string(t.p))
