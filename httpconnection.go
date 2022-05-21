@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"path"
 
 	"nhooyr.io/websocket"
 )
@@ -55,7 +56,17 @@ func NewHTTPConnection(ctx context.Context, address string, options ...func(*htt
 		httpConn.client = &http.Client{}
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "POST", fmt.Sprintf("%s/negotiate", address), nil)
+	reqURL, err := url.Parse(address)
+	if err != nil {
+		return nil, err
+	}
+
+	negotiateURL := func(u *url.URL) *url.URL {
+		tmp := *u
+		return &tmp
+	}(reqURL)
+	negotiateURL.Path = path.Join(negotiateURL.Path, "negotiate")
+	req, err := http.NewRequestWithContext(ctx, "POST", negotiateURL.String(), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -84,11 +95,6 @@ func NewHTTPConnection(ctx context.Context, address string, options ...func(*htt
 		return nil, err
 	}
 
-	reqURL, err := url.Parse(address)
-	if err != nil {
-		return nil, err
-	}
-
 	q := reqURL.Query()
 	q.Set("id", nr.ConnectionID)
 	reqURL.RawQuery = q.Encode()
@@ -110,6 +116,12 @@ func NewHTTPConnection(ctx context.Context, address string, options ...func(*htt
 		}
 
 		opts := &websocket.DialOptions{}
+
+		client, ok := httpConn.client.(*http.Client)
+		if ok {
+			opts.HTTPClient = client
+		}
+
 		if httpConn.headers != nil {
 			opts.HTTPHeader = httpConn.headers()
 		}
