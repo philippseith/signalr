@@ -61,10 +61,7 @@ func NewHTTPConnection(ctx context.Context, address string, options ...func(*htt
 		return nil, err
 	}
 
-	negotiateURL := func(u *url.URL) *url.URL {
-		tmp := *u
-		return &tmp
-	}(reqURL)
+	negotiateURL := *reqURL
 	negotiateURL.Path = path.Join(negotiateURL.Path, "negotiate")
 	req, err := http.NewRequestWithContext(ctx, "POST", negotiateURL.String(), nil)
 	if err != nil {
