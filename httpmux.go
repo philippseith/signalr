@@ -156,6 +156,7 @@ func (h *httpMux) handleWebsocket(writer http.ResponseWriter, request *http.Requ
 		// don't need to write an error header here as websocket.Accept has already used http.Error
 		return
 	}
+	websocketConn.SetReadLimit(int64(h.server.maximumReceiveMessageSize()))
 	connectionMapKey := request.URL.Query().Get("id")
 	if connectionMapKey == "" {
 		// Support websocket connection without negotiate
