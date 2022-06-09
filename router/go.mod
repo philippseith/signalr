@@ -1,4 +1,4 @@
-module github.com/philippseith/signalr/router
+module github.com/mvdslot/signalr/router
 
 go 1.17
 
