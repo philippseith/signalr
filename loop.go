@@ -137,7 +137,7 @@ func (l *loop) PullStream(method, id string, arguments ...interface{}) <-chan In
 	_, errChan := l.invokeClient.newInvocation(id)
 	upChan := l.streamClient.newUpstreamChannel(id)
 	ch := newInvokeResultChan(l.party.context(), upChan, errChan)
-	if err := l.hubConn.SendStreamInvocation(id, method, arguments, nil); err != nil {
+	if err := l.hubConn.SendStreamInvocation(id, method, arguments); err != nil {
 		// When we get an error here, the loop is closed and the errChan might be already closed
 		// We create a new one to deliver our error
 		ch, _ = createResultChansWithError(l.party.context(), err)
@@ -162,7 +162,7 @@ func (l *loop) PushStreams(method, id string, arguments ...interface{}) (<-chan 
 		}
 	}
 	// Tell the server we are streaming now
-	if err := l.hubConn.SendStreamInvocation(l.GetNewID(), method, invokeArgs, streamIds); err != nil {
+	if err := l.hubConn.SendInvocationWithStreamIds(l.GetNewID(), method, invokeArgs, streamIds); err != nil {
 		l.invokeClient.deleteInvocation(id)
 		return nil, err
 	}
