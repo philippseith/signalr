@@ -147,8 +147,9 @@ func (l *loop) PullStream(method, id string, arguments ...interface{}) <-chan In
 	return ch
 }
 
-func (l *loop) PushStreams(method, id string, arguments ...interface{}) (<-chan error, error) {
-	_, errChan := l.invokeClient.newInvocation(id)
+func (l *loop) PushStreams(method, id string, arguments ...interface{}) (<-chan InvokeResult, error) {
+	resultCh, errCh := l.invokeClient.newInvocation(id)
+	irCh := newInvokeResultChan(l.party.context(), resultCh, errCh)
 	invokeArgs := make([]interface{}, 0)
 	reflectedChannels := make([]reflect.Value, 0)
 	streamIds := make([]string, 0)
@@ -162,7 +163,7 @@ func (l *loop) PushStreams(method, id string, arguments ...interface{}) (<-chan 
 		}
 	}
 	// Tell the server we are streaming now
-	if err := l.hubConn.SendInvocationWithStreamIds(l.GetNewID(), method, invokeArgs, streamIds); err != nil {
+	if err := l.hubConn.SendInvocationWithStreamIds(id, method, invokeArgs, streamIds); err != nil {
 		l.invokeClient.deleteInvocation(id)
 		return nil, err
 	}
@@ -170,7 +171,7 @@ func (l *loop) PushStreams(method, id string, arguments ...interface{}) (<-chan 
 	for i, reflectedChannel := range reflectedChannels {
 		l.streamer.Start(streamIds[i], reflectedChannel)
 	}
-	return errChan, nil
+	return irCh, nil
 }
 
 // GetNewID returns a new, connection-unique id for invocations and streams
@@ -186,16 +187,10 @@ func (l *loop) handleInvocationMessage(invocation invocationMessage) {
 		// Unable to find the method
 		_ = l.info.Log(evt, "getMethod", "error", "missing method", "name", invocation.Target, react, "send completion with error")
 		_ = l.hubConn.Completion(invocation.InvocationID, nil, fmt.Sprintf("Unknown method %s", invocation.Target))
-	} else if in, clientStreaming, err := buildMethodArguments(method, invocation, l.streamClient, l.protocol); err != nil {
+	} else if in, err := buildMethodArguments(method, invocation, l.streamClient, l.protocol); err != nil {
 		// argument build failed
 		_ = l.info.Log(evt, "buildMethodArguments", "error", err, "name", invocation.Target, react, "send completion with error")
 		_ = l.hubConn.Completion(invocation.InvocationID, nil, err.Error())
-	} else if clientStreaming {
-		// let the receiving method run independently
-		go func() {
-			defer l.recoverInvocationPanic(invocation)
-			method.Call(in)
-		}()
 	} else {
 		// Stream invocation is only allowed when the method has only one return value
 		// We allow no channel return values, because a client can receive as stream with only one item
@@ -273,7 +268,7 @@ func (l *loop) handleCompletionMessage(message completionMessage) error {
 	} else if l.invokeClient.handlesInvocationID(message.InvocationID) {
 		err = l.invokeClient.receiveCompletionItem(message)
 	} else {
-		err = fmt.Errorf("unkown invocationID %v", message.InvocationID)
+		err = fmt.Errorf("unknown invocationID %v", message.InvocationID)
 	}
 	if err != nil {
 		_ = l.info.Log(evt, msgRecv, "error", err, msg, fmtMsg(message), react, "close connection")
@@ -333,9 +328,9 @@ func (l *loop) recoverInvocationPanic(invocation invocationMessage) {
 }
 
 func buildMethodArguments(method reflect.Value, invocation invocationMessage,
-	streamClient *streamClient, protocol hubProtocol) (arguments []reflect.Value, clientStreaming bool, err error) {
+	streamClient *streamClient, protocol hubProtocol) (arguments []reflect.Value, err error) {
 	if len(invocation.StreamIds)+len(invocation.Arguments) != method.Type().NumIn() {
-		return nil, false, fmt.Errorf("parameter mismatch calling method %v", invocation.Target)
+		return nil, fmt.Errorf("parameter mismatch calling method %v", invocation.Target)
 	}
 	arguments = make([]reflect.Value, method.Type().NumIn())
 	chanCount := 0
@@ -344,7 +339,7 @@ func buildMethodArguments(method reflect.Value, invocation invocationMessage,
 		// Is it a channel for client streaming?
 		if arg, clientStreaming, err := streamClient.buildChannelArgument(invocation, t, chanCount); err != nil {
 			// it is, but channel count in invocation and method mismatch
-			return nil, false, err
+			return nil, err
 		} else if clientStreaming {
 			// it is
 			chanCount++
@@ -353,15 +348,15 @@ func buildMethodArguments(method reflect.Value, invocation invocationMessage,
 			// it is not, so do the normal thing
 			arg := reflect.New(t)
 			if err := protocol.UnmarshalArgument(invocation.Arguments[i-chanCount], arg.Interface()); err != nil {
-				return arguments, chanCount > 0, err
+				return arguments, err
 			}
 			arguments[i] = arg.Elem()
 		}
 	}
 	if len(invocation.StreamIds) != chanCount {
-		return arguments, chanCount > 0, fmt.Errorf("to many StreamIds for channel parameters of method %v", invocation.Target)
+		return arguments, fmt.Errorf("to many StreamIds for channel parameters of method %v", invocation.Target)
 	}
-	return arguments, chanCount > 0, nil
+	return arguments, nil
 }
 
 func getMethod(target interface{}, name string) (reflect.Value, bool) {

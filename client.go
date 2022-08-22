@@ -104,7 +104,7 @@ type Client interface {
 	Invoke(method string, arguments ...interface{}) <-chan InvokeResult
 	Send(method string, arguments ...interface{}) <-chan error
 	PullStream(method string, arguments ...interface{}) <-chan InvokeResult
-	PushStreams(method string, arguments ...interface{}) <-chan error
+	PushStreams(method string, arguments ...interface{}) <-chan InvokeResult
 }
 
 var ErrUnableToConnect = errors.New("neither WithConnection nor WithConnector option was given")
@@ -462,28 +462,28 @@ func (c *client) PullStream(method string, arguments ...interface{}) <-chan Invo
 	return irCh
 }
 
-func (c *client) PushStreams(method string, arguments ...interface{}) <-chan error {
-	errCh := make(chan error, 1)
+func (c *client) PushStreams(method string, arguments ...interface{}) <-chan InvokeResult {
+	irCh := make(chan InvokeResult, 1)
 	go func() {
 		if err := <-c.waitForConnected(); err != nil {
-			errCh <- err
-			close(errCh)
+			irCh <- InvokeResult{Error: err}
+			close(irCh)
 			return
 		}
 		pushCh, err := c.loop.PushStreams(method, c.loop.GetNewID(), arguments...)
 		if err != nil {
-			errCh <- err
-			close(errCh)
+			irCh <- InvokeResult{Error: err}
+			close(irCh)
 			return
 		}
 		go func() {
-			for err := range pushCh {
-				errCh <- err
+			for ir := range pushCh {
+				irCh <- ir
 			}
-			close(errCh)
+			close(irCh)
 		}()
 	}()
-	return errCh
+	return irCh
 }
 
 func (c *client) waitForConnected() <-chan error {
