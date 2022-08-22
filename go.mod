@@ -1,6 +1,6 @@
 module github.com/philippseith/signalr
 
-go 1.19
+go 1.16
 
 require (
 	github.com/cenkalti/backoff/v4 v4.1.2
@@ -16,17 +16,9 @@ require (
 )
 
 require (
-	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/fsnotify/fsnotify v1.5.1 // indirect
-	github.com/go-logfmt/logfmt v0.5.1 // indirect
 	github.com/klauspost/compress v1.13.6 // indirect
-	github.com/nxadm/tail v1.4.4 // indirect
-	github.com/pmezard/go-difflib v1.0.0 // indirect
-	github.com/vmihailenco/tagparser/v2 v2.0.0 // indirect
 	golang.org/x/net v0.0.0-20211111160137-58aab5ef257a // indirect
 	golang.org/x/sys v0.0.0-20211112164355-7580c6e521dc // indirect
 	golang.org/x/text v0.3.7 // indirect
-	gopkg.in/tomb.v1 v1.0.0-20141024135613-dd632973f1e7 // indirect
-	gopkg.in/yaml.v2 v2.4.0 // indirect
-	gopkg.in/yaml.v3 v3.0.0-20200313102051-9f266ea9e77c // indirect
 )
