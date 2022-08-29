@@ -114,11 +114,6 @@ func NewHTTPConnection(ctx context.Context, address string, options ...func(*htt
 
 		opts := &websocket.DialOptions{}
 
-		client, ok := httpConn.client.(*http.Client)
-		if ok {
-			opts.HTTPClient = client
-		}
-
 		if httpConn.headers != nil {
 			opts.HTTPHeader = httpConn.headers()
 		}
