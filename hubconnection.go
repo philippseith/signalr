@@ -15,7 +15,8 @@ type hubConnection interface {
 	ConnectionID() string
 	Receive() <-chan receiveResult
 	SendInvocation(id string, target string, args []interface{}) error
-	SendStreamInvocation(id string, target string, args []interface{}, streamIds []string) error
+	SendStreamInvocation(id string, target string, args []interface{}) error
+	SendInvocationWithStreamIds(id string, target string, args []interface{}, streamIds []string) error
 	StreamItem(id string, item interface{}) error
 	Completion(id string, result interface{}, error string) error
 	Close(error string, allowReconnect bool) error
@@ -173,9 +174,22 @@ func (c *defaultHubConnection) SendInvocation(id string, target string, args []i
 	return c.writeMessage(invocationMessage)
 }
 
-func (c *defaultHubConnection) SendStreamInvocation(id string, target string, args []interface{}, streamIds []string) error {
+func (c *defaultHubConnection) SendStreamInvocation(id string, target string, args []interface{}) error {
+	if args == nil {
+		args = make([]interface{}, 0)
+	}
 	var invocationMessage = invocationMessage{
 		Type:         4,
+		InvocationID: id,
+		Target:       target,
+		Arguments:    args,
+	}
+	return c.writeMessage(invocationMessage)
+}
+
+func (c *defaultHubConnection) SendInvocationWithStreamIds(id string, target string, args []interface{}, streamIds []string) error {
+	var invocationMessage = invocationMessage{
+		Type:         1,
 		InvocationID: id,
 		Target:       target,
 		Arguments:    args,

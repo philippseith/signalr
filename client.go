@@ -21,13 +21,21 @@ import (
 type ClientState int
 
 // Client states
-//   ClientCreated
+//
+//	ClientCreated
+//
 // The Client has been created and is not started yet.
-//   ClientConnecting
+//
+//	ClientConnecting
+//
 // The Client has been started and is negotiating the connection.
-//   ClientConnected
+//
+//	ClientConnected
+//
 // The Client has successfully negotiated the connection and can send and receive messages.
-//   ClientClosed
+//
+//	ClientClosed
+//
 // The Client is not able to send and receive messages anymore and has to be started again to be able to.
 const (
 	ClientCreated ClientState = iota
@@ -37,35 +45,54 @@ const (
 )
 
 // Client is the signalR connection used on the client side.
-//   Start()
+//
+//	Start()
+//
 // Start starts the client loop. After starting the client, the interaction with a server can be started.
 // The client loop will run until the server closes the connection. If WithConnector is used, Start will
 // start a new loop. To end the loop from the client side, the context passed to NewClient has to be canceled.
-//  State() ClientState
+//
+//	State() ClientState
+//
 // State returns the current client state.
 // When WithConnector is set and the server allows reconnection, the client switches to ClientConnecting
 // and tries to reach ClientConnected after the last connection has ended.
-//  ObserveStateChanged(chan ClientState) context.CancelFunc
+//
+//	ObserveStateChanged(chan ClientState) context.CancelFunc
+//
 // ObserveStateChanged pushes a new item != nil to the channel when State has changed.
 // The returned CancelFunc ends the observation and closes the channel.
-//  Err() error
+//
+//	Err() error
+//
 // Err returns the last error occurred while running the client.
 // When the client goes to ClientConnecting, Err is set to nil.
-//  WaitForState(ctx context.Context, waitFor ClientState) <-chan error
+//
+//	WaitForState(ctx context.Context, waitFor ClientState) <-chan error
+//
 // WaitForState returns a channel for waiting on the Client to reach a specific ClientState.
 // The channel either returns an error if ctx or the client has been canceled.
 // or nil if the ClientState waitFor was reached.
-//  Invoke(method string, arguments ...interface{}) <-chan InvokeResult
+//
+//	Invoke(method string, arguments ...interface{}) <-chan InvokeResult
+//
 // Invoke invokes a method on the server and returns a channel wich will return the InvokeResult.
 // When failing, InvokeResult.Error contains the client side error.
-//  Send(method string, arguments ...interface{}) <-chan error
+//
+//	Send(method string, arguments ...interface{}) <-chan error
+//
 // Send invokes a method on the server but does not return a result from the server but only a channel,
 // which might contain a client side error occurred while sending.
-//   PullStream(method string, arguments ...interface{}) <-chan InvokeResult
+//
+//	PullStream(method string, arguments ...interface{}) <-chan InvokeResult
+//
 // PullStream invokes a streaming method on the server and returns a channel which delivers the stream items.
 // For more info about Streaming see https://github.com/dotnet/aspnetcore/blob/main/src/SignalR/docs/specs/HubProtocol.md#streaming
-//   PushStreams(method string, arguments ...interface{}) <-chan error
+//
+//	PushStreams(method string, arguments ...interface{}) <-chan error
+//
 // PushStreams pushes all items received from its arguments of type channel to the server (Upload Streaming).
+// PushStreams does not support server methods that return a channel.
 // For more info about Upload Streaming see https://github.com/dotnet/aspnetcore/blob/main/src/SignalR/docs/specs/HubProtocol.md#upload-streaming
 type Client interface {
 	Party
@@ -77,7 +104,7 @@ type Client interface {
 	Invoke(method string, arguments ...interface{}) <-chan InvokeResult
 	Send(method string, arguments ...interface{}) <-chan error
 	PullStream(method string, arguments ...interface{}) <-chan InvokeResult
-	PushStreams(method string, arguments ...interface{}) <-chan error
+	PushStreams(method string, arguments ...interface{}) <-chan InvokeResult
 }
 
 var ErrUnableToConnect = errors.New("neither WithConnection nor WithConnector option was given")
@@ -435,28 +462,28 @@ func (c *client) PullStream(method string, arguments ...interface{}) <-chan Invo
 	return irCh
 }
 
-func (c *client) PushStreams(method string, arguments ...interface{}) <-chan error {
-	errCh := make(chan error, 1)
+func (c *client) PushStreams(method string, arguments ...interface{}) <-chan InvokeResult {
+	irCh := make(chan InvokeResult, 1)
 	go func() {
 		if err := <-c.waitForConnected(); err != nil {
-			errCh <- err
-			close(errCh)
+			irCh <- InvokeResult{Error: err}
+			close(irCh)
 			return
 		}
 		pushCh, err := c.loop.PushStreams(method, c.loop.GetNewID(), arguments...)
 		if err != nil {
-			errCh <- err
-			close(errCh)
+			irCh <- InvokeResult{Error: err}
+			close(irCh)
 			return
 		}
 		go func() {
-			for err := range pushCh {
-				errCh <- err
+			for ir := range pushCh {
+				irCh <- ir
 			}
-			close(errCh)
+			close(irCh)
 		}()
 	}()
-	return errCh
+	return irCh
 }
 
 func (c *client) waitForConnected() <-chan error {

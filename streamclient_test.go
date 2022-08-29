@@ -381,7 +381,7 @@ var _ = Describe("ClientStreaming", func() {
 				Expect(err).NotTo(HaveOccurred())
 				conn := newTestingConnectionForServer()
 				go func() { _ = server.Serve(conn) }()
-				conn.ClientSend(`{"type":4,"invocationId": "nnn","target":"uploadstreamsmoke","arguments":[5.0],"streamIds":["ff2","ggg"]}`)
+				conn.ClientSend(`{"type":1,"invocationId": "nnn","target":"uploadstreamsmoke","arguments":[5.0],"streamIds":["ff2","ggg"]}`)
 				<-hub.ch
 				<-conn.received
 				// Send invalid stream item message with missing id and item
@@ -402,7 +402,7 @@ var _ = Describe("ClientStreaming", func() {
 				Expect(err).NotTo(HaveOccurred())
 				conn := newTestingConnectionForServer()
 				go func() { _ = server.Serve(conn) }()
-				conn.ClientSend(`{"type":4,"invocationId": "nnn","target":"uploadstreamsmoke","arguments":[5.0],"streamIds":["ff3","ggg"]}`)
+				conn.ClientSend(`{"type":1,"invocationId": "nnn","target":"uploadstreamsmoke","arguments":[5.0],"streamIds":["ff3","ggg"]}`)
 				<-hub.ch
 				<-conn.received
 				// Send invalid stream item message with missing item
@@ -423,7 +423,7 @@ var _ = Describe("ClientStreaming", func() {
 				Expect(err).NotTo(HaveOccurred())
 				conn := newTestingConnectionForServer()
 				go func() { _ = server.Serve(conn) }()
-				conn.ClientSend(`{"type":4,"invocationId": "nnn","target":"uploadstreamsmoke","arguments":[5.0],"streamIds":["ff1","ggg"]}`)
+				conn.ClientSend(`{"type":1,"invocationId": "nnn","target":"uploadstreamsmoke","arguments":[5.0],"streamIds":["ff1","ggg"]}`)
 				<-hub.ch
 				<-conn.received
 				// Send invalid stream item message
@@ -444,7 +444,7 @@ var _ = Describe("ClientStreaming", func() {
 				Expect(err).NotTo(HaveOccurred())
 				conn := newTestingConnectionForServer()
 				go func() { _ = server.Serve(conn) }()
-				conn.ClientSend(`{"type":4,"invocationId": "nnn","target":"uploadstreamsmoke","arguments":[5.0],"streamIds":["ff4","ggg"]}`)
+				conn.ClientSend(`{"type":1,"invocationId": "nnn","target":"uploadstreamsmoke","arguments":[5.0],"streamIds":["ff4","ggg"]}`)
 				<-hub.ch
 				<-conn.received
 				// Send invalid stream item message with invalid invocation id
@@ -468,7 +468,7 @@ var _ = Describe("ClientStreaming", func() {
 				Expect(err).NotTo(HaveOccurred())
 				conn := newTestingConnectionForServer()
 				go func() { _ = server.Serve(conn) }()
-				conn.ClientSend(`{"type":4,"invocationId": "nnn","target":"uploadstreamsmoke","arguments":[5.0],"streamIds":["ff5","ggg"]}`)
+				conn.ClientSend(`{"type":1,"invocationId": "nnn","target":"uploadstreamsmoke","arguments":[5.0],"streamIds":["ff5","ggg"]}`)
 				<-hub.ch
 				<-conn.received
 				// Send invalid completion message with missing id
@@ -490,7 +490,7 @@ var _ = Describe("ClientStreaming", func() {
 				Expect(err).NotTo(HaveOccurred())
 				conn := newTestingConnectionForServer()
 				go func() { _ = server.Serve(conn) }()
-				conn.ClientSend(`{"type":4,"invocationId":"nnn","target":"uploadstreamsmoke","arguments":[5.0],"streamIds":["ff6","ggg"]}`)
+				conn.ClientSend(`{"type":1,"invocationId":"nnn","target":"uploadstreamsmoke","arguments":[5.0],"streamIds":["ff6","ggg"]}`)
 				<-hub.ch
 				<-conn.received
 				// Send invalid completion message with unknown id
@@ -549,7 +549,7 @@ var _ = Describe("ClientStreaming", func() {
 				Expect(err).NotTo(HaveOccurred())
 				conn := newTestingConnectionForServer()
 				go func() { _ = server.Serve(conn) }()
-				conn.ClientSend(`{"type":4,"invocationId":"nnn","target":"uploadstreamsmoke","arguments":[5.0],"streamIds":["fff","ggg"]}`)
+				conn.ClientSend(`{"type":1,"invocationId":"nnn","target":"uploadstreamsmoke","arguments":[5.0],"streamIds":["fff","ggg"]}`)
 				<-hub.ch
 				<-conn.received
 				// Send stream item
@@ -575,7 +575,7 @@ var _ = Describe("ClientStreaming", func() {
 				Expect(err).NotTo(HaveOccurred())
 				conn := newTestingConnectionForServer()
 				go func() { _ = server.Serve(conn) }()
-				conn.ClientSend(`{"type":4,"invocationId":"nnn","target":"uploaderror","streamIds":["eee"]}`)
+				conn.ClientSend(`{"type":1,"invocationId":"nnn","target":"uploaderror","streamIds":["eee"]}`)
 				<-hub.ch
 				<-conn.received
 				// Send stream item
@@ -597,7 +597,7 @@ var _ = Describe("ClientStreaming", func() {
 				Expect(err).NotTo(HaveOccurred())
 				conn := newTestingConnectionForServer()
 				go func() { _ = server.Serve(conn) }()
-				conn.ClientSend(`{"type":4,"invocationId":"nnn","target":"uploaderrorarray","streamIds":["aeae"]}`)
+				conn.ClientSend(`{"type":1,"invocationId":"nnn","target":"uploaderrorarray","streamIds":["aeae"]}`)
 				<-hub.ch
 				<-conn.received
 				// Send stream item
