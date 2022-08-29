@@ -73,9 +73,8 @@ func newClientServerConnections() (cliConn *pipeConnection, svrConn *pipeConnect
 
 type simpleHub struct {
 	Hub
-	receiveStreamArg        string
-	receiveStreamChanValues []int
-	receiveStreamDone       chan struct{}
+	receiveStreamArg  string
+	receiveStreamDone chan struct{}
 }
 
 func (s *simpleHub) InvokeMe(arg1 string, arg2 int) string {
@@ -98,15 +97,14 @@ func (s *simpleHub) ReadStream(i int) chan string {
 	return ch
 }
 
-func (s *simpleHub) ReceiveStream(arg string, ch <-chan int) {
+func (s *simpleHub) ReceiveStream(arg string, ch <-chan int) int {
 	s.receiveStreamArg = arg
-	s.receiveStreamChanValues = make([]int, 0)
-	go func(ch <-chan int, done chan struct{}) {
-		for v := range ch {
-			s.receiveStreamChanValues = append(s.receiveStreamChanValues, v)
-		}
-		done <- struct{}{}
-	}(ch, s.receiveStreamDone)
+	receiveStreamChanValues := make([]int, 0)
+	for v := range ch {
+		receiveStreamChanValues = append(receiveStreamChanValues, v)
+	}
+	s.receiveStreamDone <- struct{}{}
+	return 100
 }
 
 func (s *simpleHub) Abort() {
@@ -339,7 +337,7 @@ var _ = Describe("Client", func() {
 
 		It("should push a stream to the server", func(done Done) {
 			ch := make(chan int, 1)
-			_ = client.PushStreams("ReceiveStream", "test", ch)
+			r := client.PushStreams("ReceiveStream", "test", ch)
 			go func(ch chan int) {
 				for i := 1; i < 5; i++ {
 					ch <- i
@@ -347,6 +345,9 @@ var _ = Describe("Client", func() {
 				close(ch)
 			}(ch)
 			<-hub.receiveStreamDone
+			ir := <-r
+			Expect(ir.Error).To(BeNil())
+			Expect(ir.Value).To(Equal(float64(100)))
 			Expect(hub.receiveStreamArg).To(Equal("test"))
 			cancelClient()
 			close(done)
@@ -355,8 +356,8 @@ var _ = Describe("Client", func() {
 		It("should return an error when the connection fails", func(done Done) {
 			cliConn.fail.Store(errors.New("fail"))
 			ch := make(chan int, 1)
-			err := <-client.PushStreams("ReceiveStream", "test", ch)
-			Expect(err).To(HaveOccurred())
+			ir := <-client.PushStreams("ReceiveStream", "test", ch)
+			Expect(ir.Error).To(HaveOccurred())
 			cancelClient()
 			close(done)
 		}, 1.0)

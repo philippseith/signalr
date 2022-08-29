@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"strings"
 	"sync"
@@ -51,7 +50,7 @@ func (s *serverSSEConnection) consumeRequest(request *http.Request) int {
 	defer func() {
 		_ = request.Body.Close()
 	}()
-	body, err := ioutil.ReadAll(request.Body)
+	body, err := io.ReadAll(request.Body)
 	if err != nil {
 		return http.StatusBadRequest // 400
 	} else if _, err := s.postWriter.Write(body); err != nil {

@@ -3,7 +3,7 @@ package signalr
 import (
 	"context"
 	"encoding/json"
-	"io/ioutil"
+	"io"
 	"os"
 	"sync"
 	"testing"
@@ -29,14 +29,14 @@ func testLoggerOption() func(Party) error {
 func testLogger() StructuredLogger {
 	if tLog == nil {
 		lConf = loggerConfig{Enabled: false, Debug: false}
-		b, err := ioutil.ReadFile("testLogConf.json")
+		b, err := os.ReadFile("testLogConf.json")
 		if err == nil {
 			err = json.Unmarshal(b, &lConf)
 			if err != nil {
 				lConf = loggerConfig{Enabled: false, Debug: false}
 			}
 		}
-		writer := ioutil.Discard
+		writer := io.Discard
 		if lConf.Enabled {
 			writer = os.Stderr
 		}
