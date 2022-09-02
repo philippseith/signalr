@@ -182,31 +182,46 @@ func (l *loop) GetNewID() string {
 
 func (l *loop) handleInvocationMessage(invocation invocationMessage) {
 	_ = l.dbg.Log(evt, msgRecv, msg, fmtMsg(invocation))
+	// Hub proxy
+	if l.party.hubProxy() != nil &&
+		l.party.hubProxy().CanInvoke(invocation) {
+		go func() {
+			defer l.recoverInvocationPanic(invocation)
+			l.party.hubProxy().Invoke(l, invocation)
+		}()
+		return
+	}
 	// Transient hub, dispatch invocation here
-	if method, ok := getMethod(l.party.invocationTarget(l.hubConn), invocation.Target); !ok {
+	var method reflect.Value
+	var ok bool
+	if method, ok = getMethod(l.party.invocationTarget(l.hubConn), invocation.Target); !ok {
 		// Unable to find the method
 		_ = l.info.Log(evt, "getMethod", "error", "missing method", "name", invocation.Target, react, "send completion with error")
 		_ = l.hubConn.Completion(invocation.InvocationID, nil, fmt.Sprintf("Unknown method %s", invocation.Target))
-	} else if in, err := buildMethodArguments(method, invocation, l.streamClient, l.protocol); err != nil {
+		return
+	}
+	var in []reflect.Value
+	var err error
+	if in, err = buildMethodArguments(method, invocation, l.streamClient, l.protocol); err != nil {
 		// argument build failed
 		_ = l.info.Log(evt, "buildMethodArguments", "error", err, "name", invocation.Target, react, "send completion with error")
 		_ = l.hubConn.Completion(invocation.InvocationID, nil, err.Error())
+		return
+	}
+	// Stream invocation is only allowed when the method has only one return value
+	// We allow no channel return values, because a client can receive as stream with only one item
+	if invocation.Type == 4 && method.Type().NumOut() != 1 {
+		_ = l.hubConn.Completion(invocation.InvocationID, nil,
+			fmt.Sprintf("Stream invocation of method %s which has not return value kind channel", invocation.Target))
 	} else {
-		// Stream invocation is only allowed when the method has only one return value
-		// We allow no channel return values, because a client can receive as stream with only one item
-		if invocation.Type == 4 && method.Type().NumOut() != 1 {
-			_ = l.hubConn.Completion(invocation.InvocationID, nil,
-				fmt.Sprintf("Stream invocation of method %s which has not return value kind channel", invocation.Target))
-		} else {
-			// hub method might take a long time
-			go func() {
-				result := func() []reflect.Value {
-					defer l.recoverInvocationPanic(invocation)
-					return method.Call(in)
-				}()
-				l.returnInvocationResult(invocation, result)
+		// hub method might take a long time
+		go func() {
+			result := func() []reflect.Value {
+				defer l.recoverInvocationPanic(invocation)
+				return method.Call(in)
 			}()
-		}
+			l.returnInvocationResult(invocation, result)
+		}()
 	}
 }
 
