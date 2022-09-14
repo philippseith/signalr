@@ -68,7 +68,7 @@ Servers for arbitrary connection types can be created with NewServer().
 To serve a connection, call server.Serve(connection) in a goroutine. Serve ends when the connection is closed or the
 servers context is canceled.
 
-	// Serving over TCP, accepting client who use MessagePack or JSON
+	// Serving over TCP, accepting client which use MessagePack or JSON
 	addr, _ := net.ResolveTCPAddr("tcp", "localhost:6502")
 	listener, _ := net.ListenTCP("tcp", addr)
 	tcpConn, _ := listener.Accept()
