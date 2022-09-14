@@ -15,14 +15,29 @@ that supports io.Reader and io.Writer.
 
 A Client can be used in client side code to access server methods. From an existing connection, it can be created with NewClient().
 
-	  // NewClient with raw TCP connection and MessagePack encoding
-	  conn, err := net.Dial("tcp", "example.com:6502")
-	  client := NewClient(ctx,
-				WithConnection(NewNetConnection(ctx, conn)),
-				TransferFormat("Binary),
-				WithReceiver(receiver))
+		// NewClient with raw TCP connection and MessagePack encoding
+		conn, err := net.Dial("tcp", "example.com:6502")
+		client := NewClient(ctx,
+			WithConnection(NewNetConnection(ctx, conn)),
+			TransferFormat("Binary),
+			WithReceiver(receiver))
 
-	  client.Start()
+		client.Start()
+
+		// Now call a simple server method
+	    result := <-clientConn.Invoke("Add", 1, 2)
+	    if result.Error != nil {
+			return result.Error
+		}
+		fmt.Println(result.Value)
+
+	    // or pull a stream from the server
+		for result = range clientConn.PullStream("FromTo", 7, 13) {
+			if result.Error != nil {
+		        return result.Error
+			}
+			fmt.Println(result.Value)
+		}
 
 A special case is NewHTTPClient(), which creates a Client from a server address and negotiates with the server
 which kind of connection (Websockets, Server-Sent Events) will be used.
@@ -59,7 +74,7 @@ servers context is canceled.
 	tcpConn, _ := listener.Accept()
 	go server.Serve(NewNetConnection(conn))
 
-To server a HTTP connection, use server.MapHTTP(), which connects the server with a path in an http.ServeMux.
+To server an HTTP connection, use server.MapHTTP(), which connects the server with a path in an http.ServeMux.
 The server then automatically negotiates which kind of connection (Websockets, Server-Sent Events) will be used.
 
 	// build a signalr.Server using your hub
@@ -73,7 +88,7 @@ The server then automatically negotiates which kind of connection (Websockets, S
 	// create a new http.ServerMux to handle your app's http requests
 	router := http.NewServeMux()
 
-	// ask the signalr server to map it's server
+	// ask the signalr server to map its server
 	// api routes to your custom baseurl
 	server.MapHTTP(signalr.WithHTTPServeMux(router), "/chat")
 
