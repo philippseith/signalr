@@ -98,7 +98,7 @@ type Client interface {
 	Party
 	Start()
 	State() ClientState
-	ObserveStateChanged(chan ClientState) context.CancelFunc
+	ObserveStateChanged(chan<- ClientState) context.CancelFunc
 	Err() error
 	WaitForState(ctx context.Context, waitFor ClientState) <-chan error
 	Invoke(method string, arguments ...interface{}) <-chan InvokeResult
@@ -115,7 +115,7 @@ func NewClient(ctx context.Context, options ...func(Party) error) (Client, error
 	info, dbg := buildInfoDebugLogger(log.NewLogfmtLogger(os.Stderr), true)
 	c := &client{
 		state:            ClientCreated,
-		stateChangeChans: make([]chan ClientState, 0),
+		stateChangeChans: make([]chan<- ClientState, 0),
 		format:           "json",
 		partyBase:        newPartyBase(ctx, info, dbg),
 		lastID:           -1,
@@ -145,7 +145,7 @@ type client struct {
 	conn              Connection
 	connectionFactory func() (Connection, error)
 	state             ClientState
-	stateChangeChans  []chan ClientState
+	stateChangeChans  []chan<- ClientState
 	err               error
 	format            string
 	loop              *loop
@@ -289,7 +289,7 @@ func (c *client) setState(state ClientState) {
 	_ = c.dbg.Log("state", state)
 
 	for _, ch := range c.stateChangeChans {
-		go func(ch chan ClientState, state ClientState) {
+		go func(ch chan<- ClientState, state ClientState) {
 			c.mx.Lock()
 			defer c.mx.Unlock()
 
@@ -305,7 +305,9 @@ func (c *client) setState(state ClientState) {
 	}
 }
 
-func (c *client) ObserveStateChanged(ch chan ClientState) context.CancelFunc {
+// ObserveStateChanged pushes the new client state to passed chan.
+// If the returned cancelFunc is called the chan is closed.
+func (c *client) ObserveStateChanged(ch chan<- ClientState) context.CancelFunc {
 	c.mx.Lock()
 	defer c.mx.Unlock()
 
@@ -316,7 +318,7 @@ func (c *client) ObserveStateChanged(ch chan ClientState) context.CancelFunc {
 	}
 }
 
-func (c *client) cancelObserveStateChanged(ch chan ClientState) {
+func (c *client) cancelObserveStateChanged(ch chan<- ClientState) {
 	c.mx.Lock()
 	defer c.mx.Unlock()
 	for i, cch := range c.stateChangeChans {
