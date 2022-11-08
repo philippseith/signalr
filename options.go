@@ -58,13 +58,13 @@ func StreamBufferCapacity(capacity uint) func(Party) error {
 }
 
 // MaximumReceiveMessageSize is the maximum size of a single incoming hub message.
-// Default is 32KB
-func MaximumReceiveMessageSize(size uint) func(Party) error {
+// Default is 32768 bytes (32KB)
+func MaximumReceiveMessageSize(sizeOnBytes uint) func(Party) error {
 	return func(p Party) error {
-		if size == 0 {
+		if sizeOnBytes == 0 {
 			return errors.New("unsupported maximumReceiveMessageSize 0")
 		}
-		p.setMaximumReceiveMessageSize(size)
+		p.setMaximumReceiveMessageSize(sizeOnBytes)
 		return nil
 	}
 }
