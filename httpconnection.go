@@ -117,6 +117,12 @@ func NewHTTPConnection(ctx context.Context, address string, options ...func(*htt
 
 		if httpConn.headers != nil {
 			opts.HTTPHeader = httpConn.headers()
+		} else {
+			opts.HTTPHeader = http.Header{}
+		}
+
+		for _, cookie := range resp.Cookies() {
+			opts.HTTPHeader.Add("Cookie", cookie.String())
 		}
 
 		ws, _, err := websocket.Dial(ctx, wsURL.String(), opts)
