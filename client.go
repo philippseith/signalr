@@ -136,6 +136,10 @@ func NewClient(ctx context.Context, options ...func(Party) error) (Client, error
 	if c.conn == nil && c.connectionFactory == nil {
 		return nil, ErrUnableToConnect
 	}
+	// Pass maximum receive message size to the websocket
+	if wsConn, ok := c.conn.(*webSocketConnection); ok {
+		wsConn.conn.SetReadLimit(int64(c.maximumReceiveMessageSize()))
+	}
 	return c, nil
 }
 
