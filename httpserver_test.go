@@ -5,7 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -99,6 +99,7 @@ var _ = Describe("HTTP server", func() {
 					ctx, cancel := context.WithCancel(context.Background())
 					server, err := NewServer(ctx,
 						SimpleHubFactory(&addHub{}), HTTPTransports(transport[0]),
+						MaximumReceiveMessageSize(50000),
 						Logger(logger, true))
 					Expect(err).NotTo(HaveOccurred())
 					router := http.NewServeMux()
@@ -112,6 +113,7 @@ var _ = Describe("HTTP server", func() {
 					Expect(err).NotTo(HaveOccurred())
 					client, err := NewClient(ctx,
 						WithConnection(conn),
+						MaximumReceiveMessageSize(60000),
 						Logger(logger, true),
 						TransferFormat(transport[1]))
 					Expect(err).NotTo(HaveOccurred())
@@ -190,7 +192,7 @@ func negotiateWebSocketTestServer(port int) map[string]interface{} {
 		_ = resp.Body.Close()
 	}()
 	var body []byte
-	body, err = ioutil.ReadAll(resp.Body)
+	body, err = io.ReadAll(resp.Body)
 	Expect(err).To(BeNil())
 	response := make(map[string]interface{})
 	err = json.Unmarshal(body, &response)

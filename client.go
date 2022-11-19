@@ -266,6 +266,10 @@ func (c *client) setupConnectionAndProtocol() (hubProtocol, error) {
 				return nil, err
 			}
 		}
+		// Pass maximum receive message size to a potential websocket connection
+		if wsConn, ok := c.conn.(*webSocketConnection); ok {
+			wsConn.conn.SetReadLimit(int64(c.maximumReceiveMessageSize()))
+		}
 		protocol, err := c.processHandshake()
 		if err != nil {
 			return nil, err
