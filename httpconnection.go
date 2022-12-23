@@ -130,7 +130,7 @@ func NewHTTPConnection(ctx context.Context, address string, options ...func(*htt
 			return nil, err
 		}
 
-		conn = newWebSocketConnection(context.Background(), nr.ConnectionID, ws)
+		conn = newWebSocketConnection(ctx, nr.ConnectionID, ws)
 
 	case nr.getTransferFormats("ServerSentEvents") != nil:
 		req, err := http.NewRequest("GET", reqURL.String(), nil)
