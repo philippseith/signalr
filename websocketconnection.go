@@ -38,6 +38,7 @@ func (w *webSocketConnection) Write(p []byte) (n int, err error) {
 		func() {})
 	if err != nil {
 		err = fmt.Errorf("%T: %w", w, err)
+		_ = w.conn.Close(1000, err.Error())
 	}
 	return n, err
 }
@@ -54,6 +55,7 @@ func (w *webSocketConnection) Read(p []byte) (n int, err error) {
 		func() {})
 	if err != nil {
 		err = fmt.Errorf("%T: %w", w, err)
+		_ = w.conn.Close(1000, err.Error())
 	}
 	return n, err
 }
