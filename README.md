@@ -256,7 +256,7 @@ if err != nil {
     return err
 }
 // Create the client and set a receiver for callbacks from the server
-client, err := signalr.NewClient(ctx, conn,
+client, err := signalr.NewClient(ctx,
 	signalr.WithConnection(conn),
 	signalr.WithReceiver(receiver))
 if err != nil {
