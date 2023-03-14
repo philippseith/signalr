@@ -35,6 +35,7 @@ func newClientSSEConnection(address string, connectionID string, body io.ReadClo
 	}
 	c.sseReader, c.sseWriter = io.Pipe()
 	go func() {
+		defer func() { closeResponseBody(body) }()
 		p := make([]byte, 1<<15)
 	loop:
 		for {
@@ -60,7 +61,6 @@ func newClientSSEConnection(address string, connectionID string, body io.ReadClo
 				}
 			}
 		}
-		_ = body.Close()
 	}()
 	return &c, nil
 }
@@ -82,6 +82,6 @@ func (c *clientSSEConnection) Write(p []byte) (n int, err error) {
 	if resp.StatusCode != 200 {
 		err = fmt.Errorf("POST %v -> %v", c.reqURL, resp.Status)
 	}
-	_ = resp.Body.Close()
+	closeResponseBody(resp.Body)
 	return len(p), err
 }
