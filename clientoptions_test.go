@@ -2,6 +2,7 @@ package signalr
 
 import (
 	"context"
+	"github.com/cenkalti/backoff/v4"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -41,7 +42,15 @@ var _ = Describe("Client options", func() {
 				Expect(err).NotTo(HaveOccurred())
 			}, 3.0)
 		})
-
+		Context("only WithBackoff is given", func() {
+			It("NewClient should not fail", func() {
+				conn := NewNetConnection(context.TODO(), nil)
+				_, err := NewClient(context.TODO(), WithConnection(conn), WithBackoff(func() backoff.BackOff {
+					return backoff.NewExponentialBackOff()
+				}))
+				Expect(err).NotTo(HaveOccurred())
+			}, 3.0)
+		})
 	})
 
 })
