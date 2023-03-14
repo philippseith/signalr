@@ -108,3 +108,5 @@ dist
 /.vscode
 /cover.out
 /coverage.txt
+
+signalr_test/package-lock.json
