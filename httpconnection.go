@@ -54,7 +54,7 @@ func NewHTTPConnection(ctx context.Context, address string, options ...func(*htt
 	}
 
 	if httpConn.client == nil {
-		httpConn.client = &http.Client{}
+		httpConn.client = http.DefaultClient
 	}
 
 	reqURL, err := url.Parse(address)
