@@ -3,7 +3,7 @@ package signalr_test
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"math/rand"
 	"net/http"
 	"os"
@@ -20,19 +20,23 @@ func TestMain(m *testing.M) {
 	npmInstall := exec.Command("npm", "install")
 	stdout, err := npmInstall.StdoutPipe()
 	if err != nil {
+		println(err.Error())
 		os.Exit(120)
 	}
 	stderr, err := npmInstall.StderrPipe()
 	if err != nil {
+		println(err.Error())
 		os.Exit(121)
 	}
 	if err := npmInstall.Start(); err != nil {
+		println(err.Error())
 		os.Exit(122)
 	}
-	outSlurp, _ := ioutil.ReadAll(stdout)
-	errSlurp, _ := ioutil.ReadAll(stderr)
+	outSlurp, _ := io.ReadAll(stdout)
+	errSlurp, _ := io.ReadAll(stderr)
 	err = npmInstall.Wait()
 	if err != nil {
+		println(err.Error())
 		fmt.Println(string(outSlurp))
 		fmt.Println(string(errSlurp))
 		os.Exit(123)
@@ -83,8 +87,8 @@ func runJest(t *testing.T, testNamePattern string, quitServer chan struct{}) {
 	if err := jest.Start(); err != nil {
 		t.Error(err)
 	}
-	outSlurp, _ := ioutil.ReadAll(stdout)
-	errSlurp, _ := ioutil.ReadAll(stderr)
+	outSlurp, _ := io.ReadAll(stdout)
+	errSlurp, _ := io.ReadAll(stderr)
 	err = jest.Wait()
 	if err != nil {
 		t.Error(err, fmt.Sprintf("\n%s\n%s", outSlurp, errSlurp))

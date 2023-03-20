@@ -3,6 +3,7 @@ package signalr
 import (
 	"errors"
 	"fmt"
+	"github.com/cenkalti/backoff/v4"
 )
 
 // WithConnection sets the Connection of the Client
@@ -46,6 +47,19 @@ func WithReceiver(receiver interface{}) func(Party) error {
 			return nil
 		}
 		return errors.New("option WithReceiver is client only")
+	}
+}
+
+// WithBackoff sets the backoff.BackOff used for repeated connection attempts in the client.
+// See https://pkg.go.dev/github.com/cenkalti/backoff for configuration options.
+// If the option is not set, backoff.NewExponentialBackOff() without any further configuration will be used.
+func WithBackoff(backoffFactory func() backoff.BackOff) func(party Party) error {
+	return func(party Party) error {
+		if client, ok := party.(*client); ok {
+			client.backoffFactory = backoffFactory
+			return nil
+		}
+		return errors.New("option WithBackoff is client only")
 	}
 }
 
