@@ -59,7 +59,7 @@ servers context is canceled.
 	tcpConn, _ := listener.Accept()
 	go server.Serve(NewNetConnection(conn))
 
-To server a HTTP connection, use server.MapHTTP(), which connects the server with a path in an http.ServeMux.
+To serve a HTTP connection, use server.MapHTTP(), which connects the server with a path in an http.ServeMux.
 The server then automatically negotiates which kind of connection (Websockets, Server-Sent Events) will be used.
 
 	// build a signalr.Server using your hub
@@ -75,7 +75,7 @@ The server then automatically negotiates which kind of connection (Websockets, S
 
 	// ask the signalr server to map it's server
 	// api routes to your custom baseurl
-	server.MapHTTP(signalr.WithHTTPServeMux(router), "/chat")
+	server.MapHTTP(signalr.WithHTTPServeMux(router), "/hub")
 
 	// in addition to mapping the signalr routes
 	// your mux will need to serve the static files
