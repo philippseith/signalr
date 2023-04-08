@@ -130,7 +130,8 @@ func NewHTTPConnection(ctx context.Context, address string, options ...func(*htt
 			return nil, err
 		}
 
-		conn = newWebSocketConnection(ctx, nr.ConnectionID, ws)
+		// TODO think about if the API should give the possibility to cancel this connection
+		conn = newWebSocketConnection(context.Background(), nr.ConnectionID, ws)
 
 	case nr.getTransferFormats("ServerSentEvents") != nil:
 		req, err := http.NewRequest("GET", reqURL.String(), nil)
