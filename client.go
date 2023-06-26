@@ -50,7 +50,12 @@ const (
 //
 // Start starts the client loop. After starting the client, the interaction with a server can be started.
 // The client loop will run until the server closes the connection. If WithConnector is used, Start will
-// start a new loop. To end the loop from the client side, the context passed to NewClient has to be canceled.
+// start a new loop. To end the loop from the client side, the context passed to NewClient has to be canceled
+// or the Stop function has to be called.
+//
+//	Stop()
+//
+// Stop stops the client loop. This is an alternative to using a cancelable context on NewClient.
 //
 //	State() ClientState
 //
@@ -97,6 +102,7 @@ const (
 type Client interface {
 	Party
 	Start()
+	Stop()
 	State() ClientState
 	ObserveStateChanged(chan ClientState) context.CancelFunc
 	Err() error
@@ -112,6 +118,8 @@ var ErrUnableToConnect = errors.New("neither WithConnection nor WithConnector op
 // NewClient builds a new Client.
 // When ctx is canceled, the client loop and a possible auto reconnect loop are ended.
 func NewClient(ctx context.Context, options ...func(Party) error) (Client, error) {
+	var cancelFunc context.CancelFunc
+	ctx, cancelFunc = context.WithCancel(ctx)
 	info, dbg := buildInfoDebugLogger(log.NewLogfmtLogger(os.Stderr), true)
 	c := &client{
 		state:            ClientCreated,
@@ -120,6 +128,7 @@ func NewClient(ctx context.Context, options ...func(Party) error) (Client, error
 		partyBase:        newPartyBase(ctx, info, dbg),
 		lastID:           -1,
 		backoffFactory:   func() backoff.BackOff { return backoff.NewExponentialBackOff() },
+		cancelFunc:       cancelFunc,
 	}
 	for _, option := range options {
 		if option != nil {
@@ -153,6 +162,7 @@ type client struct {
 	receiver          interface{}
 	lastID            int64
 	backoffFactory    func() backoff.BackOff
+	cancelFunc        context.CancelFunc
 }
 
 func (c *client) Start() {
@@ -199,6 +209,13 @@ func (c *client) Start() {
 			c.setState(ClientConnecting)
 		}
 	}()
+}
+
+func (c *client) Stop() {
+	if c.cancelFunc != nil {
+		c.cancelFunc()
+	}
+	c.setState(ClientClosed)
 }
 
 func (c *client) run() error {
