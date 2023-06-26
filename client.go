@@ -97,6 +97,7 @@ const (
 type Client interface {
 	Party
 	Start()
+	Stop()
 	State() ClientState
 	ObserveStateChanged(chan ClientState) context.CancelFunc
 	Err() error
@@ -112,6 +113,8 @@ var ErrUnableToConnect = errors.New("neither WithConnection nor WithConnector op
 // NewClient builds a new Client.
 // When ctx is canceled, the client loop and a possible auto reconnect loop are ended.
 func NewClient(ctx context.Context, options ...func(Party) error) (Client, error) {
+	var cancelFunc context.CancelFunc
+	ctx, cancelFunc = context.WithCancel(ctx)
 	info, dbg := buildInfoDebugLogger(log.NewLogfmtLogger(os.Stderr), true)
 	c := &client{
 		state:            ClientCreated,
@@ -120,6 +123,7 @@ func NewClient(ctx context.Context, options ...func(Party) error) (Client, error
 		partyBase:        newPartyBase(ctx, info, dbg),
 		lastID:           -1,
 		backoffFactory:   func() backoff.BackOff { return backoff.NewExponentialBackOff() },
+		cancelFunc:       cancelFunc,
 	}
 	for _, option := range options {
 		if option != nil {
@@ -153,6 +157,7 @@ type client struct {
 	receiver          interface{}
 	lastID            int64
 	backoffFactory    func() backoff.BackOff
+	cancelFunc        context.CancelFunc
 }
 
 func (c *client) Start() {
@@ -199,6 +204,13 @@ func (c *client) Start() {
 			c.setState(ClientConnecting)
 		}
 	}()
+}
+
+func (c *client) Stop() {
+	if cancelFunc := c.cancelFunc; cancelFunc != nil {
+		c.cancelFunc()
+	}
+	c.setState(ClientClosed)
 }
 
 func (c *client) run() error {
