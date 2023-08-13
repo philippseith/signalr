@@ -50,7 +50,12 @@ const (
 //
 // Start starts the client loop. After starting the client, the interaction with a server can be started.
 // The client loop will run until the server closes the connection. If WithConnector is used, Start will
-// start a new loop. To end the loop from the client side, the context passed to NewClient has to be canceled.
+// start a new loop. To end the loop from the client side, the context passed to NewClient has to be canceled
+// or the Stop function has to be called.
+//
+//	Stop()
+//
+// Stop stops the client loop. This is an alternative to using a cancelable context on NewClient.
 //
 //	State() ClientState
 //
