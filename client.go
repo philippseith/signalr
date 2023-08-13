@@ -207,7 +207,7 @@ func (c *client) Start() {
 }
 
 func (c *client) Stop() {
-	if cancelFunc := c.cancelFunc; cancelFunc != nil {
+	if c.cancelFunc != nil {
 		c.cancelFunc()
 	}
 	c.setState(ClientClosed)
