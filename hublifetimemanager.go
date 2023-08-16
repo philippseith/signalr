@@ -47,21 +47,28 @@ func (d *defaultHubLifetimeManager) OnDisconnected(conn hubConnection) {
 
 func (d *defaultHubLifetimeManager) InvokeAll(target string, args []interface{}) {
 	d.clients.Range(func(key, value interface{}) bool {
-		_ = value.(hubConnection).SendInvocation("", target, args)
+		go func() {
+			_ = value.(hubConnection).SendInvocation("", target, args)
+		}()
 		return true
 	})
 }
 
 func (d *defaultHubLifetimeManager) InvokeClient(connectionID string, target string, args []interface{}) {
 	if client, ok := d.clients.Load(connectionID); ok {
-		_ = client.(hubConnection).SendInvocation("", target, args)
+		go func() {
+			_ = client.(hubConnection).SendInvocation("", target, args)
+		}()
 	}
 }
 
 func (d *defaultHubLifetimeManager) InvokeGroup(groupName string, target string, args []interface{}) {
 	if groups, ok := d.groups.Load(groupName); ok {
 		for _, v := range groups.(map[string]hubConnection) {
-			_ = v.SendInvocation("", target, args)
+			conn := v
+			go func() {
+				_ = conn.SendInvocation("", target, args)
+			}()
 		}
 	}
 }
