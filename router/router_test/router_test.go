@@ -21,6 +21,7 @@ import (
 	"github.com/gorilla/mux"
 
 	"github.com/philippseith/signalr"
+
 	"github.com/philippseith/signalr/router"
 
 	. "github.com/onsi/ginkgo"
@@ -72,7 +73,7 @@ var _ = Describe("Router", func() {
 				It("should send a correct negotiation response", func(done Done) {
 					// Start server
 					ctx, serverCancel := context.WithCancel(context.Background())
-					server, err := signalr.NewServer(ctx, signalr.SimpleHubFactory(&addHub{}), signalr.HTTPTransports("WebSockets"))
+					server, err := signalr.NewServer(ctx, signalr.SimpleHubFactory(&addHub{}), signalr.HTTPTransports(signalr.TransportWebSockets))
 					Expect(err).NotTo(HaveOccurred())
 					port := freePort()
 					initFunc(server, port)

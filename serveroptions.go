@@ -47,7 +47,7 @@ func HTTPTransports(transports ...string) func(Party) error {
 		if s, ok := p.(*server); ok {
 			for _, transport := range transports {
 				switch transport {
-				case "WebSockets", "ServerSentEvents":
+				case TransportWebSockets, TransportServerSentEvents:
 					s.transports = append(s.transports, transport)
 				default:
 					return fmt.Errorf("unsupported transport: %v", transport)

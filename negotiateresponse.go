@@ -1,5 +1,8 @@
 package signalr
 
+var TransportWebSockets = "WebSockets"
+var TransportServerSentEvents = "ServerSentEvents"
+
 type availableTransport struct {
 	Transport       string   `json:"transport"`
 	TransferFormats []string `json:"transferFormats"`

@@ -16,10 +16,12 @@ import (
 
 // Server is a SignalR server for one type of hub.
 //
-// 	MapHTTP(mux *http.ServeMux, path string)
+//	MapHTTP(mux *http.ServeMux, path string)
+//
 // maps the servers' hub to a path on a http.ServeMux.
 //
-// 	Serve(conn Connection)
+//	Serve(conn Connection)
+//
 // serves the hub of the server on one connection.
 // The same server might serve different connections in parallel. Serve does not return until the connection is closed
 // or the servers' context is canceled.
@@ -70,7 +72,7 @@ func NewServer(ctx context.Context, options ...func(Party) error) (Server, error
 		}
 	}
 	if server.transports == nil {
-		server.transports = []string{"WebSockets", "ServerSentEvents"}
+		server.transports = []string{TransportWebSockets, TransportServerSentEvents}
 	}
 	if server.newHub == nil {
 		return server, errors.New("cannot determine hub type. Neither UseHub, HubFactory or SimpleHubFactory given as option")

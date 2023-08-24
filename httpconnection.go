@@ -103,7 +103,7 @@ func NewHTTPConnection(ctx context.Context, address string, options ...func(*htt
 	case nr.getTransferFormats("WebTransports") != nil:
 		// TODO
 
-	case nr.getTransferFormats("WebSockets") != nil:
+	case nr.getTransferFormats(TransportWebSockets) != nil:
 		wsURL := reqURL
 
 		// switch to wss for secure connection
@@ -133,7 +133,7 @@ func NewHTTPConnection(ctx context.Context, address string, options ...func(*htt
 		// TODO think about if the API should give the possibility to cancel this connection
 		conn = newWebSocketConnection(context.Background(), nr.ConnectionID, ws)
 
-	case nr.getTransferFormats("ServerSentEvents") != nil:
+	case nr.getTransferFormats(TransportServerSentEvents) != nil:
 		req, err := http.NewRequest("GET", reqURL.String(), nil)
 		if err != nil {
 			return nil, err

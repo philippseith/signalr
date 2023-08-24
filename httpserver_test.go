@@ -35,9 +35,9 @@ func (w *addHub) Echo(s string) string {
 
 var _ = Describe("HTTP server", func() {
 	for _, transport := range [][]string{
-		{"WebSockets", "Text"},
-		{"WebSockets", "Binary"},
-		{"ServerSentEvents", "Text"},
+		{TransportWebSockets, "Text"},
+		{TransportWebSockets, "Binary"},
+		{TransportServerSentEvents, "Text"},
 	} {
 		transport := transport
 		Context(fmt.Sprintf("%v %v", transport[0], transport[1]), func() {
@@ -63,7 +63,7 @@ var _ = Describe("HTTP server", func() {
 					Expect(avtVal["transferFormats"]).To(BeAssignableToTypeOf([]interface{}{}))
 					tf := avtVal["transferFormats"].([]interface{})
 					Expect(tf).To(ContainElement("Text"))
-					if transport[0] == "WebSockets" {
+					if transport[0] == TransportWebSockets {
 						Expect(tf).To(ContainElement("Binary"))
 					}
 					testServer.Close()
@@ -154,7 +154,7 @@ var _ = Describe("HTTP server", func() {
 	Context("When no negotiation is send", func() {
 		It("should serve websocket requests", func(done Done) {
 			// Start server
-			server, err := NewServer(context.TODO(), SimpleHubFactory(&addHub{}), HTTPTransports("WebSockets"), testLoggerOption())
+			server, err := NewServer(context.TODO(), SimpleHubFactory(&addHub{}), HTTPTransports(TransportWebSockets), testLoggerOption())
 			Expect(err).NotTo(HaveOccurred())
 			router := http.NewServeMux()
 			server.MapHTTP(WithHTTPServeMux(router), "/hub")
