@@ -15,11 +15,11 @@ type negotiateResponse struct {
 	AvailableTransports []availableTransport `json:"availableTransports"`
 }
 
-func (nr *negotiateResponse) getTransferFormats(transportType string) []string {
+func (nr *negotiateResponse) hasTransport(transportType string) bool {
 	for _, transport := range nr.AvailableTransports {
 		if transport.Transport == transportType {
-			return transport.TransferFormats
+			return true
 		}
 	}
-	return nil
+	return false
 }
