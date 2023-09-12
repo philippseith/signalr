@@ -20,7 +20,7 @@ type Doer interface {
 type httpConnection struct {
 	client     Doer
 	headers    func() http.Header
-	transports []string
+	transports []TransportType
 }
 
 // WithHTTPClient sets the http client used to connect to the signalR server.
@@ -40,7 +40,7 @@ func WithHTTPHeaders(headers func() http.Header) func(*httpConnection) error {
 	}
 }
 
-func WithTransports(transports ...string) func(*httpConnection) error {
+func WithTransports(transports ...TransportType) func(*httpConnection) error {
 	return func(c *httpConnection) error {
 		for _, transport := range transports {
 			switch transport {
@@ -73,7 +73,7 @@ func NewHTTPConnection(ctx context.Context, address string, options ...func(*htt
 		httpConn.client = http.DefaultClient
 	}
 	if len(httpConn.transports) == 0 {
-		httpConn.transports = []string{TransportWebSockets, TransportServerSentEvents}
+		httpConn.transports = []TransportType{TransportWebSockets, TransportServerSentEvents}
 	}
 
 	reqURL, err := url.Parse(address)
@@ -185,7 +185,7 @@ func closeResponseBody(body io.ReadCloser) {
 	_ = body.Close()
 }
 
-func (h *httpConnection) hasTransport(transport string) bool {
+func (h *httpConnection) hasTransport(transport TransportType) bool {
 	for _, t := range h.transports {
 		if transport == t {
 			return true

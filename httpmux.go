@@ -214,14 +214,14 @@ func (h *httpMux) negotiate(w http.ResponseWriter, req *http.Request) {
 			case TransportServerSentEvents:
 				availableTransports = append(availableTransports,
 					availableTransport{
-						Transport:       TransportServerSentEvents,
-						TransferFormats: []string{"Text"},
+						Transport:       string(TransportServerSentEvents),
+						TransferFormats: []string{string(TransferFormatText)},
 					})
 			case TransportWebSockets:
 				availableTransports = append(availableTransports,
 					availableTransport{
-						Transport:       TransportWebSockets,
-						TransferFormats: []string{"Text", "Binary"},
+						Transport:       string(TransportWebSockets),
+						TransferFormats: []string{string(TransferFormatText), string(TransferFormatBinary)},
 					})
 			}
 		}

@@ -34,17 +34,25 @@ func (w *addHub) Echo(s string) string {
 }
 
 var _ = Describe("HTTP server", func() {
-	for _, transport := range [][]string{
-		{TransportWebSockets, "Text"},
-		{TransportWebSockets, "Binary"},
-		{TransportServerSentEvents, "Text"},
-	} {
-		transport := transport
+	for i := 0; i < 3; i++ {
+		var transport TransportType
+		var transferFormat TransferFormatType
+		switch i {
+		case 0:
+			transport = TransportWebSockets
+			transferFormat = TransferFormatText
+		case 1:
+			transport = TransportWebSockets
+			transferFormat = TransferFormatBinary
+		case 2:
+			transport = TransportServerSentEvents
+			transferFormat = TransferFormatText
+		}
 		Context(fmt.Sprintf("%v %v", transport[0], transport[1]), func() {
 			Context("A correct negotiation request is sent", func() {
 				It(fmt.Sprintf("should send a correct negotiation response with support for %v with text protocol", transport), func(done Done) {
 					// Start server
-					server, err := NewServer(context.TODO(), SimpleHubFactory(&addHub{}), HTTPTransports(transport[0]), testLoggerOption())
+					server, err := NewServer(context.TODO(), SimpleHubFactory(&addHub{}), HTTPTransports(transport), testLoggerOption())
 					Expect(err).NotTo(HaveOccurred())
 					router := http.NewServeMux()
 					server.MapHTTP(WithHTTPServeMux(router), "/hub")
@@ -59,11 +67,11 @@ var _ = Describe("HTTP server", func() {
 					Expect(len(avt)).To(BeNumerically(">", 0))
 					Expect(avt[0]).To(BeAssignableToTypeOf(map[string]interface{}{}))
 					avtVal := avt[0].(map[string]interface{})
-					Expect(avtVal["transport"]).To(Equal(transport[0]))
+					Expect(avtVal["transport"]).To(Equal(string(transport)))
 					Expect(avtVal["transferFormats"]).To(BeAssignableToTypeOf([]interface{}{}))
 					tf := avtVal["transferFormats"].([]interface{})
 					Expect(tf).To(ContainElement("Text"))
-					if transport[0] == TransportWebSockets {
+					if transport == TransportWebSockets {
 						Expect(tf).To(ContainElement("Binary"))
 					}
 					testServer.Close()
@@ -74,7 +82,7 @@ var _ = Describe("HTTP server", func() {
 			Context("A invalid negotiation request is sent", func() {
 				It(fmt.Sprintf("should send a correct negotiation response with support for %v with text protocol", transport), func(done Done) {
 					// Start server
-					server, err := NewServer(context.TODO(), SimpleHubFactory(&addHub{}), HTTPTransports(transport[0]), testLoggerOption())
+					server, err := NewServer(context.TODO(), SimpleHubFactory(&addHub{}), HTTPTransports(transport), testLoggerOption())
 					Expect(err).NotTo(HaveOccurred())
 					router := http.NewServeMux()
 					server.MapHTTP(WithHTTPServeMux(router), "/hub")
@@ -98,7 +106,7 @@ var _ = Describe("HTTP server", func() {
 					// Start server
 					ctx, cancel := context.WithCancel(context.Background())
 					server, err := NewServer(ctx,
-						SimpleHubFactory(&addHub{}), HTTPTransports(transport[0]),
+						SimpleHubFactory(&addHub{}), HTTPTransports(transport),
 						MaximumReceiveMessageSize(50000),
 						Logger(logger, true))
 					Expect(err).NotTo(HaveOccurred())
@@ -115,7 +123,7 @@ var _ = Describe("HTTP server", func() {
 						WithConnection(conn),
 						MaximumReceiveMessageSize(60000),
 						Logger(logger, true),
-						TransferFormat(transport[1]))
+						TransferFormat(transferFormat))
 					Expect(err).NotTo(HaveOccurred())
 					Expect(client).NotTo(BeNil())
 					client.Start()
@@ -130,7 +138,7 @@ var _ = Describe("HTTP server", func() {
 					client2, err := NewClient(ctx,
 						WithConnection(conn2),
 						Logger(logger, true),
-						TransferFormat(transport[1]))
+						TransferFormat(transferFormat))
 					Expect(err).NotTo(HaveOccurred())
 					Expect(client2).NotTo(BeNil())
 					client2.Start()
