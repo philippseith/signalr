@@ -201,8 +201,14 @@ func (c *client) Start() {
 				boff.Reset()
 			}
 			// Reconnect after BackOff
+			nextBackoff := boff.NextBackOff()
+			// Check for exceeded backoff
+			if nextBackoff == backoff.Stop {
+				c.setErr(errors.New("backoff exceeded"))
+				return
+			}
 			select {
-			case <-time.After(boff.NextBackOff()):
+			case <-time.After(nextBackoff):
 			case <-c.ctx.Done():
 				return
 			}
