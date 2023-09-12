@@ -48,7 +48,7 @@ var _ = Describe("HTTP server", func() {
 			transport = TransportServerSentEvents
 			transferFormat = TransferFormatText
 		}
-		Context(fmt.Sprintf("%v %v", transport[0], transport[1]), func() {
+		Context(fmt.Sprintf("%v %v", transport, transferFormat), func() {
 			Context("A correct negotiation request is sent", func() {
 				It(fmt.Sprintf("should send a correct negotiation response with support for %v with text protocol", transport), func(done Done) {
 					// Start server
@@ -174,6 +174,34 @@ var _ = Describe("HTTP server", func() {
 			testServer.Close()
 			close(done)
 		}, 5.0)
+	})
+})
+
+var _ = Describe("HTTP client", func() {
+	Context("WithHttpConnection", func() {
+		It("should fallback to SSE (this can only be tested when httpConnection is tampered with)", func(done Done) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+
+			server, err := NewServer(ctx, SimpleHubFactory(&addHub{}), HTTPTransports(TransportWebSockets, TransportServerSentEvents), testLoggerOption())
+			Expect(err).NotTo(HaveOccurred())
+			router := http.NewServeMux()
+			server.MapHTTP(WithHTTPServeMux(router), "/hub")
+			testServer := httptest.NewServer(router)
+			url, _ := url.Parse(testServer.URL)
+			port, _ := strconv.Atoi(url.Port())
+			waitForPort(port)
+
+			client, err := NewClient(ctx, WithHttpConnection(ctx, fmt.Sprintf("http://127.0.0.1:%v/hub", port)))
+			Expect(err).NotTo(HaveOccurred())
+
+			client.Start()
+			Expect(<-client.WaitForState(context.Background(), ClientConnected)).NotTo(HaveOccurred())
+			result := <-client.Invoke("Add2", 2)
+			Expect(result.Error).NotTo(HaveOccurred())
+
+			close(done)
+		}, 2.0)
 	})
 })
 
