@@ -1,8 +1,10 @@
 package signalr
 
 import (
+	"context"
 	"errors"
 	"fmt"
+
 	"github.com/cenkalti/backoff/v4"
 )
 
@@ -36,6 +38,58 @@ func WithConnector(connectionFactory func() (Connection, error)) func(Party) err
 	}
 }
 
+// HttpConnectionFactory is a connectionFactory for WithConnector which first tries to create a connection
+// with WebSockets (if it is allowed by the HttpConnection options) and if this fails, falls back to a SSE based connection.
+func HttpConnectionFactory(ctx context.Context, address string, options ...func(*httpConnection) error) (Connection, error) {
+	conn := &httpConnection{}
+	for i, option := range options {
+		if err := option(conn); err != nil {
+			return nil, err
+		}
+		if conn.transports != nil {
+			// Remove the WithTransports option
+			options = append(options[:i], options[i+1:]...)
+			break
+		}
+	}
+	// If no WithTransports was given, NewHTTPConnection fallbacks to both
+	if conn.transports == nil {
+		conn.transports = []TransportType{TransportWebSockets, TransportServerSentEvents}
+	}
+
+	for _, transport := range conn.transports {
+		// If Websockets are allowed, we try to connect with these
+		if transport == TransportWebSockets {
+			wsOptions := append(options, WithTransports(TransportWebSockets))
+			conn, err := NewHTTPConnection(ctx, address, wsOptions...)
+			// If this is ok, return the conn
+			if err == nil {
+				return conn, err
+			}
+			break
+		}
+	}
+	for _, transport := range conn.transports {
+		// If SSE is allowed, with fallback to try these
+		if transport == TransportServerSentEvents {
+			sseOptions := append(options, WithTransports(TransportServerSentEvents))
+			return NewHTTPConnection(ctx, address, sseOptions...)
+		}
+	}
+	// None of the transports worked
+	return nil, fmt.Errorf("can not connect with supported transports: %v", conn.transports)
+}
+
+// WithHttpConnection first tries to create a connection
+// with WebSockets (if it is allowed by the HttpConnection options) and if this fails, falls back to a SSE based connection.
+// This strategy is also used for auto reconnect if this option is used.
+// WithHttpConnection is a shortcut for WithConnector(HttpConnectionFactory(...))
+func WithHttpConnection(ctx context.Context, address string, options ...func(*httpConnection) error) func(Party) error {
+	return WithConnector(func() (Connection, error) {
+		return HttpConnectionFactory(ctx, address, options...)
+	})
+}
+
 // WithReceiver sets the object which will receive server side calls to client methods (e.g. callbacks)
 func WithReceiver(receiver interface{}) func(Party) error {
 	return func(party Party) error {
@@ -64,7 +118,7 @@ func WithBackoff(backoffFactory func() backoff.BackOff) func(party Party) error 
 }
 
 // TransferFormat sets the transfer format used on the transport. Allowed values are "Text" and "Binary"
-func TransferFormat(format string) func(Party) error {
+func TransferFormat(format TransferFormatType) func(Party) error {
 	return func(p Party) error {
 		if c, ok := p.(*client); ok {
 			switch format {

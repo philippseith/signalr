@@ -16,10 +16,12 @@ import (
 
 // Server is a SignalR server for one type of hub.
 //
-// 	MapHTTP(mux *http.ServeMux, path string)
+//	MapHTTP(mux *http.ServeMux, path string)
+//
 // maps the servers' hub to a path on a http.ServeMux.
 //
-// 	Serve(conn Connection)
+//	Serve(conn Connection)
+//
 // serves the hub of the server on one connection.
 // The same server might serve different connections in parallel. Serve does not return until the connection is closed
 // or the servers' context is canceled.
@@ -32,7 +34,7 @@ type Server interface {
 	MapHTTP(routerFactory func() MappableRouter, path string)
 	Serve(conn Connection) error
 	HubClients() HubClients
-	availableTransports() []string
+	availableTransports() []TransportType
 }
 
 type server struct {
@@ -42,7 +44,7 @@ type server struct {
 	defaultHubClients *defaultHubClients
 	groupManager      GroupManager
 	reconnectAllowed  bool
-	transports        []string
+	transports        []TransportType
 }
 
 // NewServer creates a new server for one type of hub. The hub type is set by one of the
@@ -70,7 +72,7 @@ func NewServer(ctx context.Context, options ...func(Party) error) (Server, error
 		}
 	}
 	if server.transports == nil {
-		server.transports = []string{"WebSockets", "ServerSentEvents"}
+		server.transports = []TransportType{TransportWebSockets, TransportServerSentEvents}
 	}
 	if server.newHub == nil {
 		return server, errors.New("cannot determine hub type. Neither UseHub, HubFactory or SimpleHubFactory given as option")
@@ -123,7 +125,7 @@ func (s *server) HubClients() HubClients {
 	return s.defaultHubClients
 }
 
-func (s *server) availableTransports() []string {
+func (s *server) availableTransports() []TransportType {
 	return s.transports
 }
 

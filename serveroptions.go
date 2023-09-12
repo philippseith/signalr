@@ -42,12 +42,12 @@ func SimpleHubFactory(hubProto HubInterface) func(Party) error {
 
 // HTTPTransports sets the list of available transports for http connections. Allowed transports are
 // "WebSockets", "ServerSentEvents". Default is both transports are available.
-func HTTPTransports(transports ...string) func(Party) error {
+func HTTPTransports(transports ...TransportType) func(Party) error {
 	return func(p Party) error {
 		if s, ok := p.(*server); ok {
 			for _, transport := range transports {
 				switch transport {
-				case "WebSockets", "ServerSentEvents":
+				case TransportWebSockets, TransportServerSentEvents:
 					s.transports = append(s.transports, transport)
 				default:
 					return fmt.Errorf("unsupported transport: %v", transport)

@@ -347,22 +347,22 @@ var _ = Describe("Server options", func() {
 	Describe("HTTPTransports option", func() {
 		Context("When HTTPTransports is one of WebSockets, ServerSentEvents or both", func() {
 			It("should set these transports", func(done Done) {
-				s, err := NewServer(context.TODO(), UseHub(&singleHub{}), HTTPTransports("WebSockets"), testLoggerOption())
+				s, err := NewServer(context.TODO(), UseHub(&singleHub{}), HTTPTransports(TransportWebSockets), testLoggerOption())
 				Expect(err).NotTo(HaveOccurred())
-				Expect(s.availableTransports()).To(ContainElement("WebSockets"))
+				Expect(s.availableTransports()).To(ContainElement(TransportWebSockets))
 				close(done)
 			})
 			It("should set these transports", func(done Done) {
-				s, err := NewServer(context.TODO(), UseHub(&singleHub{}), HTTPTransports("ServerSentEvents"), testLoggerOption())
+				s, err := NewServer(context.TODO(), UseHub(&singleHub{}), HTTPTransports(TransportServerSentEvents), testLoggerOption())
 				Expect(err).NotTo(HaveOccurred())
-				Expect(s.availableTransports()).To(ContainElement("ServerSentEvents"))
+				Expect(s.availableTransports()).To(ContainElement(TransportServerSentEvents))
 				close(done)
 			})
 			It("should set these transports", func(done Done) {
-				s, err := NewServer(context.TODO(), UseHub(&singleHub{}), HTTPTransports("ServerSentEvents", "WebSockets"), testLoggerOption())
+				s, err := NewServer(context.TODO(), UseHub(&singleHub{}), HTTPTransports(TransportServerSentEvents, TransportWebSockets), testLoggerOption())
 				Expect(err).NotTo(HaveOccurred())
-				Expect(s.availableTransports()).To(ContainElement("WebSockets"))
-				Expect(s.availableTransports()).To(ContainElement("ServerSentEvents"))
+				Expect(s.availableTransports()).To(ContainElement(TransportWebSockets))
+				Expect(s.availableTransports()).To(ContainElement(TransportServerSentEvents))
 				close(done)
 			})
 		})
@@ -375,7 +375,7 @@ var _ = Describe("Server options", func() {
 		})
 		Context("When HTTPTransports is used on a client", func() {
 			It("should return an error", func(done Done) {
-				_, err := NewClient(context.TODO(), WithConnection(newTestingConnection()), HTTPTransports("ServerSentEvents"), testLoggerOption())
+				_, err := NewClient(context.TODO(), WithConnection(newTestingConnection()), HTTPTransports(TransportServerSentEvents), testLoggerOption())
 				Expect(err).To(HaveOccurred())
 				close(done)
 			})
@@ -401,16 +401,16 @@ func newChannelWriter() *channelWriter {
 	return &channelWriter{make(chan []byte, 100)}
 }
 
-//type mapLogger struct {
+// type mapLogger struct {
 //	c chan bool
 //	m map[string]string
-//}
+// }
 //
-//func (m *mapLogger) Log(keyvals ...interface{}) error {
+// func (m *mapLogger) Log(keyvals ...interface{}) error {
 //	m.m = make(map[string]string)
 //	for i := 0; i < len(keyvals); i += 2 {
 //		m.m[keyvals[i].(string)] = keyvals[i+1].(string)
 //	}
 //	m.c <- true
 //	return nil
-//}
+// }

@@ -49,15 +49,15 @@ func TestServerSmoke(t *testing.T) {
 }
 
 func TestServerJsonWebSockets(t *testing.T) {
-	testServer(t, "^JSON", signalr.HTTPTransports("WebSockets"))
+	testServer(t, "^JSON", signalr.HTTPTransports(signalr.TransportWebSockets))
 }
 
 func TestServerJsonSSE(t *testing.T) {
-	testServer(t, "^JSON", signalr.HTTPTransports("ServerSentEvents"))
+	testServer(t, "^JSON", signalr.HTTPTransports(signalr.TransportServerSentEvents))
 }
 
 func TestServerMessagePack(t *testing.T) {
-	testServer(t, "^MessagePack", signalr.HTTPTransports("WebSockets"))
+	testServer(t, "^MessagePack", signalr.HTTPTransports(signalr.TransportWebSockets))
 }
 
 func testServer(t *testing.T, testNamePattern string, transports func(signalr.Party) error) {

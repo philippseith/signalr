@@ -32,7 +32,7 @@ which kind of connection (Websockets, Server-Sent Events) will be used.
 	  // Client with JSON encoding
 	  client, err := NewClient(ctx,
 				WithConnection(conn),
-				TransferFormat("Text"),
+				TransferFormat(TransferFormatText),
 				WithReceiver(receiver))
 
 	  client.Start()

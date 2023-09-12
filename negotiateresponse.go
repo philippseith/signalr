@@ -1,5 +1,15 @@
 package signalr
 
+type TransportType string
+
+var TransportWebSockets TransportType = "WebSockets"
+var TransportServerSentEvents TransportType = "ServerSentEvents"
+
+type TransferFormatType string
+
+var TransferFormatText TransferFormatType = "Text"
+var TransferFormatBinary TransferFormatType = "Binary"
+
 type availableTransport struct {
 	Transport       string   `json:"transport"`
 	TransferFormats []string `json:"transferFormats"`
@@ -12,11 +22,11 @@ type negotiateResponse struct {
 	AvailableTransports []availableTransport `json:"availableTransports"`
 }
 
-func (nr *negotiateResponse) getTransferFormats(transportType string) []string {
+func (nr *negotiateResponse) hasTransport(transportType TransportType) bool {
 	for _, transport := range nr.AvailableTransports {
-		if transport.Transport == transportType {
-			return transport.TransferFormats
+		if transport.Transport == string(transportType) {
+			return true
 		}
 	}
-	return nil
+	return false
 }

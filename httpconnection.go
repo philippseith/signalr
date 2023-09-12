@@ -18,8 +18,9 @@ type Doer interface {
 }
 
 type httpConnection struct {
-	client  Doer
-	headers func() http.Header
+	client     Doer
+	headers    func() http.Header
+	transports []TransportType
 }
 
 // WithHTTPClient sets the http client used to connect to the signalR server.
@@ -35,6 +36,21 @@ func WithHTTPClient(client Doer) func(*httpConnection) error {
 func WithHTTPHeaders(headers func() http.Header) func(*httpConnection) error {
 	return func(c *httpConnection) error {
 		c.headers = headers
+		return nil
+	}
+}
+
+func WithTransports(transports ...TransportType) func(*httpConnection) error {
+	return func(c *httpConnection) error {
+		for _, transport := range transports {
+			switch transport {
+			case TransportWebSockets, TransportServerSentEvents:
+				// Supported
+			default:
+				return fmt.Errorf("unsupported transport %s", transport)
+			}
+		}
+		c.transports = transports
 		return nil
 	}
 }
@@ -55,6 +71,9 @@ func NewHTTPConnection(ctx context.Context, address string, options ...func(*htt
 
 	if httpConn.client == nil {
 		httpConn.client = http.DefaultClient
+	}
+	if len(httpConn.transports) == 0 {
+		httpConn.transports = []TransportType{TransportWebSockets, TransportServerSentEvents}
 	}
 
 	reqURL, err := url.Parse(address)
@@ -88,22 +107,22 @@ func NewHTTPConnection(ctx context.Context, address string, options ...func(*htt
 		return nil, err
 	}
 
-	nr := negotiateResponse{}
-	if err := json.Unmarshal(body, &nr); err != nil {
+	negotiateResponse := negotiateResponse{}
+	if err := json.Unmarshal(body, &negotiateResponse); err != nil {
 		return nil, err
 	}
 
 	q := reqURL.Query()
-	q.Set("id", nr.ConnectionID)
+	q.Set("id", negotiateResponse.ConnectionID)
 	reqURL.RawQuery = q.Encode()
 
 	// Select the best connection
 	var conn Connection
 	switch {
-	case nr.getTransferFormats("WebTransports") != nil:
+	case negotiateResponse.hasTransport("WebTransports"):
 		// TODO
 
-	case nr.getTransferFormats("WebSockets") != nil:
+	case httpConn.hasTransport(TransportWebSockets) && negotiateResponse.hasTransport(TransportWebSockets):
 		wsURL := reqURL
 
 		// switch to wss for secure connection
@@ -131,9 +150,9 @@ func NewHTTPConnection(ctx context.Context, address string, options ...func(*htt
 		}
 
 		// TODO think about if the API should give the possibility to cancel this connection
-		conn = newWebSocketConnection(context.Background(), nr.ConnectionID, ws)
+		conn = newWebSocketConnection(context.Background(), negotiateResponse.ConnectionID, ws)
 
-	case nr.getTransferFormats("ServerSentEvents") != nil:
+	case httpConn.hasTransport(TransportServerSentEvents) && negotiateResponse.hasTransport(TransportServerSentEvents):
 		req, err := http.NewRequest("GET", reqURL.String(), nil)
 		if err != nil {
 			return nil, err
@@ -149,7 +168,7 @@ func NewHTTPConnection(ctx context.Context, address string, options ...func(*htt
 			return nil, err
 		}
 
-		conn, err = newClientSSEConnection(address, nr.ConnectionID, resp.Body)
+		conn, err = newClientSSEConnection(address, negotiateResponse.ConnectionID, resp.Body)
 		if err != nil {
 			return nil, err
 		}
@@ -164,4 +183,13 @@ func NewHTTPConnection(ctx context.Context, address string, options ...func(*htt
 func closeResponseBody(body io.ReadCloser) {
 	_, _ = io.Copy(io.Discard, body)
 	_ = body.Close()
+}
+
+func (h *httpConnection) hasTransport(transport TransportType) bool {
+	for _, t := range h.transports {
+		if transport == t {
+			return true
+		}
+	}
+	return false
 }

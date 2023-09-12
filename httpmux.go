@@ -211,17 +211,17 @@ func (h *httpMux) negotiate(w http.ResponseWriter, req *http.Request) {
 		var availableTransports []availableTransport
 		for _, transport := range h.server.availableTransports() {
 			switch transport {
-			case "ServerSentEvents":
+			case TransportServerSentEvents:
 				availableTransports = append(availableTransports,
 					availableTransport{
-						Transport:       "ServerSentEvents",
-						TransferFormats: []string{"Text"},
+						Transport:       string(TransportServerSentEvents),
+						TransferFormats: []string{string(TransferFormatText)},
 					})
-			case "WebSockets":
+			case TransportWebSockets:
 				availableTransports = append(availableTransports,
 					availableTransport{
-						Transport:       "WebSockets",
-						TransferFormats: []string{"Text", "Binary"},
+						Transport:       string(TransportWebSockets),
+						TransferFormats: []string{string(TransferFormatText), string(TransferFormatBinary)},
 					})
 			}
 		}
