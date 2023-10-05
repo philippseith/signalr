@@ -70,6 +70,8 @@ func (l *loop) Run(connected chan struct{}) (err error) {
 		}
 	}()
 	timeoutTicker := time.NewTicker(l.party.timeout())
+	keepAliveTicker := time.NewTicker(l.party.keepAliveInterval())
+
 msgLoop:
 	for {
 	pingLoop:
@@ -104,7 +106,8 @@ msgLoop:
 					_ = l.info.Log(evt, msgRecv, "error", err, msg, fmtMsg(evt.message), react, "close connection")
 				}
 				break pingLoop
-			case <-time.After(l.party.keepAliveInterval()):
+			case <-keepAliveTicker.C:
+				keepAliveTicker.Reset(l.party.keepAliveInterval())
 				// Send ping only when there was no write in the keepAliveInterval before
 				if time.Since(l.hubConn.LastWriteStamp()) > l.party.keepAliveInterval() {
 					_ = l.hubConn.Ping()
