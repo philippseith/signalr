@@ -113,7 +113,13 @@ func NewHTTPConnection(ctx context.Context, address string, options ...func(*htt
 	}
 
 	q := reqURL.Query()
-	q.Set("id", negotiateResponse.ConnectionID)
+	switch negotiateResponse.NegotiateVersion {
+	case 0:
+		q.Set("id", negotiateResponse.ConnectionID)
+	case 1:
+		q.Set("id", negotiateResponse.ConnectionToken)
+	}
+
 	reqURL.RawQuery = q.Encode()
 
 	// Select the best connection
