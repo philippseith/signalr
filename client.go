@@ -204,6 +204,7 @@ func (c *client) Start() {
 			nextBackoff := boff.NextBackOff()
 			// Check for exceeded backoff
 			if nextBackoff == backoff.Stop {
+				c.setState(ClientClosed)
 				c.setErr(errors.New("backoff exceeded"))
 				return
 			}
