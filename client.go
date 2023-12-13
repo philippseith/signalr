@@ -221,8 +221,10 @@ func (c *client) Start() {
 func (c *client) Stop() {
 	if c.cancelFunc != nil {
 		c.cancelFunc()
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second) // in practice, it is faster than 5 seconds so this is just to avoid infinite block
+		defer cancel()
+		c.WaitForState(ctx, ClientClosed)
 	}
-	c.setState(ClientClosed)
 }
 
 func (c *client) run() error {

@@ -149,6 +149,32 @@ var _ = Describe("Client", func() {
 			close(done)
 		}, 1.0)
 	})
+	Context("Stop", func() {
+		It("should stop the client properly", func(done Done) {
+			// Create a simple server
+			server, err := NewServer(context.TODO(), SimpleHubFactory(&simpleHub{}),
+				testLoggerOption(),
+				ChanReceiveTimeout(200*time.Millisecond),
+				StreamBufferCapacity(5))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(server).NotTo(BeNil())
+			// Create both ends of the connection
+			cliConn, srvConn := newClientServerConnections()
+			// Start the server
+			go func() { _ = server.Serve(srvConn) }()
+			// Create the Client
+			clientConn, err := NewClient(context.Background(), WithConnection(cliConn), testLoggerOption(), formatOption)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(clientConn).NotTo(BeNil())
+			// Start it
+			clientConn.Start()
+			Expect(<-clientConn.WaitForState(context.Background(), ClientConnected)).NotTo(HaveOccurred())
+			clientConn.Stop()
+			Expect(clientConn.State()).To(BeEquivalentTo(ClientClosed))
+			server.cancel()
+			close(done)
+		})
+	})
 	Context("Invoke", func() {
 		It("should invoke a server method and return the result", func(done Done) {
 			_, client, _, cancelClient := getTestBed(&simpleReceiver{}, formatOption)
