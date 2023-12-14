@@ -194,10 +194,25 @@ func (h *httpMux) negotiate(w http.ResponseWriter, req *http.Request) {
 	} else {
 		connectionID := newConnectionID()
 		connectionMapKey := connectionID
-		negotiateVersion, err := strconv.Atoi(req.Header.Get("negotiateVersion"))
+
+		// Check the header for negotiateVersion
+		headerNegotiateVersion, err := strconv.Atoi(req.Header.Get("negotiateVersion"))
 		if err != nil {
-			negotiateVersion = 0
+			headerNegotiateVersion = 0
 		}
+
+		// Check the query parameter for negotiateVersion
+		queryNegotiateVersion, err := strconv.Atoi(req.URL.Query().Get("negotiateVersion"))
+		if err != nil {
+			queryNegotiateVersion = 0
+		}
+
+		// Use the negotiateVersion from query if present, otherwise use the one from the header parameter
+		negotiateVersion := queryNegotiateVersion
+		if headerNegotiateVersion != 0 {
+			negotiateVersion = headerNegotiateVersion
+		}
+
 		connectionToken := ""
 		if negotiateVersion == 1 {
 			connectionToken = newConnectionID()
