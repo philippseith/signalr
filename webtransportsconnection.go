@@ -36,7 +36,7 @@ func (w *webTransportsConnection) Write(p []byte) (n int, err error) {
 		func() {})
 	if err != nil {
 		err = fmt.Errorf("%T: %w", w, err)
-		_ = w.stream.Close()
+		_ = w.closeStream()
 	}
 	return n, err
 }
@@ -53,7 +53,7 @@ func (w *webTransportsConnection) Read(p []byte) (n int, err error) {
 		func() {})
 	if err != nil {
 		err = fmt.Errorf("%T: %w", w, err)
-		_ = w.stream.Close()
+		_ = w.closeStream()
 	}
 	return n, err
 }
@@ -65,4 +65,13 @@ func (w *webTransportsConnection) syncStream() (err error) {
 		w.stream, err = w.session.OpenStream()
 	}
 	return
+}
+
+func (w *webTransportsConnection) closeStream() (err error) {
+	w.Lock()
+	defer w.Unlock()
+	if w.stream == nil {
+		return nil
+	}
+	return w.stream.Close()
 }
