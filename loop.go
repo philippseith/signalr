@@ -50,7 +50,10 @@ func (l *loop) Run(connected chan struct{}) (err error) {
 	close(connected)
 	// Process messages
 	ch := make(chan receiveResult, 1)
+	wg := l.party.waitGroup()
+	wg.Add(1)
 	go func() {
+		defer wg.Done()
 		recv := l.hubConn.Receive()
 	loop:
 		for {

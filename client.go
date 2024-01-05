@@ -163,7 +163,6 @@ type client struct {
 	lastID            int64
 	backoffFactory    func() backoff.BackOff
 	cancelFunc        context.CancelFunc
-	wg                sync.WaitGroup
 }
 
 func (c *client) Start() {

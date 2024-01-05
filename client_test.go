@@ -213,7 +213,7 @@ var _ = Describe("Client", func() {
 			panicableInfo.shouldPanic.Store(true)
 			panicableDebug.shouldPanic.Store(true)
 			// Ensure that we really don't get any logs anymore
-			time.Sleep(1 * time.Second)
+			time.Sleep(500 * time.Millisecond)
 			Expect(clientConn.State()).To(BeEquivalentTo(ClientClosed))
 			server.cancel()
 			close(done)
