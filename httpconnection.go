@@ -3,6 +3,7 @@ package signalr
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -127,6 +128,7 @@ func NewHTTPConnection(ctx context.Context, address string, options ...func(*htt
 	switch {
 	case negotiateResponse.hasTransport("WebTransports"):
 		// TODO
+		return nil, errors.New("support for WebTransports not implemented yet")
 
 	case httpConn.hasTransport(TransportWebSockets) && negotiateResponse.hasTransport(TransportWebSockets):
 		wsURL := reqURL
