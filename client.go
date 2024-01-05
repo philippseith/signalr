@@ -163,12 +163,15 @@ type client struct {
 	lastID            int64
 	backoffFactory    func() backoff.BackOff
 	cancelFunc        context.CancelFunc
+	wg                sync.WaitGroup
 }
 
 func (c *client) Start() {
 	c.setState(ClientConnecting)
 	boff := c.backoffFactory()
+	c.wg.Add(1)
 	go func() {
+		defer c.wg.Done()
 		for {
 			c.setErr(nil)
 			// Listen for state change to ClientConnected and signal backoff Reset then.
@@ -221,9 +224,8 @@ func (c *client) Start() {
 func (c *client) Stop() {
 	if c.cancelFunc != nil {
 		c.cancelFunc()
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second) // in practice, it is faster than 5 seconds so this is just to avoid infinite block
-		defer cancel()
-		c.WaitForState(ctx, ClientClosed)
+		c.wg.Wait()
+		c.setState(ClientClosed)
 	}
 }
 
