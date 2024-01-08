@@ -3,7 +3,6 @@ package signalr
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -127,7 +126,7 @@ func NewHTTPConnection(ctx context.Context, address string, options ...func(*htt
 	// Select the best connection
 	var conn Connection
 	switch {
-	case negotiateResponse.hasTransport("WebTransports"):
+	case httpConn.hasTransport(TransportWebTransports) && negotiateResponse.hasTransport(TransportWebTransports):
 		var d webtransport.Dialer
 		_, wtConn, err := d.Dial(ctx, reqURL.String(), req.Header)
 		if err != nil {
