@@ -180,6 +180,9 @@ func NewHTTPConnection(ctx context.Context, address string, options ...func(*htt
 		if err != nil {
 			return nil, err
 		}
+
+	default:
+		return nil, fmt.Errorf("transport not configured or unknown negotiation transports: %v", negotiateResponse.AvailableTransports)
 	}
 
 	return conn, nil
