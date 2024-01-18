@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"path"
 
+	"github.com/quic-go/webtransport-go"
 	"nhooyr.io/websocket"
 )
 
@@ -125,8 +126,15 @@ func NewHTTPConnection(ctx context.Context, address string, options ...func(*htt
 	// Select the best connection
 	var conn Connection
 	switch {
-	case negotiateResponse.hasTransport("WebTransports"):
-		// TODO
+	case httpConn.hasTransport(TransportWebTransports) && negotiateResponse.hasTransport(TransportWebTransports):
+		var d webtransport.Dialer
+		_, wtConn, err := d.Dial(ctx, reqURL.String(), req.Header)
+		if err != nil {
+			return nil, err
+		}
+
+		// TODO think about if the API should give the possibility to cancel this connections
+		conn = newWebTransportsConnection(context.Background(), negotiateResponse.ConnectionID, wtConn)
 
 	case httpConn.hasTransport(TransportWebSockets) && negotiateResponse.hasTransport(TransportWebSockets):
 		wsURL := reqURL
@@ -178,6 +186,9 @@ func NewHTTPConnection(ctx context.Context, address string, options ...func(*htt
 		if err != nil {
 			return nil, err
 		}
+
+	default:
+		return nil, fmt.Errorf("transport not configured or unknown negotiation transports: %v", negotiateResponse.AvailableTransports)
 	}
 
 	return conn, nil

@@ -3,6 +3,7 @@ package signalr
 type TransportType string
 
 var TransportWebSockets TransportType = "WebSockets"
+var TransportWebTransports TransportType = "WebTransports"
 var TransportServerSentEvents TransportType = "ServerSentEvents"
 
 type TransferFormatType string
