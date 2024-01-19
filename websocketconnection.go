@@ -4,9 +4,19 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-
+	"net/http"
+	"net/url"
 	"nhooyr.io/websocket"
 )
+
+func NewWebSocketConnection(ctx context.Context, reqURL *url.URL, connectionID string, headers http.Header) (Connection, error) {
+	ws, _, err := websocket.Dial(ctx, reqURL.String(), &websocket.DialOptions{HTTPHeader: headers})
+	if err != nil {
+		return nil, err
+	}
+
+	return newWebSocketConnection(ctx, connectionID, ws), nil
+}
 
 type webSocketConnection struct {
 	ConnectionBase
