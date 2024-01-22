@@ -168,7 +168,9 @@ type client struct {
 func (c *client) Start() {
 	c.setState(ClientConnecting)
 	boff := c.backoffFactory()
+	c.partyBase.waitGroup().Add(1)
 	go func() {
+		defer c.partyBase.waitGroup().Done()
 		for {
 			c.setErr(nil)
 			// Listen for state change to ClientConnected and signal backoff Reset then.
@@ -221,8 +223,9 @@ func (c *client) Start() {
 func (c *client) Stop() {
 	if c.cancelFunc != nil {
 		c.cancelFunc()
+		c.partyBase.waitGroup().Wait()
+		c.setState(ClientClosed)
 	}
-	c.setState(ClientClosed)
 }
 
 func (c *client) run() error {

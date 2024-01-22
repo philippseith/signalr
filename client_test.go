@@ -120,6 +120,18 @@ func (s *simpleReceiver) OnCallback(result string) {
 	s.ch <- result
 }
 
+type noLogAfterStopLogger struct {
+	StructuredLogger
+	shouldPanic atomic.Bool
+}
+
+func (n *noLogAfterStopLogger) Log(keyVals ...interface{}) error {
+	if n.shouldPanic.Load() {
+		panic("oh no")
+	}
+	return n.StructuredLogger.Log(keyVals)
+}
+
 var _ = Describe("Client", func() {
 	formatOption := TransferFormat("Text")
 	j := 1
@@ -148,6 +160,64 @@ var _ = Describe("Client", func() {
 			server.cancel()
 			close(done)
 		}, 1.0)
+	})
+	Context("Stop", func() {
+		It("should stop the client properly", func(done Done) {
+			// Create a simple server
+			server, err := NewServer(context.TODO(), SimpleHubFactory(&simpleHub{}),
+				testLoggerOption(),
+				ChanReceiveTimeout(200*time.Millisecond),
+				StreamBufferCapacity(5))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(server).NotTo(BeNil())
+			// Create both ends of the connection
+			cliConn, srvConn := newClientServerConnections()
+			// Start the server
+			go func() { _ = server.Serve(srvConn) }()
+			// Create the Client
+			clientConn, err := NewClient(context.Background(), WithConnection(cliConn), testLoggerOption(), formatOption)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(clientConn).NotTo(BeNil())
+			// Start it
+			clientConn.Start()
+			Expect(<-clientConn.WaitForState(context.Background(), ClientConnected)).NotTo(HaveOccurred())
+			clientConn.Stop()
+			Expect(clientConn.State()).To(BeEquivalentTo(ClientClosed))
+			server.cancel()
+			close(done)
+		})
+		It("should not log after stop", func(done Done) {
+			// Create a simple server
+			server, err := NewServer(context.TODO(), SimpleHubFactory(&simpleHub{}),
+				testLoggerOption(),
+				ChanReceiveTimeout(200*time.Millisecond),
+				StreamBufferCapacity(5))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(server).NotTo(BeNil())
+			// Create both ends of the connection
+			cliConn, srvConn := newClientServerConnections()
+			// Start the server
+			go func() { _ = server.Serve(srvConn) }()
+			// Create the Client
+			clientConn, err := NewClient(context.Background(), WithConnection(cliConn), testLoggerOption(), formatOption)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(clientConn).NotTo(BeNil())
+			// Replace loggers with loggers that panic after stop
+			info, debug := clientConn.loggers()
+			panicableInfo, panicableDebug := &noLogAfterStopLogger{StructuredLogger: info}, &noLogAfterStopLogger{StructuredLogger: debug}
+			clientConn.setLoggers(panicableInfo, panicableDebug)
+			// Start it
+			clientConn.Start()
+			Expect(<-clientConn.WaitForState(context.Background(), ClientConnected)).NotTo(HaveOccurred())
+			clientConn.Stop()
+			panicableInfo.shouldPanic.Store(true)
+			panicableDebug.shouldPanic.Store(true)
+			// Ensure that we really don't get any logs anymore
+			time.Sleep(500 * time.Millisecond)
+			Expect(clientConn.State()).To(BeEquivalentTo(ClientClosed))
+			server.cancel()
+			close(done)
+		})
 	})
 	Context("Invoke", func() {
 		It("should invoke a server method and return the result", func(done Done) {

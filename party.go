@@ -2,6 +2,7 @@ package signalr
 
 import (
 	"context"
+	"sync"
 	"time"
 
 	"github.com/go-kit/log"
@@ -29,7 +30,7 @@ type Party interface {
 	insecureSkipVerify() bool
 	setInsecureSkipVerify(skip bool)
 
-	originPatterns()   [] string
+	originPatterns() []string
 	setOriginPatterns(orgs []string)
 
 	chanReceiveTimeout() time.Duration
@@ -50,6 +51,8 @@ type Party interface {
 
 	maximumReceiveMessageSize() uint
 	setMaximumReceiveMessageSize(size uint)
+
+	waitGroup() *sync.WaitGroup
 }
 
 func newPartyBase(parentContext context.Context, info log.Logger, dbg log.Logger) partyBase {
@@ -81,10 +84,11 @@ type partyBase struct {
 	_streamBufferCapacity      uint
 	_maximumReceiveMessageSize uint
 	_enableDetailedErrors      bool
-	_insecureSkipVerify		   bool
-	_originPatterns             []string
+	_insecureSkipVerify        bool
+	_originPatterns            []string
 	info                       StructuredLogger
 	dbg                        StructuredLogger
+	wg                         sync.WaitGroup
 }
 
 func (p *partyBase) context() context.Context {
@@ -120,16 +124,16 @@ func (p *partyBase) setKeepAliveInterval(interval time.Duration) {
 }
 
 func (p *partyBase) insecureSkipVerify() bool {
-	return  p._insecureSkipVerify
+	return p._insecureSkipVerify
 }
 func (p *partyBase) setInsecureSkipVerify(skip bool) {
 	p._insecureSkipVerify = skip
 }
 
 func (p *partyBase) originPatterns() []string {
-	return  p._originPatterns
+	return p._originPatterns
 }
-func (p *partyBase) setOriginPatterns(origins  []string) {
+func (p *partyBase) setOriginPatterns(origins []string) {
 	p._originPatterns = origins
 }
 
@@ -172,4 +176,8 @@ func (p *partyBase) setLoggers(info StructuredLogger, dbg StructuredLogger) {
 
 func (p *partyBase) loggers() (info StructuredLogger, debug StructuredLogger) {
 	return p.info, p.dbg
+}
+
+func (p *partyBase) waitGroup() *sync.WaitGroup {
+	return &p.wg
 }
