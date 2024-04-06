@@ -9,8 +9,8 @@ require (
 	github.com/dave/jennifer v1.7.0
 	github.com/go-kit/log v0.2.1
 	github.com/google/uuid v1.6.0
-	github.com/onsi/ginkgo v1.16.5
-	github.com/onsi/gomega v1.32.0
+	github.com/onsi/ginkgo v1.12.1
+	github.com/onsi/gomega v1.27.10
 	github.com/quic-go/webtransport-go v0.7.0
 	github.com/stretchr/testify v1.9.0
 	github.com/teivah/onecontext v1.3.0
@@ -26,7 +26,7 @@ require (
 	github.com/google/go-cmp v0.6.0 // indirect
 	github.com/google/pprof v0.0.0-20240402174815-29b9bb013b0f // indirect
 	github.com/nxadm/tail v1.4.11 // indirect
-	github.com/onsi/ginkgo/v2 v2.17.1 // indirect
+	github.com/onsi/ginkgo/v2 v2.13.0 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/quic-go/qpack v0.4.0 // indirect
 	github.com/quic-go/quic-go v0.42.0 // indirect
