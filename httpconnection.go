@@ -19,9 +19,10 @@ type Doer interface {
 }
 
 type httpConnection struct {
-	client     Doer
-	headers    func() http.Header
-	transports []TransportType
+	client           Doer
+	headers          func() http.Header
+	transports       []TransportType
+	negotiateVersion *int
 }
 
 // WithHTTPClient sets the http client used to connect to the signalR server.
@@ -56,6 +57,14 @@ func WithTransports(transports ...TransportType) func(*httpConnection) error {
 	}
 }
 
+// WithNegotiateVersion sets the negotiate version to use for the SignalR negotiation.
+func WithNegotiateVersion(version int) func(*httpConnection) error {
+	return func(c *httpConnection) error {
+		c.negotiateVersion = &version
+		return nil
+	}
+}
+
 // NewHTTPConnection creates a signalR HTTP Connection for usage with a Client.
 // ctx can be used to cancel the SignalR negotiation during the creation of the Connection
 // but not the Connection itself.
@@ -84,6 +93,11 @@ func NewHTTPConnection(ctx context.Context, address string, options ...func(*htt
 
 	negotiateURL := *reqURL
 	negotiateURL.Path = path.Join(negotiateURL.Path, "negotiate")
+	if httpConn.negotiateVersion != nil {
+		q := negotiateURL.Query()
+		q.Set("negotiateVersion", fmt.Sprint(*httpConn.negotiateVersion))
+		negotiateURL.RawQuery = q.Encode()
+	}
 	req, err := http.NewRequestWithContext(ctx, "POST", negotiateURL.String(), nil)
 	if err != nil {
 		return nil, err
