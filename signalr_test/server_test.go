@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log"
 	"math/rand"
 	"net/http"
 	"os"
@@ -44,8 +45,12 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
-func TestServerSmoke(t *testing.T) {
-	testServer(t, "^smoke", signalr.HTTPTransports("WebSockets"))
+func TestServerSmokeWebSockets(t *testing.T) {
+	testServer(t, "^smoke", signalr.HTTPTransports(signalr.TransportWebSockets))
+}
+
+func TestServerSmokeSSE(t *testing.T) {
+	testServer(t, "^smoke", signalr.HTTPTransports(signalr.TransportServerSentEvents))
 }
 
 func TestServerJsonWebSockets(t *testing.T) {
@@ -94,7 +99,7 @@ func runJest(t *testing.T, testNamePattern string, quitServer chan struct{}) {
 		t.Error(err, fmt.Sprintf("\n%s\n%s", outSlurp, errSlurp))
 	} else {
 		// Strange: Jest reports test results to stderr
-		t.Log(fmt.Sprintf("\n%s", errSlurp))
+		log.Printf("\n%s", errSlurp)
 	}
 }
 

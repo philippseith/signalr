@@ -91,18 +91,18 @@ func (h *httpMux) handleGet(writer http.ResponseWriter, request *http.Request) {
 }
 
 func (h *httpMux) handleServerSentEvent(writer http.ResponseWriter, request *http.Request) {
-	connectionID := request.URL.Query().Get("id")
-	if connectionID == "" {
+	connectionIDorToken := request.URL.Query().Get("id")
+	if connectionIDorToken == "" {
 		writer.WriteHeader(http.StatusBadRequest)
 		return
 	}
 	h.mx.RLock()
-	c, ok := h.connectionMap[connectionID]
+	c, ok := h.connectionMap[connectionIDorToken]
 	h.mx.RUnlock()
 	if ok {
 		if _, ok := c.(*negotiateConnection); ok {
 			ctx, _ := onecontext.Merge(h.server.context(), request.Context())
-			sseConn, jobChan, jobResultChan, err := newServerSSEConnection(ctx, c.ConnectionID())
+			sseConn, jobChan, jobResultChan, err := newServerSSEConnection(ctx, connectionIDorToken) // version 1 uses the token to initiate the connection, not the ID
 			if err != nil {
 				writer.WriteHeader(http.StatusInternalServerError)
 				return
