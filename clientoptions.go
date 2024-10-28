@@ -6,6 +6,8 @@ import (
 	"fmt"
 
 	"github.com/cenkalti/backoff/v4"
+	"reflect"
+	"strings"
 )
 
 // WithConnection sets the Connection of the Client
@@ -94,13 +96,43 @@ func WithHttpConnection(ctx context.Context, address string, options ...func(*ht
 func WithReceiver(receiver interface{}) func(Party) error {
 	return func(party Party) error {
 		if client, ok := party.(*client); ok {
+			if client.receiver != nil {
+				return errors.New("client already has a receiver")
+			}
 			client.receiver = receiver
 			if receiver, ok := receiver.(ReceiverInterface); ok {
 				receiver.Init(client)
+
+				hubType := reflect.TypeOf(receiver)
+				hubValue := reflect.ValueOf(receiver)
+
+				for i := 0; i < hubType.NumMethod(); i++ {
+					methodName := strings.ToLower(hubType.Method(i).Name)
+					receiver.SetFunc(methodName, hubValue.Method(i))
+				}
 			}
 			return nil
 		}
 		return errors.New("option WithReceiver is client only")
+	}
+}
+
+// ReceiveFunc  set the handler function, and it will be added to the receiver. a default one will be used, If there is no receiver.
+func ReceiveFunc(name string, fn interface{}) func(Party) error {
+	return func(party Party) error {
+		if client, ok := party.(*client); ok {
+			if client.receiver == nil {
+				receiver := &Receiver{}
+				receiver.Init(client)
+				client.receiver = receiver
+			}
+			if receiver, ok := client.receiver.(ReceiverInterface); ok {
+				receiver.SetFunc(name, fn)
+				return nil
+			}
+			return errors.New("existing receiver does not support adding methods")
+		}
+		return errors.New("option ReceiveFunc is client only")
 	}
 }
 

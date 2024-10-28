@@ -369,13 +369,20 @@ func buildMethodArguments(method reflect.Value, invocation invocationMessage,
 }
 
 func getMethod(target interface{}, name string) (reflect.Value, bool) {
+	if receiver, ok := target.(ReceiverInterface); ok {
+		if method := receiver.GetFunc(name); method != nil {
+			return reflect.ValueOf(method), true
+		}
+	}
+
 	hubType := reflect.TypeOf(target)
 	if hubType != nil {
 		hubValue := reflect.ValueOf(target)
-		name = strings.ToLower(name)
+		lowCaseName := strings.ToLower(name)
+
 		for i := 0; i < hubType.NumMethod(); i++ {
 			// Search in public methods
-			if m := hubType.Method(i); strings.ToLower(m.Name) == name {
+			if m := hubType.Method(i); strings.ToLower(m.Name) == lowCaseName {
 				return hubValue.Method(i), true
 			}
 		}
