@@ -44,6 +44,9 @@ type Party interface {
 	enableDetailedErrors() bool
 	setEnableDetailedErrors(enable bool)
 
+	setAlternateMethodName(methodName, alternateName string)
+	getMethodNameByAlternateName(alternateName string) (methodName string)
+
 	loggers() (info StructuredLogger, dbg StructuredLogger)
 	setLoggers(info StructuredLogger, dbg StructuredLogger)
 
@@ -69,6 +72,7 @@ func newPartyBase(parentContext context.Context, info log.Logger, dbg log.Logger
 		_enableDetailedErrors:      false,
 		_insecureSkipVerify:        false,
 		_originPatterns:            nil,
+		methodNamesByAlternateName: make(map[string]string),
 		info:                       info,
 		dbg:                        dbg,
 	}
@@ -86,6 +90,7 @@ type partyBase struct {
 	_enableDetailedErrors      bool
 	_insecureSkipVerify        bool
 	_originPatterns            []string
+	methodNamesByAlternateName map[string]string
 	info                       StructuredLogger
 	dbg                        StructuredLogger
 	wg                         sync.WaitGroup
@@ -180,4 +185,16 @@ func (p *partyBase) loggers() (info StructuredLogger, debug StructuredLogger) {
 
 func (p *partyBase) waitGroup() *sync.WaitGroup {
 	return &p.wg
+}
+
+func (p *partyBase) setAlternateMethodName(methodName, alternateName string) {
+	p.methodNamesByAlternateName[alternateName] = methodName
+}
+
+func (p *partyBase) getMethodNameByAlternateName(alternateName string) (methodName string) {
+	var ok bool
+	if methodName, ok = p.methodNamesByAlternateName[alternateName]; !ok {
+		methodName = alternateName
+	}
+	return methodName
 }

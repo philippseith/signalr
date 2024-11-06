@@ -192,7 +192,8 @@ func (l *loop) GetNewID() string {
 func (l *loop) handleInvocationMessage(invocation invocationMessage) {
 	_ = l.dbg.Log(evt, msgRecv, msg, fmtMsg(invocation))
 	// Transient hub, dispatch invocation here
-	if method, ok := getMethod(l.party.invocationTarget(l.hubConn), invocation.Target); !ok {
+	methodName := l.party.getMethodNameByAlternateName(invocation.Target)
+	if method, ok := getMethod(l.party.invocationTarget(l.hubConn), methodName); !ok {
 		// Unable to find the method
 		_ = l.info.Log(evt, "getMethod", "error", "missing method", "name", invocation.Target, react, "send completion with error")
 		_ = l.hubConn.Completion(invocation.InvocationID, nil, fmt.Sprintf("Unknown method %s", invocation.Target))

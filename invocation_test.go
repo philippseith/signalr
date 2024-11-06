@@ -81,6 +81,18 @@ var _ = Describe("Invocation", func() {
 				close(done)
 			}, 2.0)
 		})
+		Context("When invoked by the client with alternate method name", func() {
+			It("should be invoked and return a completion", func(done Done) {
+				conn.ClientSend(`{"type":1,"invocationId": "123","target":"."}`)
+				Expect(<-invocationQueue).To(Equal("Simple()"))
+				recv := (<-conn.received).(completionMessage)
+				Expect(recv).NotTo(BeNil())
+				Expect(recv.InvocationID).To(Equal("123"))
+				Expect(recv.Result).To(BeNil())
+				Expect(recv.Error).To(Equal(""))
+				close(done)
+			}, 2.0)
+		})
 		Context("When invoked by the client two times in one frame", func() {
 			It("should be invoked and return a completion", func(done Done) {
 				conn.ClientSend(`{"type":1,"invocationId": "123","target":"simple"}`)

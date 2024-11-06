@@ -85,6 +85,10 @@ func (s *simpleHub) Callback(arg1 string) {
 	s.Hub.Clients().Caller().Send("OnCallback", strings.ToUpper(arg1))
 }
 
+func (s *simpleHub) SwearBack(arg1 string) {
+	s.Hub.Clients().Caller().Send("#@!", strings.ToUpper(arg1))
+}
+
 func (s *simpleHub) ReadStream(i int) chan string {
 	ch := make(chan string)
 	go func() {
@@ -259,6 +263,31 @@ var _ = Describe("Client", func() {
 			_, client, _, cancelClient := getTestBed(receiver, formatOption)
 			receiver.result.Store("x")
 			errCh := client.Send("Callback", "low")
+			ch := make(chan string, 1)
+			go func() {
+				for {
+					if result, ok := receiver.result.Load().(string); ok {
+						if result != "x" {
+							ch <- result
+							break
+						}
+					}
+				}
+			}()
+			select {
+			case val := <-ch:
+				Expect(val).To(Equal("LOW"))
+			case err := <-errCh:
+				Expect(err).NotTo(HaveOccurred())
+			}
+			cancelClient()
+			close(done)
+		}, 5.0)
+		It("should invoke a server method and get the result via callback with alternate name", func(done Done) {
+			receiver := &simpleReceiver{}
+			_, client, _, cancelClient := getTestBed(receiver, formatOption)
+			receiver.result.Store("x")
+			errCh := client.Send("SwearBack", "low")
 			ch := make(chan string, 1)
 			go func() {
 				for {
@@ -480,7 +509,8 @@ func getTestBed(receiver interface{}, formatOption func(Party) error) (Server, C
 	// Create the Client
 	var ctx context.Context
 	ctx, cancelClient := context.WithCancel(context.Background())
-	client, _ := NewClient(ctx, WithConnection(cliConn), WithReceiver(receiver), testLoggerOption(), formatOption)
+	client, _ := NewClient(ctx, WithConnection(cliConn), WithReceiver(receiver),
+		WithAlternateMethodName("OnCallback", "#@!"), testLoggerOption(), formatOption)
 	// Start it
 	client.Start()
 	return server, client, cliConn, cancelClient

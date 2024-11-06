@@ -129,3 +129,13 @@ func buildInfoDebugLogger(logger log.Logger, debug bool) (log.Logger, log.Logger
 	debugLogger := log.With(&recoverLogger{level.Debug(logger)}, "caller", log.DefaultCaller)
 	return infoLogger, debugLogger
 }
+
+// WithAlternateMethodName sets an alternate method name for hub or receiver method. This might be necessary
+// if the invocation target used by existing clients for invocations or by existing servers for callback invocations
+// is not a name that can be used as a Go method name.
+func WithAlternateMethodName(methodName, alternateName string) func(Party) error {
+	return func(p Party) error {
+		p.setAlternateMethodName(methodName, alternateName)
+		return nil
+	}
+}
