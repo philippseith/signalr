@@ -11,7 +11,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/onsi/ginkgo v1.12.1
 	github.com/onsi/gomega v1.27.10
-	github.com/quic-go/webtransport-go v0.7.0
+	github.com/quic-go/webtransport-go v0.8.1-0.20241018022711-4ac2c9250e66
 	github.com/stretchr/testify v1.9.0
 	github.com/teivah/onecontext v1.3.0
 	github.com/vmihailenco/msgpack/v5 v5.4.1
