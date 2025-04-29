@@ -7,7 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"os"
+	"os" // Add os import
 	"reflect"
 	"runtime/debug"
 
@@ -116,6 +116,11 @@ func (s *server) Serve(conn Connection) error {
 		info, _ := s.prefixLoggers("")
 		_ = info.Log(evt, "processHandshake", "connectionId", conn.ConnectionID(), "error", err, react, "do not connect")
 		return err
+	}
+
+	// If the lifetime manager is the Redis manager, set the protocol now that it's known.
+	if redisMgr, ok := s.lifetimeManager.(*redisHubLifetimeManager); ok {
+		redisMgr.setProtocol(protocol)
 	}
 
 	return newLoop(s, conn, protocol).Run(make(chan struct{}, 1))
