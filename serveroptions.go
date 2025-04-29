@@ -4,6 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+
+	"github.com/redis/go-redis/v9"
 )
 
 // UseHub sets the hub instance used by the server
@@ -73,6 +75,37 @@ func InsecureSkipVerify(skip bool) func(Party) error {
 func AllowOriginPatterns(origins []string) func(Party) error {
 	return func(p Party) error {
 		p.setOriginPatterns(origins)
+		return nil
+	}
+}
+
+// WithRedisHubLifetimeManager configures the server to use a Redis-backed HubLifetimeManager.
+// This enables scaling the SignalR server across multiple instances using Redis Pub/Sub and Sets.
+// Provide redis.Options to connect to your Redis instance.
+func WithRedisHubLifetimeManager(redisClient *redis.Client) func(Party) error {
+	return func(p Party) error {
+		s, ok := p.(*server)
+		if !ok {
+			return errors.New("option WithRedisHubLifetimeManager is server only")
+		}
+
+		// The RedisLifetimeManager needs access to the protocol to handle message serialization.
+		// However, the protocol is determined *after* options are processed during the handshake.
+		// This requires a slight adjustment: the Redis manager needs to be initialized with the protocol later.
+		// For now, we'll create the manager and signal it needs protocol setup post-handshake.
+
+		// Create the Redis manager (protocol will be set later)
+		mgr, err := newRedisHubLifetimeManager(s.context(), s.info, redisClient, nil) // Pass nil for protocol initially
+		if err != nil {
+			return fmt.Errorf("failed to create Redis HubLifetimeManager: %w", err)
+		}
+
+		// Assign the new manager
+		s.lifetimeManager = mgr
+
+		// Note: We need a mechanism to set the protocol on the redisHubLifetimeManager
+		// after the handshake is done in the Serve method. This requires modifying Serve.
+
 		return nil
 	}
 }

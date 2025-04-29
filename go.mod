@@ -7,9 +7,11 @@ require (
 	github.com/dave/jennifer v1.7.0
 	github.com/go-kit/log v0.2.1
 	github.com/google/uuid v1.6.0
-	github.com/onsi/ginkgo v1.12.1
+	github.com/gorilla/websocket v1.5.3
+	github.com/onsi/ginkgo v1.16.5
 	github.com/onsi/gomega v1.27.10
 	github.com/quic-go/webtransport-go v0.8.1-0.20241018022711-4ac2c9250e66
+	github.com/redis/go-redis/v9 v9.7.3
 	github.com/stretchr/testify v1.9.0
 	github.com/teivah/onecontext v1.3.0
 	github.com/vmihailenco/msgpack/v5 v5.4.1
@@ -17,7 +19,9 @@ require (
 )
 
 require (
+	github.com/cespare/xxhash/v2 v2.2.0 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
+	github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect
 	github.com/fsnotify/fsnotify v1.7.0 // indirect
 	github.com/go-logfmt/logfmt v0.6.0 // indirect
 	github.com/go-task/slim-sprig v0.0.0-20230315185526-52ccab3ef572 // indirect
