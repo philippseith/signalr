@@ -11,13 +11,13 @@ import (
 // Party is the common base of Server and Client. The Party methods are only used internally,
 // but the interface is public to allow using Options on Party as parameters for external functions
 type Party interface {
-	context() context.Context
+	Context() context.Context
 	cancel()
 
-	onConnected(hc hubConnection)
-	onDisconnected(hc hubConnection)
+	onConnected(hc HubConnection)
+	onDisconnected(hc HubConnection)
 
-	invocationTarget(hc hubConnection) interface{}
+	invocationTarget(hc HubConnection) interface{}
 
 	timeout() time.Duration
 	setTimeout(timeout time.Duration)
@@ -96,7 +96,7 @@ type partyBase struct {
 	wg                         sync.WaitGroup
 }
 
-func (p *partyBase) context() context.Context {
+func (p *partyBase) Context() context.Context {
 	return p.ctx
 }
 
