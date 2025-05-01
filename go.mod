@@ -7,7 +7,6 @@ require (
 	github.com/dave/jennifer v1.7.0
 	github.com/go-kit/log v0.2.1
 	github.com/google/uuid v1.6.0
-	github.com/gorilla/websocket v1.5.3
 	github.com/onsi/ginkgo v1.16.5
 	github.com/onsi/gomega v1.27.10
 	github.com/quic-go/webtransport-go v0.8.1-0.20241018022711-4ac2c9250e66
