@@ -1,4 +1,4 @@
-package signalr
+package ext
 
 import (
 	"context"
@@ -10,6 +10,7 @@ import (
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	"github.com/google/uuid"
+	"github.com/philippseith/signalr"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -33,19 +34,19 @@ type redisInvocation struct {
 
 // redisHubLifetimeManager manages hub connections using Redis Pub/Sub and Sets
 type redisHubLifetimeManager struct {
-	clients          sync.Map // Map[string]hubConnection - Local connections on this server instance
+	clients          sync.Map // Map[string]signalr.HubConnection - Local connections on this server instance
 	connectionGroups sync.Map // Map[string]map[string]struct{} - Local cache: connectionID -> set of groupNames this connection belongs to *locally*
 	redisClient      *redis.Client
 	pubSub           *redis.PubSub
-	logger           StructuredLogger
+	logger           signalr.StructuredLogger
 	instanceID       string // Unique ID for this server instance (can be useful for debugging)
 	ctx              context.Context
 	cancel           context.CancelFunc
-	protocol         hubProtocol // Needed for serialization if args are complex (though JSON handles basic types)
+	// protocol         signalr.hubProtocol // Needed for serialization if args are complex (though JSON handles basic types)
 }
 
 // newRedisHubLifetimeManager creates a new Redis-backed HubLifetimeManager
-func newRedisHubLifetimeManager(ctx context.Context, logger StructuredLogger, redisclient *redis.Client, protocol hubProtocol) (HubLifetimeManager, error) {
+func newRedisHubLifetimeManager(ctx context.Context, logger signalr.StructuredLogger, redisclient *redis.Client) (signalr.HubLifetimeManager, error) {
 	instanceID := uuid.New().String()
 	info := log.WithPrefix(logger, "ts", log.DefaultTimestampUTC, "class", "redisHubLifetimeManager", "instance", instanceID)
 
@@ -57,7 +58,7 @@ func newRedisHubLifetimeManager(ctx context.Context, logger StructuredLogger, re
 		instanceID:  instanceID,
 		ctx:         mgrCtx,
 		cancel:      cancel,
-		protocol:    protocol, // Store protocol (though json.Marshal handles args for now)
+		// protocol:    protocol, // Store protocol (though json.Marshal handles args for now)
 	}
 
 	// Start listening to Redis Pub/Sub in a separate goroutine
@@ -139,7 +140,7 @@ func (r *redisHubLifetimeManager) handleRedisMessage(msg *redis.Message) {
 		if conn, ok := r.clients.Load(invocation.ConnectionID); ok {
 			// Check if this connection ID is in the exclusion list
 			if _, excluded := excludedMap[invocation.ConnectionID]; !excluded {
-				hubConn := conn.(hubConnection)
+				hubConn := conn.(signalr.HubConnection)
 				// Send the invocation asynchronously
 				go func() {
 					// Use empty invocation ID as per CHANGE pattern interpretation
@@ -170,7 +171,7 @@ func (r *redisHubLifetimeManager) handleRedisMessage(msg *redis.Message) {
 		// Iterate through local connections ONLY
 		r.clients.Range(func(key, value interface{}) bool {
 			connectionID := key.(string)
-			hubConn := value.(hubConnection)
+			hubConn := value.(signalr.HubConnection)
 
 			// Check exclusion list first
 			if _, excluded := excludedMap[connectionID]; excluded {
@@ -189,7 +190,7 @@ func (r *redisHubLifetimeManager) handleRedisMessage(msg *redis.Message) {
 
 			if isMember {
 				// Send the invocation asynchronously
-				go func(conn hubConnection, connID string) {
+				go func(conn signalr.HubConnection, connID string) {
 					// Timeout removed as per request
 					err := conn.SendInvocation(uuid.NewString(), invocation.Target, invocation.Args)
 					if err != nil {
@@ -215,7 +216,7 @@ func (r *redisHubLifetimeManager) handleRedisMessage(msg *redis.Message) {
 		// Iterate through all local connections
 		r.clients.Range(func(key, value interface{}) bool {
 			connectionID := key.(string)
-			hubConn := value.(hubConnection)
+			hubConn := value.(signalr.HubConnection)
 
 			// Check exclusion list
 			if _, excluded := excludedMap[connectionID]; excluded {
@@ -224,7 +225,7 @@ func (r *redisHubLifetimeManager) handleRedisMessage(msg *redis.Message) {
 			}
 
 			// Send the invocation asynchronously
-			go func(conn hubConnection, connID string) {
+			go func(conn signalr.HubConnection, connID string) {
 				_, cancel := context.WithTimeout(r.ctx, 5*time.Second)
 				defer cancel()
 				err := conn.SendInvocation(uuid.NewString(), invocation.Target, invocation.Args)
@@ -246,7 +247,7 @@ func (r *redisHubLifetimeManager) handleRedisMessage(msg *redis.Message) {
 
 // --- HubLifetimeManager Interface Implementation ---
 
-func (r *redisHubLifetimeManager) OnConnected(conn hubConnection) {
+func (r *redisHubLifetimeManager) OnConnected(conn signalr.HubConnection) {
 	r.clients.Store(conn.ConnectionID(), conn)
 	// Initialize local group cache for this connection
 	r.connectionGroups.Store(conn.ConnectionID(), make(map[string]struct{}))
@@ -254,7 +255,7 @@ func (r *redisHubLifetimeManager) OnConnected(conn hubConnection) {
 	// No Redis action needed on connect, only when adding to groups.
 }
 
-func (r *redisHubLifetimeManager) OnDisconnected(conn hubConnection) {
+func (r *redisHubLifetimeManager) OnDisconnected(conn signalr.HubConnection) {
 	connectionID := conn.ConnectionID()
 	r.clients.Delete(connectionID)
 
@@ -323,7 +324,7 @@ func (r *redisHubLifetimeManager) InvokeAll(target string, args []interface{}) {
 func (r *redisHubLifetimeManager) InvokeClient(connectionID string, target string, args []interface{}) {
 	// Optimization: Check local first?
 	// if client, ok := r.clients.Load(connectionID); ok {
-	// 	 go func() { _ = client.(hubConnection).SendInvocation("", target, args) }()
+	// 	 go func() { _ = client.(signalr.HubConnection).SendInvocation("", target, args) }()
 	//   // If we send locally, should we still publish?
 	//   // Publishing ensures the message is delivered even if the connection migrates *during* the send.
 	//   // Let's stick to the Redis publish model for simplicity and consistency.
@@ -534,6 +535,6 @@ func (r *redisHubLifetimeManager) Close() error {
 
 // setProtocol sets the hub protocol on the Redis lifetime manager.
 // This is called after the handshake determines the protocol.
-func (r *redisHubLifetimeManager) setProtocol(protocol hubProtocol) {
-	r.protocol = protocol
-}
+// func (r *redisHubLifetimeManager) setProtocol(protocol hubProtocol) {
+// 	r.protocol = protocol
+// }
