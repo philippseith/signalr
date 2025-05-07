@@ -10,7 +10,7 @@ import (
 	"path"
 
 	"github.com/quic-go/webtransport-go"
-	"nhooyr.io/websocket"
+	"github.com/coder/websocket"
 )
 
 // Doer is the *http.Client interface
