@@ -4,6 +4,7 @@ go 1.23.0
 
 require (
 	github.com/cenkalti/backoff/v4 v4.3.0
+	github.com/coder/websocket v1.8.13
 	github.com/dave/jennifer v1.7.0
 	github.com/go-kit/log v0.2.1
 	github.com/google/uuid v1.6.0
@@ -13,7 +14,6 @@ require (
 	github.com/stretchr/testify v1.9.0
 	github.com/teivah/onecontext v1.3.0
 	github.com/vmihailenco/msgpack/v5 v5.4.1
-	nhooyr.io/websocket v1.8.10
 )
 
 require (

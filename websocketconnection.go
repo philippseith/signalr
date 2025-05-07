@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"nhooyr.io/websocket"
+	"github.com/coder/websocket"
 )
 
 func NewWebSocketConnection(ctx context.Context, reqURL *url.URL, connectionID string, headers http.Header) (Connection, error) {
