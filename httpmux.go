@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/teivah/onecontext"
-	"nhooyr.io/websocket"
+	"github.com/coder/websocket"
 )
 
 type httpMux struct {
