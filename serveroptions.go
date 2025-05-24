@@ -76,3 +76,23 @@ func AllowOriginPatterns(origins []string) func(Party) error {
 		return nil
 	}
 }
+
+// WithHubLifetimeManager configures the server to use a specifc HubLifetimeManager.
+func WithHubLifetimeManager(newMgr func(s Server) (HubLifetimeManager, error)) func(Party) error {
+	return func(p Party) error {
+		s, ok := p.(*server)
+		if !ok {
+			return errors.New("option WithHubLifetimeManager is server only")
+		}
+
+		mgr, err := newMgr(s)
+		if err != nil {
+			return fmt.Errorf("failed to create HubLifetimeManager: %w", err)
+		}
+
+		// Assign the new manager
+		s.lifetimeManager = mgr
+
+		return nil
+	}
+}

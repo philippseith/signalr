@@ -24,7 +24,7 @@ type HubContext interface {
 
 type connectionHubContext struct {
 	abort      context.CancelFunc
-	connection hubConnection
+	connection HubConnection
 	clients    HubClients
 	groups     GroupManager
 	info       StructuredLogger

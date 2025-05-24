@@ -9,9 +9,9 @@ import (
 	"time"
 )
 
-// hubConnection is used by HubContext, Server and Client to realize the external API.
-// hubConnection uses a transport connection (of type Connection) and a hubProtocol to send and receive SignalR messages.
-type hubConnection interface {
+// HubConnection is used by HubContext, Server and Client to realize the external API.
+// HubConnection uses a transport connection (of type Connection) and a hubProtocol to send and receive SignalR messages.
+type HubConnection interface {
 	ConnectionID() string
 	Receive() <-chan receiveResult
 	SendInvocation(id string, target string, args []interface{}) error
@@ -32,7 +32,7 @@ type receiveResult struct {
 	err     error
 }
 
-func newHubConnection(connection Connection, protocol hubProtocol, maximumReceiveMessageSize uint, info StructuredLogger) hubConnection {
+func newHubConnection(connection Connection, protocol hubProtocol, maximumReceiveMessageSize uint, info StructuredLogger) HubConnection {
 	ctx, cancelFunc := context.WithCancel(connection.Context())
 	c := &defaultHubConnection{
 		ctx:                       ctx,

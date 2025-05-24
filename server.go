@@ -7,7 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"os"
+	"os" // Add os import
 	"reflect"
 	"runtime/debug"
 
@@ -129,7 +129,7 @@ func (s *server) availableTransports() []TransportType {
 	return s.transports
 }
 
-func (s *server) onConnected(hc hubConnection) {
+func (s *server) onConnected(hc HubConnection) {
 	s.lifetimeManager.OnConnected(hc)
 	go func() {
 		defer s.recoverHubLifeCyclePanic()
@@ -137,7 +137,7 @@ func (s *server) onConnected(hc hubConnection) {
 	}()
 }
 
-func (s *server) onDisconnected(hc hubConnection) {
+func (s *server) onDisconnected(hc HubConnection) {
 	go func() {
 		defer s.recoverHubLifeCyclePanic()
 		s.invocationTarget(hc).(HubInterface).OnDisconnected(hc.ConnectionID())
@@ -146,7 +146,7 @@ func (s *server) onDisconnected(hc hubConnection) {
 
 }
 
-func (s *server) invocationTarget(conn hubConnection) interface{} {
+func (s *server) invocationTarget(conn HubConnection) interface{} {
 	hub := s.newHub()
 	hub.Initialize(s.newConnectionHubContext(conn))
 	return hub
@@ -177,7 +177,7 @@ func (s *server) prefixLoggers(connectionID string) (info StructuredLogger, dbg 
 			"hub", reflect.ValueOf(s.newHub()).Elem().Type())
 }
 
-func (s *server) newConnectionHubContext(hubConn hubConnection) HubContext {
+func (s *server) newConnectionHubContext(hubConn HubConnection) HubContext {
 	return &connectionHubContext{
 		abort: hubConn.Abort,
 		clients: &callerHubClients{
@@ -201,7 +201,7 @@ func (s *server) processHandshake(conn Connection) (hubProtocol, error) {
 
 func (s *server) receiveHandshakeRequest(conn Connection) (handshakeRequest, error) {
 	_, dbg := s.prefixLoggers(conn.ConnectionID())
-	ctx, cancelRead := context.WithTimeout(s.context(), s.HandshakeTimeout())
+	ctx, cancelRead := context.WithTimeout(s.Context(), s.HandshakeTimeout())
 	defer cancelRead()
 	readJSONFramesChan := make(chan []interface{}, 1)
 	go func() {
@@ -225,7 +225,7 @@ func (s *server) receiveHandshakeRequest(conn Connection) (handshakeRequest, err
 
 func (s *server) sendHandshakeResponse(conn Connection, request handshakeRequest) (protocol hubProtocol, err error) {
 	info, dbg := s.prefixLoggers(conn.ConnectionID())
-	ctx, cancelWrite := context.WithTimeout(s.context(), s.HandshakeTimeout())
+	ctx, cancelWrite := context.WithTimeout(s.Context(), s.HandshakeTimeout())
 	defer cancelWrite()
 	var ok bool
 	if protocol, ok = protocolMap[request.Protocol]; ok {
