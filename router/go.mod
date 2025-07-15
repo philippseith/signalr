@@ -1,4 +1,4 @@
-module github.com/mojtabaRKS/signalr
+module github.com/mojtabaRKS/signalr/router
 
 go 1.23.0
 
