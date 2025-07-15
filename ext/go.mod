@@ -1,4 +1,4 @@
-module github.com/mojtabaRKS/signalr
+module github.com/mojtabaRKS/signalr/ext
 
 go 1.24.2
 
