@@ -9,7 +9,7 @@ require (
 	github.com/julienschmidt/httprouter v1.3.0
 	github.com/onsi/ginkgo v1.12.1
 	github.com/onsi/gomega v1.27.10
-	github.com/mojtabaRKS/signalr v0.6.3
+	github.com/mojtabaRKS/signalr v1.1.0
 )
 
 require (
