@@ -4,7 +4,7 @@ import (
 	"net/http"
 
 	"github.com/julienschmidt/httprouter"
-	"github.com/philippseith/signalr"
+	"github.com/mojtabaRKS/signalr"
 )
 
 // WithHttpRouter is a signalr.MappableRouter factory for signalr.Server.MapHTTP

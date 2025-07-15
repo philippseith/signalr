@@ -2,12 +2,12 @@ module github.com/mojtabaRKS/signalr
 
 go 1.24.2
 
-replace github.com/philippseith/signalr => /Users/philipp/wspc/go/moj_signalr
+replace github.com/mojtabaRKS/signalr => /Users/philipp/wspc/go/moj_signalr
 
 require (
 	github.com/go-kit/log v0.2.1
 	github.com/google/uuid v1.6.0
-	github.com/philippseith/signalr v0.6.3
+	github.com/mojtabaRKS/signalr v0.6.3
 	github.com/redis/go-redis/v9 v9.8.0
 )
 
