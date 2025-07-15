@@ -5,7 +5,7 @@ go 1.24.2
 require (
 	github.com/go-kit/log v0.2.1
 	github.com/google/uuid v1.6.0
-	github.com/mojtabaRKS/signalr v0.6.3
+	github.com/mojtabaRKS/signalr v1.1.0
 	github.com/redis/go-redis/v9 v9.8.0
 )
 
