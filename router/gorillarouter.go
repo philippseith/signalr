@@ -4,7 +4,7 @@ import (
 	"net/http"
 
 	"github.com/gorilla/mux"
-	"github.com/philippseith/signalr"
+	"github.com/mojtabaRKS/signalr"
 )
 
 // WithGorillaRouter is a signalr.MappableRouter factory for signalr.Server.MapHTTP

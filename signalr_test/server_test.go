@@ -14,7 +14,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/philippseith/signalr"
+	"github.com/mojtabaRKS/signalr"
 )
 
 func TestMain(m *testing.M) {

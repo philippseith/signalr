@@ -9,7 +9,7 @@ import (
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	"github.com/philippseith/signalr"
+	"github.com/mojtabaRKS/signalr"
 )
 
 func TestSignalR(t *testing.T) {

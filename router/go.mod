@@ -38,4 +38,4 @@ require (
 	nhooyr.io/websocket v1.8.7 // indirect
 )
 
-// replace github.com/philippseith/signalr => ..
+// replace github.com/mojtabaRKS/signalr => ..

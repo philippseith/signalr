@@ -3,7 +3,7 @@
     <module name="signalr" />
     <working_directory value="$PROJECT_DIR$" />
     <kind value="PACKAGE" />
-    <package value="github.com/philippseith/signalr" />
+    <package value="github.com/mojtabaRKS/signalr" />
     <directory value="$PROJECT_DIR$" />
     <filePath value="$PROJECT_DIR$" />
     <framework value="gotest" />
@@ -24,7 +24,7 @@
       </ENTRIES>
     </EXTENSION>
     <kind value="PACKAGE" />
-    <package value="github.com/philippseith/signalr" />
+    <package value="github.com/mojtabaRKS/signalr" />
     <directory value="$PROJECT_DIR$" />
     <filePath value="$PROJECT_DIR$" />
     <framework value="gotest" />
