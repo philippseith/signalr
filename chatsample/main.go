@@ -40,6 +40,11 @@ func (c *chat) Echo(message string) {
 	c.Clients().Caller().Send("receive", message)
 }
 
+func (c *chat) DoSomethingBugy() {
+	c.Close("this is a custom error!", true)
+}
+
+
 func (c *chat) Panic() {
 	panic("Don't panic!")
 }
