@@ -54,16 +54,11 @@ func NewServer(ctx context.Context, options ...func(Party) error) (Server, error
 	lifetimeManager := newLifeTimeManager(info)
 	server := &server{
 		lifetimeManager: &lifetimeManager,
-		defaultHubClients: &defaultHubClients{
-			lifetimeManager: &lifetimeManager,
-			allCache:        allClientProxy{lifetimeManager: &lifetimeManager},
-		},
-		groupManager: &defaultGroupManager{
-			lifetimeManager: &lifetimeManager,
-		},
+		// Do NOT initialize defaultHubClients or groupManager yet
 		partyBase:        newPartyBase(ctx, info, dbg),
 		reconnectAllowed: true,
 	}
+	// apply any option including lifetime manager, logger, etc.
 	for _, option := range options {
 		if option != nil {
 			if err := option(server); err != nil {
@@ -71,12 +66,25 @@ func NewServer(ctx context.Context, options ...func(Party) error) (Server, error
 			}
 		}
 	}
+
+	// Now initialize them, using the (possibly replaced) lifetimeManager
+	server.defaultHubClients = &defaultHubClients{
+		lifetimeManager: server.lifetimeManager,
+		allCache:        allClientProxy{lifetimeManager: server.lifetimeManager},
+	}
+
+	server.groupManager = &defaultGroupManager{
+		lifetimeManager: server.lifetimeManager,
+	}
+
 	if server.transports == nil {
 		server.transports = []TransportType{TransportWebSockets, TransportServerSentEvents}
 	}
+
 	if server.newHub == nil {
 		return server, errors.New("cannot determine hub type. Neither UseHub, HubFactory or SimpleHubFactory given as option")
 	}
+
 	return server, nil
 }
 
