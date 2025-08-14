@@ -20,7 +20,7 @@ type HubContext interface {
 	Context() context.Context
 	Abort()
 	Logger() (info StructuredLogger, dbg StructuredLogger)
-	Close(errorMessage string, allowReconnect bool)
+	Close(errorMessage string, allowReconnect bool) error
 }
 
 type connectionHubContext struct {
@@ -60,6 +60,6 @@ func (c *connectionHubContext) Logger() (info StructuredLogger, dbg StructuredLo
 	return c.info, c.dbg
 }
 
-func (c *connectionHubContext) Close(errorMessage string, allowReconnect bool) {
-	c.connection.Close(errorMessage, allowReconnect)
+func (c *connectionHubContext) Close(errorMessage string, allowReconnect bool) error {
+	return c.connection.Close(errorMessage, allowReconnect)
 }
