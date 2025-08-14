@@ -3,8 +3,9 @@ package signalr
 import (
 	"context"
 	"fmt"
-	"github.com/quic-go/webtransport-go"
 	"sync"
+
+	"github.com/quic-go/webtransport-go"
 )
 
 type webTransportsConnection struct {
@@ -12,7 +13,7 @@ type webTransportsConnection struct {
 	session *webtransport.Session
 
 	// current stream guarded by mutex
-	stream webtransport.Stream
+	stream *webtransport.Stream
 	sync.Mutex
 }
 
