@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/teivah/onecontext"
-	"nhooyr.io/websocket"
+	"github.com/coder/websocket"
 )
 
 type httpMux struct {
@@ -101,7 +101,7 @@ func (h *httpMux) handleServerSentEvent(writer http.ResponseWriter, request *htt
 	h.mx.RUnlock()
 	if ok {
 		if _, ok := c.(*negotiateConnection); ok {
-			ctx, _ := onecontext.Merge(h.server.context(), request.Context())
+			ctx, _ := onecontext.Merge(h.server.Context(), request.Context())
 			sseConn, jobChan, jobResultChan, err := newServerSSEConnection(ctx, connectionIDorToken) // version 1 uses the token to initiate the connection, not the ID
 			if err != nil {
 				writer.WriteHeader(http.StatusInternalServerError)
@@ -173,7 +173,7 @@ func (h *httpMux) handleWebsocket(writer http.ResponseWriter, request *http.Requ
 	if ok {
 		if _, ok := c.(*negotiateConnection); ok {
 			// Connection is negotiated but not initiated
-			ctx, _ := onecontext.Merge(h.server.context(), request.Context())
+			ctx, _ := onecontext.Merge(h.server.Context(), request.Context())
 			err = h.serveConnection(newWebSocketConnection(ctx, c.ConnectionID(), websocketConn))
 			if err != nil {
 				_ = websocketConn.Close(1005, err.Error())

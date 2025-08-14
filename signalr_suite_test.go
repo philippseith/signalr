@@ -18,7 +18,9 @@ func connect(hubProto HubInterface) (Server, *testingConnection) {
 	server, err := NewServer(context.TODO(), SimpleHubFactory(hubProto),
 		testLoggerOption(),
 		ChanReceiveTimeout(200*time.Millisecond),
-		StreamBufferCapacity(5))
+		StreamBufferCapacity(5),
+		WithAlternateMethodName("Simple", "."),
+	)
 	if err != nil {
 		Fail(err.Error())
 		return nil, nil

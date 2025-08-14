@@ -20,11 +20,12 @@ type HubContext interface {
 	Context() context.Context
 	Abort()
 	Logger() (info StructuredLogger, dbg StructuredLogger)
+	Close(errorMessage string, allowReconnect bool)
 }
 
 type connectionHubContext struct {
 	abort      context.CancelFunc
-	connection hubConnection
+	connection HubConnection
 	clients    HubClients
 	groups     GroupManager
 	info       StructuredLogger
@@ -57,4 +58,8 @@ func (c *connectionHubContext) Abort() {
 
 func (c *connectionHubContext) Logger() (info StructuredLogger, dbg StructuredLogger) {
 	return c.info, c.dbg
+}
+
+func (c *connectionHubContext) Close(errorMessage string, allowReconnect bool) {
+	c.connection.Close(errorMessage, allowReconnect)
 }
