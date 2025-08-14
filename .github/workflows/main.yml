@@ -8,47 +8,46 @@ on:
   pull_request:
 
 jobs:
-
   golangci:
     name: golangci
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@v3
+        uses: golangci/golangci-lint-action@v8
         with:
           # Required: the version of golangci-lint is required and must be specified without patch version: we always use the latest patch version.
-          version: v1.61
+          version: v2.3
 
   test:
     name: Test and Coverage
     runs-on: ubuntu-latest
     steps:
       - name: Set up Go
-        uses: actions/setup-go@v1
+        uses: actions/setup-go@v5
         with:
-          go-version: 1.21
+          go-version: 1.24
 
       - name: Check out code
-        uses: actions/checkout@v1
+        uses: actions/checkout@v5
 
       - name: Run Unit tests
         run: make test-coverage
 
       - name: Upload Coverage report to CodeCov
-        uses: codecov/codecov-action@v1.0.0
+        uses: codecov/codecov-action@v5
         with:
           token: ${{secrets.CODECOV_TOKEN}}
-          file: ./coverage.txt
+          files: ./coverage.txt
 
 #  test-macos:
 #    name: Test MacOS
 #    runs-on: macos-11
 #    steps:
 #      - name: Set up Go
-#        uses: actions/setup-go@v1
+#        uses: actions/setup-go@v5
 #        with:
-#          go-version: 1.16
+#          go-version: 1.24
 #
 #      - name: Check out code
 #        uses: actions/checkout@v1
@@ -61,9 +60,9 @@ jobs:
 #    runs-on: windows-2019
 #    steps:
 #      - name: Set up Go
-#        uses: actions/setup-go@v1
+#        uses: actions/setup-go@v5
 #        with:
-#          go-version: 1.16
+#          go-version: 1.24
 #
 #      - name: Check out code
 #        uses: actions/checkout@v1
@@ -77,12 +76,12 @@ jobs:
     needs: [golangci, test]
     steps:
       - name: Set up Go
-        uses: actions/setup-go@v1
+        uses: actions/setup-go@v5
         with:
-          go-version: 1.21
+          go-version: 1.24
 
       - name: Check out code
-        uses: actions/checkout@v1
+        uses: actions/checkout@v5
 
       - name: Build
         run: make build

@@ -1,7 +1,9 @@
-issues:
-  exclude-dirs:
+version: "2"
+
+linters:
+  exclusions:
+    paths:
     - chatsample
     - signalr_test
     - router/router_test
-  exclude-files:
     - ".+_test\\.go$"
