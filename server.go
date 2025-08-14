@@ -253,7 +253,7 @@ func (s *server) sendHandshakeResponse(conn Connection, request handshakeRequest
 		if _, respErr := ReadWriteWithContext(ctx,
 			func() (int, error) {
 				const errorHandshakeResponse = "{\"error\":\"%s\"}\u001e"
-				return conn.Write([]byte(fmt.Sprintf(errorHandshakeResponse, err)))
+				return fmt.Fprintf(conn, errorHandshakeResponse, err)
 			}, func() {}); respErr != nil {
 			_ = dbg.Log(evt, "handshake sent", "error", respErr)
 			err = respErr
