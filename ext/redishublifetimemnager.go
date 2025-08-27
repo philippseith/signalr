@@ -23,13 +23,19 @@ const (
 	// redisConnectionGroupsPrefix = redisChannelPrefix + "connectiongroups:" // Not strictly needed with Redis Sets for membership; local cache is sufficient.
 )
 
+// SECURITY NOTE: This implementation includes protection against infinite loops
+// by tracking the source instance ID and skipping self-messages.
+// Without this protection, Redis Pub/Sub would cause infinite message loops
+// where each instance processes its own published messages.
+
 // redisInvocation represents a message sent over Redis for hub invocations
 type redisInvocation struct {
-	Target       string        `json:"t"`
-	Args         []interface{} `json:"a"`
-	ExcludedIDs  []string      `json:"e,omitempty"` // Optional: Connection IDs to exclude (e.g., for SendAllExcept)
-	GroupName    string        `json:"g,omitempty"` // Used for group messages to identify the target group
-	ConnectionID string        `json:"c,omitempty"` // Used for client messages to identify the target client
+	Target         string        `json:"t"`
+	Args           []interface{} `json:"a"`
+	ExcludedIDs    []string      `json:"e,omitempty"` // Optional: Connection IDs to exclude (e.g., for SendAllExcept)
+	GroupName      string        `json:"g,omitempty"` // Used for group messages to identify the target group
+	ConnectionID   string        `json:"c,omitempty"` // Used for client messages to identify the target client
+	SourceInstance string        `json:"s,omitempty"` // Source instance ID to prevent infinite loops
 }
 
 // redisHubLifetimeManager manages hub connections using Redis Pub/Sub and Sets
@@ -123,6 +129,12 @@ func (r *redisHubLifetimeManager) handleRedisMessage(msg *redis.Message) {
 	var invocation redisInvocation
 	if err := json.Unmarshal([]byte(msg.Payload), &invocation); err != nil {
 		level.Error(r.logger).Log("event", "redis_payload_unmarshal_error", "err", err, "payload", msg.Payload)
+		return
+	}
+
+	// CRITICAL: Skip messages from this instance to prevent infinite loops
+	if invocation.SourceInstance == r.instanceID {
+		level.Debug(r.logger).Log("event", "skipped_self_message", "sourceInstance", invocation.SourceInstance, "target", invocation.Target)
 		return
 	}
 
@@ -302,7 +314,7 @@ func (r *redisHubLifetimeManager) OnDisconnected(conn signalr.HubConnection) {
 // All server instances subscribed to this channel will process the message
 // and send it to their *local* connections (unless excluded).
 func (r *redisHubLifetimeManager) InvokeAll(target string, args []interface{}) {
-	msg := redisInvocation{Target: target, Args: args}
+	msg := redisInvocation{Target: target, Args: args, SourceInstance: r.instanceID}
 	// ExcludedIDs can be added here if InvokeAllExcept is implemented
 	payload, err := json.Marshal(msg)
 	if err != nil {
@@ -330,7 +342,7 @@ func (r *redisHubLifetimeManager) InvokeClient(connectionID string, target strin
 	//   // Let's stick to the Redis publish model for simplicity and consistency.
 	// }
 
-	msg := redisInvocation{Target: target, Args: args, ConnectionID: connectionID}
+	msg := redisInvocation{Target: target, Args: args, ConnectionID: connectionID, SourceInstance: r.instanceID}
 	payload, err := json.Marshal(msg)
 	if err != nil {
 		level.Error(r.logger).Log("event", "json_marshal_failed", "target", "client", "connectionId", connectionID, "method", target, "err", err)
@@ -351,7 +363,7 @@ func (r *redisHubLifetimeManager) InvokeClient(connectionID string, target strin
 // against the Redis Set for that group before sending.
 func (r *redisHubLifetimeManager) InvokeGroup(groupName string, target string, args []interface{}) {
 	channel := r.groupChannel(groupName)
-	msg := redisInvocation{Target: target, Args: args, GroupName: groupName}
+	msg := redisInvocation{Target: target, Args: args, GroupName: groupName, SourceInstance: r.instanceID}
 	// ExcludedIDs can be added here if InvokeGroupExcept is implemented
 	payload, err := json.Marshal(msg)
 	if err != nil {
@@ -369,7 +381,7 @@ func (r *redisHubLifetimeManager) InvokeGroup(groupName string, target string, a
 
 // InvokeAllExcept publishes a message to the central 'all' channel, with excluded ConnectionIDs.
 func (r *redisHubLifetimeManager) InvokeAllExcept(target string, args []interface{}, excludedIDs []string) {
-	msg := redisInvocation{Target: target, Args: args, ExcludedIDs: excludedIDs}
+	msg := redisInvocation{Target: target, Args: args, ExcludedIDs: excludedIDs, SourceInstance: r.instanceID}
 	payload, err := json.Marshal(msg)
 	if err != nil {
 		level.Error(r.logger).Log("event", "json_marshal_failed", "target", "all_except", "method", target, "err", err)
@@ -386,7 +398,7 @@ func (r *redisHubLifetimeManager) InvokeAllExcept(target string, args []interfac
 // InvokeGroupExcept publishes a message to the group-specific channel, with excluded ConnectionIDs.
 func (r *redisHubLifetimeManager) InvokeGroupExcept(groupName string, target string, args []interface{}, excludedIDs []string) {
 	channel := r.groupChannel(groupName)
-	msg := redisInvocation{Target: target, Args: args, GroupName: groupName, ExcludedIDs: excludedIDs}
+	msg := redisInvocation{Target: target, Args: args, GroupName: groupName, ExcludedIDs: excludedIDs, SourceInstance: r.instanceID}
 	payload, err := json.Marshal(msg)
 	if err != nil {
 		level.Error(r.logger).Log("event", "json_marshal_failed", "target", "group_except", "groupName", groupName, "method", target, "err", err)
@@ -498,6 +510,11 @@ func (r *redisHubLifetimeManager) groupChannel(groupName string) string {
 // groupMembershipKey returns the Redis key for the Set storing members of a group.
 func (r *redisHubLifetimeManager) groupMembershipKey(groupName string) string {
 	return redisGroupMembershipPrefix + groupName
+}
+
+// GetInstanceID returns the unique instance ID for debugging and monitoring purposes.
+func (r *redisHubLifetimeManager) GetInstanceID() string {
+	return r.instanceID
 }
 
 // Close stops the manager, closes the Redis PubSub, and closes the Redis client connection.
