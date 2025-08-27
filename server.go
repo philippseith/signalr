@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"os" // Add os import
+	"reflect"
 	"runtime/debug"
 	"sync"
 
@@ -198,12 +199,25 @@ func (s *server) recoverHubLifeCyclePanic() {
 }
 
 func (s *server) prefixLoggers(connectionID string) (info StructuredLogger, dbg StructuredLogger) {
+	var hubType reflect.Type
+	if s.perConnectionHubFactory != nil {
+		// Create a temporary hub to get the type for logging
+		tempHub := s.perConnectionHubFactory(connectionID)
+		hubType = reflect.ValueOf(tempHub).Elem().Type()
+	} else if s.newHub != nil {
+		hubType = reflect.ValueOf(s.newHub()).Elem().Type()
+	} else {
+		hubType = reflect.TypeOf(nil)
+	}
+
 	return log.WithPrefix(s.info, "ts", log.DefaultTimestampUTC,
 			"class", "Server",
-			"connection", connectionID,),
+			"connection", connectionID,
+			"hub", hubType),
 		log.WithPrefix(s.dbg, "ts", log.DefaultTimestampUTC,
 			"class", "Server",
-			"connection", connectionID,)
+			"connection", connectionID,
+			"hub", hubType)
 }
 
 func (s *server) newConnectionHubContext(hubConn HubConnection) HubContext {

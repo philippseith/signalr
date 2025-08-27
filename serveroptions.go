@@ -104,10 +104,7 @@ func WithHubLifetimeManager(newMgr func(s Server) (HubLifetimeManager, error)) f
 func PerConnectionHubFactory(factory func(connectionID string) HubInterface) func(Party) error {
 	return func(p Party) error {
 		if s, ok := p.(*server); ok {
-			s.newHub = func() HubInterface {
-				// This will be overridden by the connection-specific factory
-				return nil
-			}
+			s.newHub = nil
 			s.perConnectionHubFactory = factory
 			return nil
 		}
