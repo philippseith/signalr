@@ -10,6 +10,7 @@ import (
 	"os" // Add os import
 	"reflect"
 	"runtime/debug"
+	"sync"
 
 	"github.com/go-kit/log"
 )
@@ -39,12 +40,15 @@ type Server interface {
 
 type server struct {
 	partyBase
-	newHub            func() HubInterface
-	lifetimeManager   HubLifetimeManager
-	defaultHubClients *defaultHubClients
-	groupManager      GroupManager
-	reconnectAllowed  bool
-	transports        []TransportType
+	newHub                  func() HubInterface
+	perConnectionHubFactory func(connectionID string) HubInterface
+	connectionHubs          map[string]HubInterface
+	connectionHubsMutex     sync.RWMutex
+	lifetimeManager         HubLifetimeManager
+	defaultHubClients       *defaultHubClients
+	groupManager            GroupManager
+	reconnectAllowed        bool
+	transports              []TransportType
 }
 
 // NewServer creates a new server for one type of hub. The hub type is set by one of the
@@ -54,6 +58,7 @@ func NewServer(ctx context.Context, options ...func(Party) error) (Server, error
 	lifetimeManager := newLifeTimeManager(info)
 	server := &server{
 		lifetimeManager: &lifetimeManager,
+		connectionHubs:  make(map[string]HubInterface),
 		// Do NOT initialize defaultHubClients or groupManager yet
 		partyBase:        newPartyBase(ctx, info, dbg),
 		reconnectAllowed: true,
@@ -81,8 +86,8 @@ func NewServer(ctx context.Context, options ...func(Party) error) (Server, error
 		server.transports = []TransportType{TransportWebSockets, TransportServerSentEvents}
 	}
 
-	if server.newHub == nil {
-		return server, errors.New("cannot determine hub type. Neither UseHub, HubFactory or SimpleHubFactory given as option")
+	if server.newHub == nil && server.perConnectionHubFactory == nil {
+		return server, errors.New("cannot determine hub type. Neither UseHub, HubFactory, SimpleHubFactory, or PerConnectionHubFactory given as option")
 	}
 
 	return server, nil
@@ -152,9 +157,28 @@ func (s *server) onDisconnected(hc HubConnection) {
 	}()
 	s.lifetimeManager.OnDisconnected(hc)
 
+	// Clean up the connection hub
+	s.removeConnectionHub(hc.ConnectionID())
 }
 
 func (s *server) invocationTarget(conn HubConnection) interface{} {
+	if s.perConnectionHubFactory != nil {
+		// Use per-connection hub factory
+		connectionID := conn.ConnectionID()
+
+		// Check if we already have a hub instance for this connection
+		if hub, exists := s.getConnectionHub(connectionID); exists {
+			return hub
+		}
+
+		// Create new hub instance for this connection
+		hub := s.perConnectionHubFactory(connectionID)
+		hub.Initialize(s.newConnectionHubContext(conn))
+		s.setConnectionHub(connectionID, hub)
+		return hub
+	}
+
+	// Fall back to the original behavior
 	hub := s.newHub()
 	hub.Initialize(s.newConnectionHubContext(conn))
 	return hub
@@ -175,14 +199,25 @@ func (s *server) recoverHubLifeCyclePanic() {
 }
 
 func (s *server) prefixLoggers(connectionID string) (info StructuredLogger, dbg StructuredLogger) {
+	var hubType reflect.Type
+	if s.newHub != nil {
+		hubType = reflect.ValueOf(s.newHub()).Elem().Type()
+	} else if s.perConnectionHubFactory != nil {
+		// Create a temporary hub to get the type for logging
+		tempHub := s.perConnectionHubFactory(connectionID)
+		hubType = reflect.ValueOf(tempHub).Elem().Type()
+	} else {
+		hubType = reflect.TypeOf(nil)
+	}
+
 	return log.WithPrefix(s.info, "ts", log.DefaultTimestampUTC,
 			"class", "Server",
 			"connection", connectionID,
-			"hub", reflect.ValueOf(s.newHub()).Elem().Type()),
+			"hub", hubType),
 		log.WithPrefix(s.dbg, "ts", log.DefaultTimestampUTC,
 			"class", "Server",
 			"connection", connectionID,
-			"hub", reflect.ValueOf(s.newHub()).Elem().Type())
+			"hub", hubType)
 }
 
 func (s *server) newConnectionHubContext(hubConn HubConnection) HubContext {
@@ -273,3 +308,25 @@ const msgRecv string = "message received"
 const msgSend string = "message send"
 const msg string = "message"
 const react string = "reaction"
+
+// getConnectionHub retrieves a hub instance for a specific connection
+func (s *server) getConnectionHub(connectionID string) (HubInterface, bool) {
+	s.connectionHubsMutex.RLock()
+	defer s.connectionHubsMutex.RUnlock()
+	hub, exists := s.connectionHubs[connectionID]
+	return hub, exists
+}
+
+// setConnectionHub stores a hub instance for a specific connection
+func (s *server) setConnectionHub(connectionID string, hub HubInterface) {
+	s.connectionHubsMutex.Lock()
+	defer s.connectionHubsMutex.Unlock()
+	s.connectionHubs[connectionID] = hub
+}
+
+// removeConnectionHub removes a hub instance for a specific connection
+func (s *server) removeConnectionHub(connectionID string) {
+	s.connectionHubsMutex.Lock()
+	defer s.connectionHubsMutex.Unlock()
+	delete(s.connectionHubs, connectionID)
+}
