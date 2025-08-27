@@ -199,25 +199,20 @@ func (s *server) recoverHubLifeCyclePanic() {
 }
 
 func (s *server) prefixLoggers(connectionID string) (info StructuredLogger, dbg StructuredLogger) {
-	var hubType reflect.Type
+	hubType := reflect.TypeOf(nil)
 	if s.perConnectionHubFactory != nil {
 		// Create a temporary hub to get the type for logging
 		tempHub := s.perConnectionHubFactory(connectionID)
 		hubValue := reflect.ValueOf(tempHub)
 		if hubValue.Kind() == reflect.Ptr {
 			hubType = hubValue.Elem().Type()
-		} else {
-			hubType = hubValue.Type()
 		}
+		
 	} else if s.newHub != nil {
 		hubValue := reflect.ValueOf(s.newHub())
 		if hubValue.Kind() == reflect.Ptr {
 			hubType = hubValue.Elem().Type()
-		} else {
-			hubType = hubValue.Type()
 		}
-	} else {
-		hubType = reflect.TypeOf(nil)
 	}
 
 	return log.WithPrefix(s.info, "ts", log.DefaultTimestampUTC,
