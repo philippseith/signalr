@@ -203,9 +203,19 @@ func (s *server) prefixLoggers(connectionID string) (info StructuredLogger, dbg 
 	if s.perConnectionHubFactory != nil {
 		// Create a temporary hub to get the type for logging
 		tempHub := s.perConnectionHubFactory(connectionID)
-		hubType = reflect.ValueOf(tempHub).Elem().Type()
+		hubValue := reflect.ValueOf(tempHub)
+		if hubValue.Kind() == reflect.Ptr {
+			hubType = hubValue.Elem().Type()
+		} else {
+			hubType = hubValue.Type()
+		}
 	} else if s.newHub != nil {
-		hubType = reflect.ValueOf(s.newHub()).Elem().Type()
+		hubValue := reflect.ValueOf(s.newHub())
+		if hubValue.Kind() == reflect.Ptr {
+			hubType = hubValue.Elem().Type()
+		} else {
+			hubType = hubValue.Type()
+		}
 	} else {
 		hubType = reflect.TypeOf(nil)
 	}
