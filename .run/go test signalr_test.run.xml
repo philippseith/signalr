@@ -3,7 +3,7 @@
     <module name="signalr" />
     <working_directory value="$PROJECT_DIR$/signalr_test" />
     <kind value="PACKAGE" />
-    <package value="github.com/mojtabaRKS/signalr/signalr_test" />
+    <package value="github.com/philippseith/signalr/signalr_test" />
     <directory value="$PROJECT_DIR$/signalr_test" />
     <filePath value="$PROJECT_DIR$" />
     <framework value="gotest" />
@@ -14,7 +14,7 @@
     <working_directory value="$PROJECT_DIR$/signalr_test" />
     <go_parameters value="-race -count=1 -v" />
     <kind value="PACKAGE" />
-    <package value="github.com/mojtabaRKS/signalr/signalr_test" />
+    <package value="github.com/philippseith/signalr/signalr_test" />
     <directory value="$PROJECT_DIR$/signalr_test" />
     <filePath value="$PROJECT_DIR$" />
     <framework value="gotest" />

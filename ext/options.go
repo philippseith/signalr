@@ -1,7 +1,7 @@
 package ext
 
 import (
-	"github.com/mojtabaRKS/signalr"
+	"github.com/philippseith/signalr"
 	"github.com/redis/go-redis/v9"
 )
 

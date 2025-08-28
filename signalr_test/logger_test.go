@@ -6,7 +6,7 @@ import (
 	"os"
 
 	"github.com/go-kit/log"
-	"github.com/mojtabaRKS/signalr"
+	"github.com/philippseith/signalr"
 )
 
 type loggerConfig struct {
