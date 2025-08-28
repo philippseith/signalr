@@ -1,4 +1,4 @@
-module github.com/mojtabaRKS/signalr/router
+module github.com/philippseith/signalr/router
 
 go 1.23.0
 
@@ -7,7 +7,7 @@ require (
 	github.com/go-kit/log v0.2.1
 	github.com/gorilla/mux v1.8.0
 	github.com/julienschmidt/httprouter v1.3.0
-	github.com/mojtabaRKS/signalr v1.1.0
+	github.com/philippseith/signalr v1.1.0
 	github.com/onsi/ginkgo v1.16.5
 	github.com/onsi/gomega v1.27.10
 )
@@ -40,4 +40,4 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
-// replace github.com/mojtabaRKS/signalr => ..
+// replace github.com/philippseith/signalr => ..

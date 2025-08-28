@@ -4,7 +4,7 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/mojtabaRKS/signalr"
+	"github.com/philippseith/signalr"
 )
 
 // WithChiRouter is a signalr.MappableRouter factory for signalr.Server.MapHTTP

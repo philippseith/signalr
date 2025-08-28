@@ -10,7 +10,7 @@ import (
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	"github.com/google/uuid"
-	"github.com/mojtabaRKS/signalr"
+	"github.com/philippseith/signalr"
 	"github.com/redis/go-redis/v9"
 )
 

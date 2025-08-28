@@ -27,7 +27,7 @@ package main
 
 import (
     "context"
-    "github.com/mojtabaRKS/signalr"
+    "github.com/philippseith/signalr"
 )
 
 // Define your hub with connection-specific state
