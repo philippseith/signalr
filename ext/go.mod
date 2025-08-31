@@ -2,8 +2,6 @@ module github.com/philippseith/signalr/ext
 
 go 1.24.2
 
-replace github.com/mojtabaRKS/signalr => /Users/philipp/wspc/go/moj_signalr
-
 require (
 	github.com/go-kit/log v0.2.1
 	github.com/google/uuid v1.6.0
