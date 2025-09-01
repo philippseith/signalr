@@ -96,3 +96,18 @@ func WithHubLifetimeManager(newMgr func(s Server) (HubLifetimeManager, error)) f
 		return nil
 	}
 }
+
+// PerConnectionHubFactory sets the function which returns a hub instance for each connection.
+// The hub instance is created once when the connection is established and reused for all
+// method invocations on that connection. This provides a 1:1 mapping between client and hub instance.
+// The factory function receives the connection ID and can create a hub instance with connection-specific state.
+func PerConnectionHubFactory(factory func(connectionID string) HubInterface) func(Party) error {
+	return func(p Party) error {
+		if s, ok := p.(*server); ok {
+			s.newHub = nil
+			s.perConnectionHubFactory = factory
+			return nil
+		}
+		return errors.New("option PerConnectionHubFactory is server only")
+	}
+}
