@@ -77,10 +77,13 @@ func (s *serverSSEConnection) Write(p []byte) (n int, err error) {
 	if err := s.Context().Err(); err != nil {
 		return 0, fmt.Errorf("%T: %w", s, s.Context().Err())
 	}
-	payload := ""
+	var b strings.Builder
 	for _, line := range strings.Split(strings.TrimRight(string(p), "\n"), "\n") {
-		payload = payload + "data: " + line + "\n"
+		b.WriteString("data: ")
+		b.WriteString(line)
+		b.WriteByte('\n')
 	}
+	payload := b.String()
 	// prevent race with goroutine closing the jobChan
 	s.mx.Lock()
 	if s.Context().Err() == nil {

@@ -12,9 +12,10 @@ import (
 
 type clientSSEConnection struct {
 	ConnectionBase
-	reqURL    string
-	sseReader io.Reader
-	sseWriter io.Writer
+	reqURL     string
+	sseReader  io.Reader
+	sseWriter  io.Writer
+	httpClient *http.Client
 }
 
 func newClientSSEConnection(address string, connectionID string, body io.ReadCloser) (*clientSSEConnection, error) {
@@ -31,7 +32,8 @@ func newClientSSEConnection(address string, connectionID string, body io.ReadClo
 			ctx:          context.Background(),
 			connectionID: connectionID,
 		},
-		reqURL: reqURL.String(),
+		reqURL:     reqURL.String(),
+		httpClient: &http.Client{},
 	}
 	c.sseReader, c.sseWriter = io.Pipe()
 	go func() {
@@ -74,7 +76,7 @@ func (c *clientSSEConnection) Write(p []byte) (n int, err error) {
 	if err != nil {
 		return 0, err
 	}
-	client := &http.Client{}
+	client := c.httpClient
 	resp, err := client.Do(req)
 	if err != nil {
 		return 0, err

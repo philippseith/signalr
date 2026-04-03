@@ -613,7 +613,7 @@ func (c *client) receiveHandshakeResponse() (hubProtocol, error) {
 				_ = info.Log(evt, "handshake received", "error", response.Error)
 				return nil, errors.New(response.Error)
 			}
-			_ = dbg.Log(evt, "handshake received", "msg", fmtMsg(response))
+			_ = dbg.Log(evt, "handshake received", "msg", lazyFmtMsg{response})
 			var protocol hubProtocol
 			switch c.format {
 			case "json":

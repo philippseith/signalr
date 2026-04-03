@@ -251,7 +251,7 @@ func (c *defaultHubConnection) writeMessage(message interface{}) error {
 		}
 	}()
 	if err != nil {
-		_ = c.info.Log(evt, msgSend, "message", fmtMsg(message), "error", err)
+		_ = c.info.Log(evt, msgSend, "message", lazyFmtMsg{message}, "error", err)
 	}
 	return err
 }

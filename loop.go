@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"reflect"
 	"runtime/debug"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -70,7 +71,8 @@ func (l *loop) Run(connected chan struct{}) (err error) {
 		}
 	}()
 	timeoutTicker := time.NewTicker(l.party.timeout())
-	//keepAliveTicker := time.NewTicker(l.party.keepAliveInterval())
+	keepAliveTimer := time.NewTimer(l.party.keepAliveInterval())
+	defer keepAliveTimer.Stop()
 
 msgLoop:
 	for {
@@ -85,14 +87,14 @@ msgLoop:
 					case invocationMessage:
 						l.handleInvocationMessage(message)
 					case cancelInvocationMessage:
-						_ = l.dbg.Log(evt, msgRecv, msg, fmtMsg(message))
+						_ = l.dbg.Log(evt, msgRecv, msg, lazyFmtMsg{message})
 						l.streamer.Stop(message.InvocationID)
 					case streamItemMessage:
 						err = l.handleStreamItemMessage(message)
 					case completionMessage:
 						err = l.handleCompletionMessage(message)
 					case closeMessage:
-						_ = l.dbg.Log(evt, msgRecv, msg, fmtMsg(message))
+						_ = l.dbg.Log(evt, msgRecv, msg, lazyFmtMsg{message})
 						l.closeMessage = &message
 						if message.Error != "" {
 							err = errors.New(message.Error)
@@ -103,10 +105,17 @@ msgLoop:
 						// No default case necessary, because the protocol would return either a hubMessage or an error
 					}
 				} else {
-					_ = l.info.Log(evt, msgRecv, "error", err, msg, fmtMsg(evt.message), react, "close connection")
+					_ = l.info.Log(evt, msgRecv, "error", err, msg, lazyFmtMsg{evt.message}, react, "close connection")
 				}
+				if !keepAliveTimer.Stop() {
+					select {
+					case <-keepAliveTimer.C:
+					default:
+					}
+				}
+				keepAliveTimer.Reset(l.party.keepAliveInterval())
 				break pingLoop
-			case <-time.After(l.party.keepAliveInterval()):
+			case <-keepAliveTimer.C:
 				// Send ping only when there was no write in the keepAliveInterval before
 				if time.Since(l.hubConn.LastWriteStamp()) > l.party.keepAliveInterval() {
 					if err = l.hubConn.Ping(); err != nil {
@@ -115,6 +124,7 @@ msgLoop:
 				}
 				// A successful ping or Write shows us that the connection is alive. Reset the timeout
 				timeoutTicker.Reset(l.party.timeout())
+				keepAliveTimer.Reset(l.party.keepAliveInterval())
 				// Don't break the pingLoop when keepAlive is over, it exists for this case
 			case <-timeoutTicker.C:
 				err = fmt.Errorf("timeout interval elapsed (%v)", l.party.timeout())
@@ -184,12 +194,11 @@ func (l *loop) PushStreams(method, id string, arguments ...interface{}) (<-chan 
 
 // GetNewID returns a new, connection-unique id for invocations and streams
 func (l *loop) GetNewID() string {
-	atomic.AddUint64(&l.lastID, 1)
-	return fmt.Sprint(atomic.LoadUint64(&l.lastID))
+	return strconv.FormatUint(atomic.AddUint64(&l.lastID, 1), 10)
 }
 
 func (l *loop) handleInvocationMessage(invocation invocationMessage) {
-	_ = l.dbg.Log(evt, msgRecv, msg, fmtMsg(invocation))
+	_ = l.dbg.Log(evt, msgRecv, msg, lazyFmtMsg{invocation})
 	// Transient hub, dispatch invocation here
 	if method, ok := getMethod(l.party.invocationTarget(l.hubConn), invocation.Target); !ok {
 		// Unable to find the method
@@ -255,13 +264,13 @@ func (l *loop) returnInvocationResult(invocation invocationMessage, result []ref
 }
 
 func (l *loop) handleStreamItemMessage(streamItemMessage streamItemMessage) error {
-	_ = l.dbg.Log(evt, msgRecv, msg, fmtMsg(streamItemMessage))
+	_ = l.dbg.Log(evt, msgRecv, msg, lazyFmtMsg{streamItemMessage})
 	if err := l.streamClient.receiveStreamItem(streamItemMessage); err != nil {
 		switch t := err.(type) {
 		case *hubChanTimeoutError:
 			_ = l.hubConn.Completion(streamItemMessage.InvocationID, nil, t.Error())
 		default:
-			_ = l.info.Log(evt, msgRecv, "error", err, msg, fmtMsg(streamItemMessage), react, "close connection")
+			_ = l.info.Log(evt, msgRecv, "error", err, msg, lazyFmtMsg{streamItemMessage}, react, "close connection")
 			return err
 		}
 	}
@@ -269,7 +278,7 @@ func (l *loop) handleStreamItemMessage(streamItemMessage streamItemMessage) erro
 }
 
 func (l *loop) handleCompletionMessage(message completionMessage) error {
-	_ = l.dbg.Log(evt, msgRecv, msg, fmtMsg(message))
+	_ = l.dbg.Log(evt, msgRecv, msg, lazyFmtMsg{message})
 	var err error
 	if l.streamClient.handlesInvocationID(message.InvocationID) {
 		err = l.streamClient.receiveCompletionItem(message, l.invokeClient)
@@ -279,17 +288,17 @@ func (l *loop) handleCompletionMessage(message completionMessage) error {
 		err = fmt.Errorf("unknown invocationID %v", message.InvocationID)
 	}
 	if err != nil {
-		_ = l.info.Log(evt, msgRecv, "error", err, msg, fmtMsg(message), react, "close connection")
+		_ = l.info.Log(evt, msgRecv, "error", err, msg, lazyFmtMsg{message}, react, "close connection")
 	}
 	return err
 }
 
 func (l *loop) handleOtherMessage(hubMessage hubMessage) error {
-	_ = l.dbg.Log(evt, msgRecv, msg, fmtMsg(hubMessage))
+	_ = l.dbg.Log(evt, msgRecv, msg, lazyFmtMsg{hubMessage})
 	// Not Ping
 	if hubMessage.Type != 6 {
 		err := fmt.Errorf("invalid message type %v", hubMessage)
-		_ = l.info.Log(evt, msgRecv, "error", err, msg, fmtMsg(hubMessage), react, "close connection")
+		_ = l.info.Log(evt, msgRecv, "error", err, msg, lazyFmtMsg{hubMessage}, react, "close connection")
 		return err
 	}
 	return nil
@@ -397,4 +406,14 @@ func fmtMsg(message interface{}) string {
 		message = msg
 	}
 	return fmt.Sprintf("%#v", message)
+}
+
+// lazyFmtMsg defers expensive message formatting until the logger actually needs it.
+// go-kit/log level filtering will drop debug messages before calling String().
+type lazyFmtMsg struct {
+	m interface{}
+}
+
+func (l lazyFmtMsg) String() string {
+	return fmtMsg(l.m)
 }
