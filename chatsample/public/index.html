@@ -11,6 +11,7 @@
     <input type="button" value="Stop Stream" id="stopstream" />
     <input type="button" value="Upstream" id="upstream" />
     <input type="button" value="Stop/Start Client Connection" id="stop" />
+    <input type="button" value="close Client Connection with error" id="close" />
     <input type="button" value="Abort Server Connection" id="abort" />
     <ul id="messages">
     </ul>
@@ -114,6 +115,11 @@
             document.getElementById('abort').addEventListener('click', () => {
                 connection.send('abort')
             });
+
+            document.getElementById('close').addEventListener('click', () => {
+                connection.send('DoSomethingBugy')
+            });
+
             connection.on('receive', message => {
                 var li = document.createElement('li');
                 li.innerText = 'sent ' + message;

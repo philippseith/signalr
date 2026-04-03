@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/teivah/onecontext"
-	"nhooyr.io/websocket"
+	"github.com/coder/websocket"
 )
 
 type httpMux struct {
@@ -91,18 +91,18 @@ func (h *httpMux) handleGet(writer http.ResponseWriter, request *http.Request) {
 }
 
 func (h *httpMux) handleServerSentEvent(writer http.ResponseWriter, request *http.Request) {
-	connectionID := request.URL.Query().Get("id")
-	if connectionID == "" {
+	connectionIDorToken := request.URL.Query().Get("id")
+	if connectionIDorToken == "" {
 		writer.WriteHeader(http.StatusBadRequest)
 		return
 	}
 	h.mx.RLock()
-	c, ok := h.connectionMap[connectionID]
+	c, ok := h.connectionMap[connectionIDorToken]
 	h.mx.RUnlock()
 	if ok {
 		if _, ok := c.(*negotiateConnection); ok {
-			ctx, _ := onecontext.Merge(h.server.context(), request.Context())
-			sseConn, jobChan, jobResultChan, err := newServerSSEConnection(ctx, c.ConnectionID())
+			ctx, _ := onecontext.Merge(h.server.Context(), request.Context())
+			sseConn, jobChan, jobResultChan, err := newServerSSEConnection(ctx, connectionIDorToken) // version 1 uses the token to initiate the connection, not the ID
 			if err != nil {
 				writer.WriteHeader(http.StatusInternalServerError)
 				return
@@ -173,7 +173,7 @@ func (h *httpMux) handleWebsocket(writer http.ResponseWriter, request *http.Requ
 	if ok {
 		if _, ok := c.(*negotiateConnection); ok {
 			// Connection is negotiated but not initiated
-			ctx, _ := onecontext.Merge(h.server.context(), request.Context())
+			ctx, _ := onecontext.Merge(h.server.Context(), request.Context())
 			err = h.serveConnection(newWebSocketConnection(ctx, c.ConnectionID(), websocketConn))
 			if err != nil {
 				_ = websocketConn.Close(1005, err.Error())
@@ -194,10 +194,25 @@ func (h *httpMux) negotiate(w http.ResponseWriter, req *http.Request) {
 	} else {
 		connectionID := newConnectionID()
 		connectionMapKey := connectionID
-		negotiateVersion, err := strconv.Atoi(req.Header.Get("negotiateVersion"))
+
+		// Check the header for negotiateVersion
+		headerNegotiateVersion, err := strconv.Atoi(req.Header.Get("negotiateVersion"))
 		if err != nil {
-			negotiateVersion = 0
+			headerNegotiateVersion = 0
 		}
+
+		// Check the query parameter for negotiateVersion
+		queryNegotiateVersion, err := strconv.Atoi(req.URL.Query().Get("negotiateVersion"))
+		if err != nil {
+			queryNegotiateVersion = 0
+		}
+
+		// Use the negotiateVersion from query if present, otherwise use the one from the header parameter
+		negotiateVersion := queryNegotiateVersion
+		if headerNegotiateVersion != 0 {
+			negotiateVersion = headerNegotiateVersion
+		}
+
 		connectionToken := ""
 		if negotiateVersion == 1 {
 			connectionToken = newConnectionID()

@@ -7,9 +7,10 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"os"
+	"os" // Add os import
 	"reflect"
 	"runtime/debug"
+	"sync"
 
 	"github.com/go-kit/log"
 )
@@ -39,12 +40,15 @@ type Server interface {
 
 type server struct {
 	partyBase
-	newHub            func() HubInterface
-	lifetimeManager   HubLifetimeManager
-	defaultHubClients *defaultHubClients
-	groupManager      GroupManager
-	reconnectAllowed  bool
-	transports        []TransportType
+	newHub                  func() HubInterface
+	perConnectionHubFactory func(connectionID string) HubInterface
+	connectionHubs          map[string]HubInterface
+	connectionHubsMutex     sync.RWMutex
+	lifetimeManager         HubLifetimeManager
+	defaultHubClients       *defaultHubClients
+	groupManager            GroupManager
+	reconnectAllowed        bool
+	transports              []TransportType
 }
 
 // NewServer creates a new server for one type of hub. The hub type is set by one of the
@@ -54,16 +58,12 @@ func NewServer(ctx context.Context, options ...func(Party) error) (Server, error
 	lifetimeManager := newLifeTimeManager(info)
 	server := &server{
 		lifetimeManager: &lifetimeManager,
-		defaultHubClients: &defaultHubClients{
-			lifetimeManager: &lifetimeManager,
-			allCache:        allClientProxy{lifetimeManager: &lifetimeManager},
-		},
-		groupManager: &defaultGroupManager{
-			lifetimeManager: &lifetimeManager,
-		},
+		connectionHubs:  make(map[string]HubInterface),
+		// Do NOT initialize defaultHubClients or groupManager yet
 		partyBase:        newPartyBase(ctx, info, dbg),
 		reconnectAllowed: true,
 	}
+	// apply any option including lifetime manager, logger, etc.
 	for _, option := range options {
 		if option != nil {
 			if err := option(server); err != nil {
@@ -71,12 +71,25 @@ func NewServer(ctx context.Context, options ...func(Party) error) (Server, error
 			}
 		}
 	}
+
+	// Now initialize them, using the (possibly replaced) lifetimeManager
+	server.defaultHubClients = &defaultHubClients{
+		lifetimeManager: server.lifetimeManager,
+		allCache:        allClientProxy{lifetimeManager: server.lifetimeManager},
+	}
+
+	server.groupManager = &defaultGroupManager{
+		lifetimeManager: server.lifetimeManager,
+	}
+
 	if server.transports == nil {
 		server.transports = []TransportType{TransportWebSockets, TransportServerSentEvents}
 	}
-	if server.newHub == nil {
-		return server, errors.New("cannot determine hub type. Neither UseHub, HubFactory or SimpleHubFactory given as option")
+
+	if server.newHub == nil && server.perConnectionHubFactory == nil {
+		return server, errors.New("cannot determine hub type. Neither UseHub, HubFactory, SimpleHubFactory, or PerConnectionHubFactory given as option")
 	}
+
 	return server, nil
 }
 
@@ -129,7 +142,7 @@ func (s *server) availableTransports() []TransportType {
 	return s.transports
 }
 
-func (s *server) onConnected(hc hubConnection) {
+func (s *server) onConnected(hc HubConnection) {
 	s.lifetimeManager.OnConnected(hc)
 	go func() {
 		defer s.recoverHubLifeCyclePanic()
@@ -137,16 +150,35 @@ func (s *server) onConnected(hc hubConnection) {
 	}()
 }
 
-func (s *server) onDisconnected(hc hubConnection) {
+func (s *server) onDisconnected(hc HubConnection) {
 	go func() {
 		defer s.recoverHubLifeCyclePanic()
 		s.invocationTarget(hc).(HubInterface).OnDisconnected(hc.ConnectionID())
 	}()
 	s.lifetimeManager.OnDisconnected(hc)
 
+	// Clean up the connection hub
+	s.removeConnectionHub(hc.ConnectionID())
 }
 
-func (s *server) invocationTarget(conn hubConnection) interface{} {
+func (s *server) invocationTarget(conn HubConnection) interface{} {
+	if s.perConnectionHubFactory != nil {
+		// Use per-connection hub factory
+		connectionID := conn.ConnectionID()
+
+		// Check if we already have a hub instance for this connection
+		if hub, exists := s.getConnectionHub(connectionID); exists {
+			return hub
+		}
+
+		// Create new hub instance for this connection
+		hub := s.perConnectionHubFactory(connectionID)
+		hub.Initialize(s.newConnectionHubContext(conn))
+		s.setConnectionHub(connectionID, hub)
+		return hub
+	}
+
+	// Fall back to the original behavior
 	hub := s.newHub()
 	hub.Initialize(s.newConnectionHubContext(conn))
 	return hub
@@ -167,17 +199,33 @@ func (s *server) recoverHubLifeCyclePanic() {
 }
 
 func (s *server) prefixLoggers(connectionID string) (info StructuredLogger, dbg StructuredLogger) {
+	hubType := reflect.TypeOf(nil)
+	if s.perConnectionHubFactory != nil {
+		// Create a temporary hub to get the type for logging
+		tempHub := s.perConnectionHubFactory(connectionID)
+		hubValue := reflect.ValueOf(tempHub)
+		if hubValue.Kind() == reflect.Ptr {
+			hubType = hubValue.Elem().Type()
+		}
+		
+	} else if s.newHub != nil {
+		hubValue := reflect.ValueOf(s.newHub())
+		if hubValue.Kind() == reflect.Ptr {
+			hubType = hubValue.Elem().Type()
+		}
+	}
+
 	return log.WithPrefix(s.info, "ts", log.DefaultTimestampUTC,
 			"class", "Server",
 			"connection", connectionID,
-			"hub", reflect.ValueOf(s.newHub()).Elem().Type()),
+			"hub", hubType),
 		log.WithPrefix(s.dbg, "ts", log.DefaultTimestampUTC,
 			"class", "Server",
 			"connection", connectionID,
-			"hub", reflect.ValueOf(s.newHub()).Elem().Type())
+			"hub", hubType)
 }
 
-func (s *server) newConnectionHubContext(hubConn hubConnection) HubContext {
+func (s *server) newConnectionHubContext(hubConn HubConnection) HubContext {
 	return &connectionHubContext{
 		abort: hubConn.Abort,
 		clients: &callerHubClients{
@@ -201,7 +249,7 @@ func (s *server) processHandshake(conn Connection) (hubProtocol, error) {
 
 func (s *server) receiveHandshakeRequest(conn Connection) (handshakeRequest, error) {
 	_, dbg := s.prefixLoggers(conn.ConnectionID())
-	ctx, cancelRead := context.WithTimeout(s.context(), s.HandshakeTimeout())
+	ctx, cancelRead := context.WithTimeout(s.Context(), s.HandshakeTimeout())
 	defer cancelRead()
 	readJSONFramesChan := make(chan []interface{}, 1)
 	go func() {
@@ -225,7 +273,7 @@ func (s *server) receiveHandshakeRequest(conn Connection) (handshakeRequest, err
 
 func (s *server) sendHandshakeResponse(conn Connection, request handshakeRequest) (protocol hubProtocol, err error) {
 	info, dbg := s.prefixLoggers(conn.ConnectionID())
-	ctx, cancelWrite := context.WithTimeout(s.context(), s.HandshakeTimeout())
+	ctx, cancelWrite := context.WithTimeout(s.Context(), s.HandshakeTimeout())
 	defer cancelWrite()
 	var ok bool
 	if protocol, ok = protocolMap[request.Protocol]; ok {
@@ -245,7 +293,7 @@ func (s *server) sendHandshakeResponse(conn Connection, request handshakeRequest
 		if _, respErr := ReadWriteWithContext(ctx,
 			func() (int, error) {
 				const errorHandshakeResponse = "{\"error\":\"%s\"}\u001e"
-				return conn.Write([]byte(fmt.Sprintf(errorHandshakeResponse, err)))
+				return fmt.Fprintf(conn, errorHandshakeResponse, err)
 			}, func() {}); respErr != nil {
 			_ = dbg.Log(evt, "handshake sent", "error", respErr)
 			err = respErr
@@ -265,3 +313,25 @@ const msgRecv string = "message received"
 const msgSend string = "message send"
 const msg string = "message"
 const react string = "reaction"
+
+// getConnectionHub retrieves a hub instance for a specific connection
+func (s *server) getConnectionHub(connectionID string) (HubInterface, bool) {
+	s.connectionHubsMutex.RLock()
+	defer s.connectionHubsMutex.RUnlock()
+	hub, exists := s.connectionHubs[connectionID]
+	return hub, exists
+}
+
+// setConnectionHub stores a hub instance for a specific connection
+func (s *server) setConnectionHub(connectionID string, hub HubInterface) {
+	s.connectionHubsMutex.Lock()
+	defer s.connectionHubsMutex.Unlock()
+	s.connectionHubs[connectionID] = hub
+}
+
+// removeConnectionHub removes a hub instance for a specific connection
+func (s *server) removeConnectionHub(connectionID string) {
+	s.connectionHubsMutex.Lock()
+	defer s.connectionHubsMutex.Unlock()
+	delete(s.connectionHubs, connectionID)
+}

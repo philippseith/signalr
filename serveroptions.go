@@ -60,7 +60,7 @@ func HTTPTransports(transports ...TransportType) func(Party) error {
 }
 
 // InsecureSkipVerify disables Accepts origin verification behaviour which is used to avoid same origin strategy.
-// See https://pkg.go.dev/nhooyr.io/websocket#AcceptOptions
+// See https://pkg.go.dev/github.com/coder/websocket#AcceptOptions
 func InsecureSkipVerify(skip bool) func(Party) error {
 	return func(p Party) error {
 		p.setInsecureSkipVerify(skip)
@@ -69,10 +69,45 @@ func InsecureSkipVerify(skip bool) func(Party) error {
 }
 
 // AllowOriginPatterns lists the host patterns for authorized origins which is used for avoid same origin strategy.
-// See https://pkg.go.dev/nhooyr.io/websocket#AcceptOptions
+// See https://pkg.go.dev/github.com/coder/websocket#AcceptOptions
 func AllowOriginPatterns(origins []string) func(Party) error {
 	return func(p Party) error {
 		p.setOriginPatterns(origins)
 		return nil
+	}
+}
+
+// WithHubLifetimeManager configures the server to use a specifc HubLifetimeManager.
+func WithHubLifetimeManager(newMgr func(s Server) (HubLifetimeManager, error)) func(Party) error {
+	return func(p Party) error {
+		s, ok := p.(*server)
+		if !ok {
+			return errors.New("option WithHubLifetimeManager is server only")
+		}
+
+		mgr, err := newMgr(s)
+		if err != nil {
+			return fmt.Errorf("failed to create HubLifetimeManager: %w", err)
+		}
+
+		// Assign the new manager
+		s.lifetimeManager = mgr
+
+		return nil
+	}
+}
+
+// PerConnectionHubFactory sets the function which returns a hub instance for each connection.
+// The hub instance is created once when the connection is established and reused for all
+// method invocations on that connection. This provides a 1:1 mapping between client and hub instance.
+// The factory function receives the connection ID and can create a hub instance with connection-specific state.
+func PerConnectionHubFactory(factory func(connectionID string) HubInterface) func(Party) error {
+	return func(p Party) error {
+		if s, ok := p.(*server); ok {
+			s.newHub = nil
+			s.perConnectionHubFactory = factory
+			return nil
+		}
+		return errors.New("option PerConnectionHubFactory is server only")
 	}
 }

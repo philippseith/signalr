@@ -18,7 +18,7 @@ import (
 	"github.com/go-kit/log/level"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	"nhooyr.io/websocket"
+	"github.com/coder/websocket"
 )
 
 type addHub struct {

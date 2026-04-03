@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io/ioutil"
 	"net"
@@ -113,12 +112,8 @@ var _ = Describe("Router", func() {
 						signalr.TransferFormat("Text"))
 					Expect(err).NotTo(HaveOccurred())
 					Expect(client).NotTo(BeNil())
-					errCh := client.Start()
-					Expect(client.WaitConnected(context.Background())).NotTo(HaveOccurred())
-					go func() {
-						defer GinkgoRecover()
-						Expect(errors.Is(<-errCh, context.Canceled)).To(BeTrue())
-					}()
+					client.Start()
+					Expect(client.WaitForState(context.Background(), signalr.ClientConnected)).NotTo(HaveOccurred())
 					Expect(err).NotTo(HaveOccurred())
 					result := <-client.Invoke("Add2", 1)
 					Expect(result.Error).NotTo(HaveOccurred())

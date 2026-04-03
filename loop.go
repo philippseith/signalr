@@ -18,7 +18,7 @@ type loop struct {
 	info         StructuredLogger
 	dbg          StructuredLogger
 	protocol     hubProtocol
-	hubConn      hubConnection
+	hubConn      HubConnection
 	invokeClient *invokeClient
 	streamer     *streamer
 	streamClient *streamClient
@@ -51,7 +51,10 @@ func (l *loop) Run(connected chan struct{}) (err error) {
 	close(connected)
 	// Process messages
 	ch := make(chan receiveResult, 1)
+	wg := l.party.waitGroup()
+	wg.Add(1)
 	go func() {
+		defer wg.Done()
 		recv := l.hubConn.Receive()
 	loop:
 		for {
@@ -124,7 +127,6 @@ msgLoop:
 				}
 				// A successful ping or Write shows us that the connection is alive. Reset the timeout
 				timeoutTicker.Reset(l.party.timeout())
-				keepAliveTimer.Reset(l.party.keepAliveInterval())
 				// Don't break the pingLoop when keepAlive is over, it exists for this case
 			case <-timeoutTicker.C:
 				err = fmt.Errorf("timeout interval elapsed (%v)", l.party.timeout())
@@ -132,8 +134,8 @@ msgLoop:
 			case <-l.hubConn.Context().Done():
 				err = fmt.Errorf("breaking loop. hubConnection canceled: %w", l.hubConn.Context().Err())
 				break pingLoop
-			case <-l.party.context().Done():
-				err = fmt.Errorf("breaking loop. Party canceled: %w", l.party.context().Err())
+			case <-l.party.Context().Done():
+				err = fmt.Errorf("breaking loop. Party canceled: %w", l.party.Context().Err())
 				break pingLoop
 			}
 		}
@@ -154,11 +156,11 @@ msgLoop:
 func (l *loop) PullStream(method, id string, arguments ...interface{}) <-chan InvokeResult {
 	_, errChan := l.invokeClient.newInvocation(id)
 	upChan := l.streamClient.newUpstreamChannel(id)
-	ch := newInvokeResultChan(l.party.context(), upChan, errChan)
+	ch := newInvokeResultChan(l.party.Context(), upChan, errChan)
 	if err := l.hubConn.SendStreamInvocation(id, method, arguments); err != nil {
 		// When we get an error here, the loop is closed and the errChan might be already closed
 		// We create a new one to deliver our error
-		ch, _ = createResultChansWithError(l.party.context(), err)
+		ch, _ = createResultChansWithError(l.party.Context(), err)
 		l.streamClient.deleteUpstreamChannel(id)
 		l.invokeClient.deleteInvocation(id)
 	}
@@ -167,7 +169,7 @@ func (l *loop) PullStream(method, id string, arguments ...interface{}) <-chan In
 
 func (l *loop) PushStreams(method, id string, arguments ...interface{}) (<-chan InvokeResult, error) {
 	resultCh, errCh := l.invokeClient.newInvocation(id)
-	irCh := newInvokeResultChan(l.party.context(), resultCh, errCh)
+	irCh := newInvokeResultChan(l.party.Context(), resultCh, errCh)
 	invokeArgs := make([]interface{}, 0)
 	reflectedChannels := make([]reflect.Value, 0)
 	streamIds := make([]string, 0)
@@ -200,7 +202,8 @@ func (l *loop) GetNewID() string {
 func (l *loop) handleInvocationMessage(invocation invocationMessage) {
 	_ = l.dbg.Log(evt, msgRecv, msg, lazyFmtMsg{invocation})
 	// Transient hub, dispatch invocation here
-	if method, ok := getMethod(l.party.invocationTarget(l.hubConn), invocation.Target); !ok {
+	methodName := l.party.getMethodNameByAlternateName(invocation.Target)
+	if method, ok := getMethod(l.party.invocationTarget(l.hubConn), methodName); !ok {
 		// Unable to find the method
 		_ = l.info.Log(evt, "getMethod", "error", "missing method", "name", invocation.Target, react, "send completion with error")
 		_ = l.hubConn.Completion(invocation.InvocationID, nil, fmt.Sprintf("Unknown method %s", invocation.Target))

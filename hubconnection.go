@@ -9,9 +9,9 @@ import (
 	"time"
 )
 
-// hubConnection is used by HubContext, Server and Client to realize the external API.
-// hubConnection uses a transport connection (of type Connection) and a hubProtocol to send and receive SignalR messages.
-type hubConnection interface {
+// HubConnection is used by HubContext, Server and Client to realize the external API.
+// HubConnection uses a transport connection (of type Connection) and a hubProtocol to send and receive SignalR messages.
+type HubConnection interface {
 	ConnectionID() string
 	Receive() <-chan receiveResult
 	SendInvocation(id string, target string, args []interface{}) error
@@ -32,7 +32,7 @@ type receiveResult struct {
 	err     error
 }
 
-func newHubConnection(connection Connection, protocol hubProtocol, maximumReceiveMessageSize uint, info StructuredLogger) hubConnection {
+func newHubConnection(connection Connection, protocol hubProtocol, maximumReceiveMessageSize uint, info StructuredLogger) HubConnection {
 	ctx, cancelFunc := context.WithCancel(connection.Context())
 	c := &defaultHubConnection{
 		ctx:                       ctx,
@@ -92,7 +92,13 @@ func (c *defaultHubConnection) Receive() <-chan receiveResult {
 	// Prepare cleanup
 	writerDone := make(chan struct{}, 1)
 	// the pipe connects the goroutine which reads from the connection and the goroutine which parses the read data
-	reader, writer := CtxPipe(c.ctx)
+	reader, writer := io.Pipe()
+	go func() {
+		<-c.ctx.Done()
+		_ = writer.CloseWithError(c.ctx.Err())
+		_ = reader.CloseWithError(c.ctx.Err())
+	}()
+
 	p := make([]byte, c.maximumReceiveMessageSize)
 	go func(ctx context.Context, connection io.Reader, writer io.Writer, recvChan chan<- receiveResult, writerDone chan<- struct{}) {
 	loop:

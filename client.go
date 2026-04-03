@@ -168,7 +168,12 @@ type client struct {
 func (c *client) Start() {
 	c.setState(ClientConnecting)
 	boff := c.backoffFactory()
+
+	c.waitGroup().Add(1)
+
 	go func() {
+		defer c.waitGroup().Done()
+
 		for {
 			c.setErr(nil)
 			// Listen for state change to ClientConnected and signal backoff Reset then.
@@ -204,6 +209,7 @@ func (c *client) Start() {
 			nextBackoff := boff.NextBackOff()
 			// Check for exceeded backoff
 			if nextBackoff == backoff.Stop {
+				c.setState(ClientClosed)
 				c.setErr(errors.New("backoff exceeded"))
 				return
 			}
@@ -220,8 +226,10 @@ func (c *client) Start() {
 func (c *client) Stop() {
 	if c.cancelFunc != nil {
 		c.cancelFunc()
+
+		c.waitGroup().Wait()
+		c.setState(ClientClosed)
 	}
-	c.setState(ClientClosed)
 }
 
 func (c *client) run() error {
@@ -392,8 +400,8 @@ func (c *client) WaitForState(ctx context.Context, waitFor ClientState) <-chan e
 			case <-ctx.Done():
 				ch <- ctx.Err()
 				return
-			case <-c.context().Done():
-				ch <- fmt.Errorf("client canceled: %w", c.context().Err())
+			case <-c.Context().Done():
+				ch <- fmt.Errorf("client canceled: %w", c.Context().Err())
 				return
 			}
 		}
@@ -426,7 +434,7 @@ func (c *client) Invoke(method string, arguments ...interface{}) <-chan InvokeRe
 		}
 		id := c.loop.GetNewID()
 		resultCh, errCh := c.loop.invokeClient.newInvocation(id)
-		irCh := newInvokeResultChan(c.context(), resultCh, errCh)
+		irCh := newInvokeResultChan(c.Context(), resultCh, errCh)
 		if err := c.loop.hubConn.SendInvocation(id, method, arguments); err != nil {
 			c.loop.invokeClient.deleteInvocation(id)
 			ch <- InvokeResult{Error: err}
@@ -529,11 +537,11 @@ func createResultChansWithError(ctx context.Context, err error) (<-chan InvokeRe
 	return invokeResultChan, errCh
 }
 
-func (c *client) onConnected(hubConnection) {}
+func (c *client) onConnected(HubConnection) {}
 
-func (c *client) onDisconnected(hubConnection) {}
+func (c *client) onDisconnected(HubConnection) {}
 
-func (c *client) invocationTarget(hubConnection) interface{} {
+func (c *client) invocationTarget(HubConnection) interface{} {
 	return c.receiver
 }
 
@@ -573,7 +581,7 @@ func (c *client) processHandshake() (hubProtocol, error) {
 func (c *client) sendHandshakeRequest() error {
 	info, dbg := c.prefixLoggers(c.conn.ConnectionID())
 	request := fmt.Sprintf("{\"protocol\":\"%v\",\"version\":1}\u001e", c.format)
-	ctx, cancelWrite := context.WithTimeout(c.context(), c.HandshakeTimeout())
+	ctx, cancelWrite := context.WithTimeout(c.Context(), c.HandshakeTimeout())
 	defer cancelWrite()
 	_, err := ReadWriteWithContext(ctx,
 		func() (int, error) {
@@ -589,7 +597,7 @@ func (c *client) sendHandshakeRequest() error {
 
 func (c *client) receiveHandshakeResponse() (hubProtocol, error) {
 	info, dbg := c.prefixLoggers(c.conn.ConnectionID())
-	ctx, cancelRead := context.WithTimeout(c.context(), c.HandshakeTimeout())
+	ctx, cancelRead := context.WithTimeout(c.Context(), c.HandshakeTimeout())
 	defer cancelRead()
 	readJSONFramesChan := make(chan []interface{}, 1)
 	go func() {

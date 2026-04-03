@@ -1,7 +1,9 @@
-run:
-  skip-dirs:
+version: "2"
+
+linters:
+  exclusions:
+    paths:
     - chatsample
     - signalr_test
     - router/router_test
-  skip-files:
     - ".+_test\\.go$"

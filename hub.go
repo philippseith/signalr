@@ -79,3 +79,9 @@ func (h *Hub) OnConnected(string) {}
 
 // OnDisconnected is called when the hub is disconnected
 func (h *Hub) OnDisconnected(string) {}
+
+func (h *Hub) Close(errorMessage string, allowReconnect bool) error {
+	h.cm.RLock()
+	defer h.cm.RUnlock()
+	return h.context.Close(errorMessage, allowReconnect)
+}

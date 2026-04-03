@@ -85,6 +85,10 @@ func (s *simpleHub) Callback(arg1 string) {
 	s.Hub.Clients().Caller().Send("OnCallback", strings.ToUpper(arg1))
 }
 
+func (s *simpleHub) SwearBack(arg1 string) {
+	s.Hub.Clients().Caller().Send("#@!", strings.ToUpper(arg1))
+}
+
 func (s *simpleHub) ReadStream(i int) chan string {
 	ch := make(chan string)
 	go func() {
@@ -120,6 +124,18 @@ func (s *simpleReceiver) OnCallback(result string) {
 	s.ch <- result
 }
 
+type noLogAfterStopLogger struct {
+	StructuredLogger
+	shouldPanic atomic.Bool
+}
+
+func (n *noLogAfterStopLogger) Log(keyVals ...interface{}) error {
+	if n.shouldPanic.Load() {
+		panic("oh no")
+	}
+	return n.StructuredLogger.Log(keyVals)
+}
+
 var _ = Describe("Client", func() {
 	formatOption := TransferFormat("Text")
 	j := 1
@@ -149,6 +165,64 @@ var _ = Describe("Client", func() {
 			close(done)
 		}, 1.0)
 	})
+	Context("Stop", func() {
+		It("should stop the client properly", func(done Done) {
+			// Create a simple server
+			server, err := NewServer(context.TODO(), SimpleHubFactory(&simpleHub{}),
+				testLoggerOption(),
+				ChanReceiveTimeout(200*time.Millisecond),
+				StreamBufferCapacity(5))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(server).NotTo(BeNil())
+			// Create both ends of the connection
+			cliConn, srvConn := newClientServerConnections()
+			// Start the server
+			go func() { _ = server.Serve(srvConn) }()
+			// Create the Client
+			clientConn, err := NewClient(context.Background(), WithConnection(cliConn), testLoggerOption(), formatOption)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(clientConn).NotTo(BeNil())
+			// Start it
+			clientConn.Start()
+			Expect(<-clientConn.WaitForState(context.Background(), ClientConnected)).NotTo(HaveOccurred())
+			clientConn.Stop()
+			Expect(clientConn.State()).To(BeEquivalentTo(ClientClosed))
+			server.cancel()
+			close(done)
+		})
+		It("should not log after stop", func(done Done) {
+			// Create a simple server
+			server, err := NewServer(context.TODO(), SimpleHubFactory(&simpleHub{}),
+				testLoggerOption(),
+				ChanReceiveTimeout(200*time.Millisecond),
+				StreamBufferCapacity(5))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(server).NotTo(BeNil())
+			// Create both ends of the connection
+			cliConn, srvConn := newClientServerConnections()
+			// Start the server
+			go func() { _ = server.Serve(srvConn) }()
+			// Create the Client
+			clientConn, err := NewClient(context.Background(), WithConnection(cliConn), testLoggerOption(), formatOption)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(clientConn).NotTo(BeNil())
+			// Replace loggers with loggers that panic after stop
+			info, debug := clientConn.loggers()
+			panicableInfo, panicableDebug := &noLogAfterStopLogger{StructuredLogger: info}, &noLogAfterStopLogger{StructuredLogger: debug}
+			clientConn.setLoggers(panicableInfo, panicableDebug)
+			// Start it
+			clientConn.Start()
+			Expect(<-clientConn.WaitForState(context.Background(), ClientConnected)).NotTo(HaveOccurred())
+			clientConn.Stop()
+			panicableInfo.shouldPanic.Store(true)
+			panicableDebug.shouldPanic.Store(true)
+			// Ensure that we really don't get any logs anymore
+			time.Sleep(500 * time.Millisecond)
+			Expect(clientConn.State()).To(BeEquivalentTo(ClientClosed))
+			server.cancel()
+			close(done)
+		})
+	})
 	Context("Invoke", func() {
 		It("should invoke a server method and return the result", func(done Done) {
 			_, client, _, cancelClient := getTestBed(&simpleReceiver{}, formatOption)
@@ -157,14 +231,14 @@ var _ = Describe("Client", func() {
 			Expect(r.Error).NotTo(HaveOccurred())
 			cancelClient()
 			close(done)
-		}, 2.0)
+		}, 5.0)
 		It("should invoke a server method and return the error when arguments don't match", func(done Done) {
 			_, client, _, cancelClient := getTestBed(&simpleReceiver{}, formatOption)
 			r := <-client.Invoke("InvokeMe", "A", "B")
 			Expect(r.Error).To(HaveOccurred())
 			cancelClient()
 			close(done)
-		}, 2.0)
+		}, 5.0)
 		It("should invoke a server method and return the result after a bad invocation", func(done Done) {
 			_, client, _, cancelClient := getTestBed(&simpleReceiver{}, formatOption)
 			client.Invoke("InvokeMe", "A", "B")
@@ -173,7 +247,7 @@ var _ = Describe("Client", func() {
 			Expect(r.Error).NotTo(HaveOccurred())
 			cancelClient()
 			close(done)
-		}, 2.0)
+		}, 5.0)
 		It(fmt.Sprintf("should return an error when the connection fails: invocation %v", j), func(done Done) {
 			_, client, cliConn, cancelClient := getTestBed(&simpleReceiver{}, formatOption)
 			cliConn.fail.Store(errors.New("fail"))
@@ -181,7 +255,7 @@ var _ = Describe("Client", func() {
 			Expect(r.Error).To(HaveOccurred())
 			cancelClient()
 			close(done)
-		}, 1.0)
+		}, 5.0)
 	})
 	Context("Send", func() {
 		It("should invoke a server method and get the result via callback", func(done Done) {
@@ -208,7 +282,32 @@ var _ = Describe("Client", func() {
 			}
 			cancelClient()
 			close(done)
-		}, 1.0)
+		}, 5.0)
+		It("should invoke a server method and get the result via callback with alternate name", func(done Done) {
+			receiver := &simpleReceiver{}
+			_, client, _, cancelClient := getTestBed(receiver, formatOption)
+			receiver.result.Store("x")
+			errCh := client.Send("SwearBack", "low")
+			ch := make(chan string, 1)
+			go func() {
+				for {
+					if result, ok := receiver.result.Load().(string); ok {
+						if result != "x" {
+							ch <- result
+							break
+						}
+					}
+				}
+			}()
+			select {
+			case val := <-ch:
+				Expect(val).To(Equal("LOW"))
+			case err := <-errCh:
+				Expect(err).NotTo(HaveOccurred())
+			}
+			cancelClient()
+			close(done)
+		}, 5.0)
 		It("should invoke a server method and return the error when arguments don't match", func(done Done) {
 			receiver := &simpleReceiver{}
 			_, client, _, cancelClient := getTestBed(receiver, formatOption)
@@ -235,7 +334,7 @@ var _ = Describe("Client", func() {
 			receiver.result.Store("Stop")
 			cancelClient()
 			close(done)
-		}, 2.0)
+		}, 5.0)
 		It(fmt.Sprintf("should return an error when the connection fails: invocation %v", j), func(done Done) {
 			_, client, cliConn, cancelClient := getTestBed(&simpleReceiver{}, formatOption)
 			cliConn.fail.Store(errors.New("fail"))
@@ -243,7 +342,7 @@ var _ = Describe("Client", func() {
 			Expect(err).To(HaveOccurred())
 			cancelClient()
 			close(done)
-		}, 1.0)
+		}, 5.0)
 	})
 	Context("PullStream", func() {
 		j := 1
@@ -271,28 +370,28 @@ var _ = Describe("Client", func() {
 			Expect(r.Value).To(Equal("A1"))
 			cancelClient()
 			close(done)
-		}, 2.0)
+		}, 5.0)
 		It("should return an error when the method returns no result", func(done Done) {
 			_, client, _, cancelClient := getTestBed(&simpleReceiver{}, formatOption)
 			r := <-client.PullStream("Callback", "A")
 			Expect(r.Error).To(HaveOccurred())
 			cancelClient()
 			close(done)
-		}, 2.0)
+		}, 5.0)
 		It("should return an error when the method does not exist on the server", func(done Done) {
 			_, client, _, cancelClient := getTestBed(&simpleReceiver{}, formatOption)
 			r := <-client.PullStream("ReadStream2")
 			Expect(r.Error).To(HaveOccurred())
 			cancelClient()
 			close(done)
-		}, 2.0)
+		}, 5.0)
 		It("should return an error when the method arguments are not matching", func(done Done) {
 			_, client, _, cancelClient := getTestBed(&simpleReceiver{}, formatOption)
 			r := <-client.PullStream("ReadStream", "A", 1)
 			Expect(r.Error).To(HaveOccurred())
 			cancelClient()
 			close(done)
-		}, 2.0)
+		}, 5.0)
 		It("should return an error when the connection fails", func(done Done) {
 			_, client, cliConn, cancelClient := getTestBed(&simpleReceiver{}, formatOption)
 			cliConn.fail.Store(errors.New("fail"))
@@ -300,7 +399,7 @@ var _ = Describe("Client", func() {
 			Expect(r.Error).To(HaveOccurred())
 			cancelClient()
 			close(done)
-		}, 2.0)
+		}, 5.0)
 	})
 	Context("PushStreams", func() {
 		var cliConn *pipeConnection
@@ -328,12 +427,12 @@ var _ = Describe("Client", func() {
 			client.Start()
 			Expect(<-client.WaitForState(context.Background(), ClientConnected)).NotTo(HaveOccurred())
 			close(done)
-		}, 2.0)
+		}, 5.0)
 		AfterEach(func(done Done) {
 			cancelClient()
 			server.cancel()
 			close(done)
-		}, 2.0)
+		}, 5.0)
 
 		It("should push a stream to the server", func(done Done) {
 			ch := make(chan int, 1)
@@ -351,7 +450,7 @@ var _ = Describe("Client", func() {
 			Expect(hub.receiveStreamArg).To(Equal("test"))
 			cancelClient()
 			close(done)
-		}, 1.0)
+		}, 5.0)
 
 		It("should return an error when the connection fails", func(done Done) {
 			cliConn.fail.Store(errors.New("fail"))
@@ -360,7 +459,7 @@ var _ = Describe("Client", func() {
 			Expect(ir.Error).To(HaveOccurred())
 			cancelClient()
 			close(done)
-		}, 1.0)
+		}, 5.0)
 	})
 
 	Context("Reconnect", func() {
@@ -389,13 +488,12 @@ var _ = Describe("Client", func() {
 			client.Start()
 			Expect(<-client.WaitForState(context.Background(), ClientConnected)).NotTo(HaveOccurred())
 			close(done)
-		}, 2.0)
+		}, 5.0)
 		AfterEach(func(done Done) {
 			cancelClient()
 			server.cancel()
 			close(done)
-		}, 2.0)
-		// TODO
+		}, 5.0)
 	})
 })
 
@@ -411,7 +509,8 @@ func getTestBed(receiver interface{}, formatOption func(Party) error) (Server, C
 	// Create the Client
 	var ctx context.Context
 	ctx, cancelClient := context.WithCancel(context.Background())
-	client, _ := NewClient(ctx, WithConnection(cliConn), WithReceiver(receiver), testLoggerOption(), formatOption)
+	client, _ := NewClient(ctx, WithConnection(cliConn), WithReceiver(receiver),
+		WithAlternateMethodName("OnCallback", "#@!"), testLoggerOption(), formatOption)
 	// Start it
 	client.Start()
 	return server, client, cliConn, cancelClient

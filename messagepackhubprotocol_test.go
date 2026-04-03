@@ -44,5 +44,39 @@ var _ = Describe("MessagePackHubProtocol", func() {
 				Expect(reflect.Indirect(value).Interface()).To(Equal(message.Arguments[i]))
 			}
 		})
+		It("should encode/decode an CancelInvocationMessage", func() {
+			message := cancelInvocationMessage{
+				Type:         5,
+				InvocationID: "1",
+			}
+			buf := bytes.Buffer{}
+			err := protocol.WriteMessage(message, &buf)
+			Expect(err).NotTo(HaveOccurred())
+			remainBuf := bytes.Buffer{}
+			got, err := protocol.ParseMessages(&buf, &remainBuf)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(remainBuf.Len()).To(Equal(0))
+			Expect(len(got)).To(Equal(1))
+			Expect(got[0]).To(BeAssignableToTypeOf(cancelInvocationMessage{}))
+			gotMsg := got[0].(cancelInvocationMessage)
+			Expect(gotMsg.Type).To(Equal(message.Type))
+			Expect(gotMsg.InvocationID).To(Equal(message.InvocationID))
+		})
+		It("should encode/decode an CloseMessage", func() {
+			message := closeMessage{
+				Type: 7,
+			}
+			buf := bytes.Buffer{}
+			err := protocol.WriteMessage(message, &buf)
+			Expect(err).NotTo(HaveOccurred())
+			remainBuf := bytes.Buffer{}
+			got, err := protocol.ParseMessages(&buf, &remainBuf)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(remainBuf.Len()).To(Equal(0))
+			Expect(len(got)).To(Equal(1))
+			Expect(got[0]).To(BeAssignableToTypeOf(closeMessage{}))
+			gotMsg := got[0].(closeMessage)
+			Expect(gotMsg.Type).To(Equal(message.Type))
+		})
 	})
 })

@@ -2,6 +2,7 @@ package signalr
 
 import (
 	"context"
+	"sync"
 	"time"
 
 	"github.com/go-kit/log"
@@ -10,13 +11,13 @@ import (
 // Party is the common base of Server and Client. The Party methods are only used internally,
 // but the interface is public to allow using Options on Party as parameters for external functions
 type Party interface {
-	context() context.Context
+	Context() context.Context
 	cancel()
 
-	onConnected(hc hubConnection)
-	onDisconnected(hc hubConnection)
+	onConnected(hc HubConnection)
+	onDisconnected(hc HubConnection)
 
-	invocationTarget(hc hubConnection) interface{}
+	invocationTarget(hc HubConnection) interface{}
 
 	timeout() time.Duration
 	setTimeout(timeout time.Duration)
@@ -29,7 +30,7 @@ type Party interface {
 	insecureSkipVerify() bool
 	setInsecureSkipVerify(skip bool)
 
-	originPatterns()   [] string
+	originPatterns() []string
 	setOriginPatterns(orgs []string)
 
 	chanReceiveTimeout() time.Duration
@@ -43,6 +44,9 @@ type Party interface {
 	enableDetailedErrors() bool
 	setEnableDetailedErrors(enable bool)
 
+	setAlternateMethodName(methodName, alternateName string)
+	getMethodNameByAlternateName(alternateName string) (methodName string)
+
 	loggers() (info StructuredLogger, dbg StructuredLogger)
 	setLoggers(info StructuredLogger, dbg StructuredLogger)
 
@@ -50,6 +54,8 @@ type Party interface {
 
 	maximumReceiveMessageSize() uint
 	setMaximumReceiveMessageSize(size uint)
+
+	waitGroup() *sync.WaitGroup
 }
 
 func newPartyBase(parentContext context.Context, info log.Logger, dbg log.Logger) partyBase {
@@ -66,6 +72,7 @@ func newPartyBase(parentContext context.Context, info log.Logger, dbg log.Logger
 		_enableDetailedErrors:      false,
 		_insecureSkipVerify:        false,
 		_originPatterns:            nil,
+		methodNamesByAlternateName: make(map[string]string),
 		info:                       info,
 		dbg:                        dbg,
 	}
@@ -81,13 +88,15 @@ type partyBase struct {
 	_streamBufferCapacity      uint
 	_maximumReceiveMessageSize uint
 	_enableDetailedErrors      bool
-	_insecureSkipVerify		   bool
-	_originPatterns             []string
+	_insecureSkipVerify        bool
+	_originPatterns            []string
+	methodNamesByAlternateName map[string]string
 	info                       StructuredLogger
 	dbg                        StructuredLogger
+	wg                         sync.WaitGroup
 }
 
-func (p *partyBase) context() context.Context {
+func (p *partyBase) Context() context.Context {
 	return p.ctx
 }
 
@@ -120,16 +129,16 @@ func (p *partyBase) setKeepAliveInterval(interval time.Duration) {
 }
 
 func (p *partyBase) insecureSkipVerify() bool {
-	return  p._insecureSkipVerify
+	return p._insecureSkipVerify
 }
 func (p *partyBase) setInsecureSkipVerify(skip bool) {
 	p._insecureSkipVerify = skip
 }
 
 func (p *partyBase) originPatterns() []string {
-	return  p._originPatterns
+	return p._originPatterns
 }
-func (p *partyBase) setOriginPatterns(origins  []string) {
+func (p *partyBase) setOriginPatterns(origins []string) {
 	p._originPatterns = origins
 }
 
@@ -172,4 +181,20 @@ func (p *partyBase) setLoggers(info StructuredLogger, dbg StructuredLogger) {
 
 func (p *partyBase) loggers() (info StructuredLogger, debug StructuredLogger) {
 	return p.info, p.dbg
+}
+
+func (p *partyBase) waitGroup() *sync.WaitGroup {
+	return &p.wg
+}
+
+func (p *partyBase) setAlternateMethodName(methodName, alternateName string) {
+	p.methodNamesByAlternateName[alternateName] = methodName
+}
+
+func (p *partyBase) getMethodNameByAlternateName(alternateName string) (methodName string) {
+	var ok bool
+	if methodName, ok = p.methodNamesByAlternateName[alternateName]; !ok {
+		methodName = alternateName
+	}
+	return methodName
 }

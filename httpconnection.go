@@ -9,7 +9,8 @@ import (
 	"net/url"
 	"path"
 
-	"nhooyr.io/websocket"
+	"github.com/quic-go/webtransport-go"
+	"github.com/coder/websocket"
 )
 
 // Doer is the *http.Client interface
@@ -18,9 +19,10 @@ type Doer interface {
 }
 
 type httpConnection struct {
-	client     Doer
-	headers    func() http.Header
-	transports []TransportType
+	client           Doer
+	headers          func() http.Header
+	transports       []TransportType
+	negotiateVersion *int
 }
 
 // WithHTTPClient sets the http client used to connect to the signalR server.
@@ -55,6 +57,14 @@ func WithTransports(transports ...TransportType) func(*httpConnection) error {
 	}
 }
 
+// WithNegotiateVersion sets the negotiate version to use for the SignalR negotiation.
+func WithNegotiateVersion(version int) func(*httpConnection) error {
+	return func(c *httpConnection) error {
+		c.negotiateVersion = &version
+		return nil
+	}
+}
+
 // NewHTTPConnection creates a signalR HTTP Connection for usage with a Client.
 // ctx can be used to cancel the SignalR negotiation during the creation of the Connection
 // but not the Connection itself.
@@ -83,6 +93,11 @@ func NewHTTPConnection(ctx context.Context, address string, options ...func(*htt
 
 	negotiateURL := *reqURL
 	negotiateURL.Path = path.Join(negotiateURL.Path, "negotiate")
+	if httpConn.negotiateVersion != nil {
+		q := negotiateURL.Query()
+		q.Set("negotiateVersion", fmt.Sprint(*httpConn.negotiateVersion))
+		negotiateURL.RawQuery = q.Encode()
+	}
 	req, err := http.NewRequestWithContext(ctx, "POST", negotiateURL.String(), nil)
 	if err != nil {
 		return nil, err
@@ -113,14 +128,27 @@ func NewHTTPConnection(ctx context.Context, address string, options ...func(*htt
 	}
 
 	q := reqURL.Query()
-	q.Set("id", negotiateResponse.ConnectionID)
+	switch negotiateResponse.NegotiateVersion {
+	case 0:
+		q.Set("id", negotiateResponse.ConnectionID)
+	case 1:
+		q.Set("id", negotiateResponse.ConnectionToken)
+	}
+
 	reqURL.RawQuery = q.Encode()
 
 	// Select the best connection
 	var conn Connection
 	switch {
-	case negotiateResponse.hasTransport("WebTransports"):
-		// TODO
+	case httpConn.hasTransport(TransportWebTransports) && negotiateResponse.hasTransport(TransportWebTransports):
+		var d webtransport.Dialer
+		_, wtConn, err := d.Dial(ctx, reqURL.String(), req.Header)
+		if err != nil {
+			return nil, err
+		}
+
+		// TODO think about if the API should give the possibility to cancel this connections
+		conn = newWebTransportsConnection(context.Background(), negotiateResponse.ConnectionID, wtConn)
 
 	case httpConn.hasTransport(TransportWebSockets) && negotiateResponse.hasTransport(TransportWebSockets):
 		wsURL := reqURL
@@ -172,6 +200,9 @@ func NewHTTPConnection(ctx context.Context, address string, options ...func(*htt
 		if err != nil {
 			return nil, err
 		}
+
+	default:
+		return nil, fmt.Errorf("transport not configured or unknown negotiation transports: %v", negotiateResponse.AvailableTransports)
 	}
 
 	return conn, nil

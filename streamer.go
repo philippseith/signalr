@@ -7,7 +7,7 @@ import (
 
 type streamer struct {
 	cancels sync.Map
-	conn    hubConnection
+	conn    HubConnection
 }
 
 func (s *streamer) Start(invocationID string, reflectedChannel reflect.Value) {
