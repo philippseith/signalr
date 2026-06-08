@@ -178,6 +178,38 @@ var _ = Describe("HTTP server", func() {
 })
 
 var _ = Describe("HTTP client", func() {
+	Context("WithHTTPClient over TLS", func() {
+		It("should send messages via SSE to a TLS server using the supplied *http.Client", func(done Done) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+
+			server, err := NewServer(ctx, SimpleHubFactory(&addHub{}), HTTPTransports(TransportServerSentEvents), testLoggerOption())
+			Expect(err).NotTo(HaveOccurred())
+			router := http.NewServeMux()
+			server.MapHTTP(WithHTTPServeMux(router), "/hub")
+			testServer := httptest.NewTLSServer(router)
+			defer testServer.Close()
+
+			conn, err := NewHTTPConnection(ctx, testServer.URL+"/hub",
+				WithHTTPClient(testServer.Client()),
+				WithTransports(TransportServerSentEvents),
+			)
+			Expect(err).NotTo(HaveOccurred())
+
+			client, err := NewClient(ctx, WithConnection(conn), testLoggerOption())
+			Expect(err).NotTo(HaveOccurred())
+			client.Start()
+			Expect(<-client.WaitForState(ctx, ClientConnected)).NotTo(HaveOccurred())
+
+			// Invoke exercises the SSE Write (upstream POST) path.
+			result := <-client.Invoke("Add2", 1)
+			Expect(result.Error).NotTo(HaveOccurred())
+			Expect(result.Value).To(BeEquivalentTo(3))
+
+			close(done)
+		}, 5.0)
+	})
+
 	Context("WithHttpConnection", func() {
 		It("should fallback to SSE (this can only be tested when httpConnection is tampered with)", func(done Done) {
 			ctx, cancel := context.WithCancel(context.Background())
