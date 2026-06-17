@@ -110,10 +110,15 @@ msgLoop:
 				break pingLoop
 			case <-keepAliveTicker.C:
 				// Send ping only when there was no write in the keepAliveInterval before
-				if time.Since(l.hubConn.LastWriteStamp()) > l.party.keepAliveInterval() {
+				nextPingIn := l.party.keepAliveInterval() - time.Since(l.hubConn.LastWriteStamp())
+
+				if nextPingIn < 100*time.Millisecond { // don't set a timer to unnecessary small values
 					if err = l.hubConn.Ping(); err != nil {
 						break pingLoop
 					}
+					keepAliveTicker.Reset(l.party.keepAliveInterval())
+				} else {
+					keepAliveTicker.Reset(nextPingIn)
 				}
 				// Don't break the pingLoop when keepAlive is over, it exists for this case
 			case <-timeoutTicker.C:
