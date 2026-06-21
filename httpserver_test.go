@@ -179,11 +179,11 @@ var _ = Describe("HTTP server", func() {
 
 var _ = Describe("HTTP client", func() {
 	Context("WithHTTPClient over TLS", func() {
-		It("should send messages via SSE to a TLS server using the supplied *http.Client", func(done Done) {
+		It("should connect via WebSocket to a TLS server using the supplied *http.Client", func(done Done) {
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 
-			server, err := NewServer(ctx, SimpleHubFactory(&addHub{}), HTTPTransports(TransportServerSentEvents), testLoggerOption())
+			server, err := NewServer(ctx, SimpleHubFactory(&addHub{}), HTTPTransports(TransportWebSockets), testLoggerOption())
 			Expect(err).NotTo(HaveOccurred())
 			router := http.NewServeMux()
 			server.MapHTTP(WithHTTPServeMux(router), "/hub")
@@ -192,7 +192,7 @@ var _ = Describe("HTTP client", func() {
 
 			conn, err := NewHTTPConnection(ctx, testServer.URL+"/hub",
 				WithHTTPClient(testServer.Client()),
-				WithTransports(TransportServerSentEvents),
+				WithTransports(TransportWebSockets),
 			)
 			Expect(err).NotTo(HaveOccurred())
 
@@ -201,7 +201,6 @@ var _ = Describe("HTTP client", func() {
 			client.Start()
 			Expect(<-client.WaitForState(ctx, ClientConnected)).NotTo(HaveOccurred())
 
-			// Invoke exercises the SSE Write (upstream POST) path.
 			result := <-client.Invoke("Add2", 1)
 			Expect(result.Error).NotTo(HaveOccurred())
 			Expect(result.Value).To(BeEquivalentTo(3))
