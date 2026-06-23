@@ -26,7 +26,10 @@ type httpConnection struct {
 }
 
 // WithHTTPClient sets the http client used to connect to the signalR server.
-// The client is only used for http requests. It is not used for the websocket connection.
+// The client is used for all HTTP requests, including the negotiate POST, the SSE downstream
+// GET, and — when the client is an *http.Client — the WebSocket upgrade handshake.
+// If the supplied Doer is not an *http.Client the WebSocket transport falls back to
+// http.DefaultClient for the dial, so custom TLS configuration is not propagated in that case.
 func WithHTTPClient(client Doer) func(*httpConnection) error {
 	return func(c *httpConnection) error {
 		c.client = client
@@ -162,6 +165,15 @@ func NewHTTPConnection(ctx context.Context, address string, options ...func(*htt
 
 		opts := &websocket.DialOptions{}
 
+		// Propagate the caller-supplied client so that custom TLS configuration
+		// (e.g. a non-default root CA or InsecureSkipVerify) is honoured during
+		// the WebSocket upgrade handshake.  coder/websocket uses opts.HTTPClient
+		// for the HTTP upgrade request; its Transport must return writable bodies
+		// (http.Transport satisfies this since Go 1.12).
+		if c, ok := httpConn.client.(*http.Client); ok {
+			opts.HTTPClient = c
+		}
+
 		if httpConn.headers != nil {
 			opts.HTTPHeader = httpConn.headers()
 		} else {
@@ -196,7 +208,7 @@ func NewHTTPConnection(ctx context.Context, address string, options ...func(*htt
 			return nil, err
 		}
 
-		conn, err = newClientSSEConnection(address, negotiateResponse.ConnectionID, resp.Body)
+		conn, err = newClientSSEConnection(address, negotiateResponse.ConnectionID, resp.Body, httpConn.client)
 		if err != nil {
 			return nil, err
 		}
