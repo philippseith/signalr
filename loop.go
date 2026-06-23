@@ -112,7 +112,7 @@ msgLoop:
 				// Send ping only when there was no write in the keepAliveInterval before
 				nextPingIn := l.party.keepAliveInterval() - time.Since(l.hubConn.LastWriteStamp())
 
-				if nextPingIn < 100*time.Millisecond { // don't set a timer to unnecessary small values
+				if nextPingIn <= 0 {
 					if err = l.hubConn.Ping(); err != nil {
 						break pingLoop
 					}
