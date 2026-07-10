@@ -255,6 +255,7 @@ func negotiateWebSocketTestServer(port int) map[string]interface{} {
 	resp, err := http.Post(fmt.Sprintf("http://127.0.0.1:%v/hub/negotiate", port), "text/plain;charset=UTF-8", &buf)
 	Expect(err).To(BeNil())
 	Expect(resp).ToNot(BeNil())
+	Expect(resp.Header.Get("Content-Type")).To(Equal("application/json"))
 	defer func() {
 		_ = resp.Body.Close()
 	}()

@@ -247,6 +247,7 @@ func (h *httpMux) negotiate(w http.ResponseWriter, req *http.Request) {
 			AvailableTransports: availableTransports,
 		}
 
+		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		_ = json.NewEncoder(w).Encode(response) // Can't imagine an error when encoding
 	}
