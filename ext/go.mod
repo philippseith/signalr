@@ -1,6 +1,6 @@
 module github.com/philippseith/signalr/ext
 
-go 1.24.2
+go 1.25.0
 
 require (
 	github.com/go-kit/log v0.2.1
@@ -20,8 +20,8 @@ require (
 	github.com/teivah/onecontext v1.3.0 // indirect
 	github.com/vmihailenco/msgpack/v5 v5.4.1 // indirect
 	github.com/vmihailenco/tagparser/v2 v2.0.0 // indirect
-	golang.org/x/net v0.38.0 // indirect
-	golang.org/x/sys v0.31.0 // indirect
+	golang.org/x/net v0.55.0 // indirect
+	golang.org/x/sys v0.45.0 // indirect
 	golang.org/x/tools v0.22.0 // indirect
 	nhooyr.io/websocket v1.8.10 // indirect
 )
