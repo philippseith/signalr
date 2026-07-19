@@ -73,6 +73,7 @@ func (l *loop) Run(connected chan struct{}) (err error) {
 		}
 	}()
 	timeoutTicker := time.NewTicker(l.party.timeout())
+	keepAliveTicker := time.NewTicker(l.party.keepAliveInterval())
 msgLoop:
 	for {
 	pingLoop:
@@ -107,15 +108,18 @@ msgLoop:
 					_ = l.info.Log(evt, msgRecv, "error", err, msg, fmtMsg(evt.message), react, "close connection")
 				}
 				break pingLoop
-			case <-time.After(l.party.keepAliveInterval()):
+			case <-keepAliveTicker.C:
 				// Send ping only when there was no write in the keepAliveInterval before
-				if time.Since(l.hubConn.LastWriteStamp()) > l.party.keepAliveInterval() {
+				nextPingIn := l.party.keepAliveInterval() - time.Since(l.hubConn.LastWriteStamp())
+
+				if nextPingIn <= 0 {
 					if err = l.hubConn.Ping(); err != nil {
 						break pingLoop
 					}
+					keepAliveTicker.Reset(l.party.keepAliveInterval())
+				} else {
+					keepAliveTicker.Reset(nextPingIn)
 				}
-				// A successful ping or Write shows us that the connection is alive. Reset the timeout
-				timeoutTicker.Reset(l.party.timeout())
 				// Don't break the pingLoop when keepAlive is over, it exists for this case
 			case <-timeoutTicker.C:
 				err = fmt.Errorf("timeout interval elapsed (%v)", l.party.timeout())
