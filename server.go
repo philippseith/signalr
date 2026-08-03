@@ -36,6 +36,7 @@ type Server interface {
 	Serve(conn Connection) error
 	HubClients() HubClients
 	availableTransports() []TransportType
+	maxNegotiationConnections() int
 }
 
 type server struct {
@@ -47,8 +48,9 @@ type server struct {
 	lifetimeManager         HubLifetimeManager
 	defaultHubClients       *defaultHubClients
 	groupManager            GroupManager
-	reconnectAllowed        bool
-	transports              []TransportType
+	reconnectAllowed           bool
+	transports                 []TransportType
+	negotiationConnectionLimit int
 }
 
 // NewServer creates a new server for one type of hub. The hub type is set by one of the
@@ -57,11 +59,12 @@ func NewServer(ctx context.Context, options ...func(Party) error) (Server, error
 	info, dbg := buildInfoDebugLogger(log.NewLogfmtLogger(os.Stderr), false)
 	lifetimeManager := newLifeTimeManager(info)
 	server := &server{
-		lifetimeManager: &lifetimeManager,
-		connectionHubs:  make(map[string]HubInterface),
+		lifetimeManager:           &lifetimeManager,
+		connectionHubs:            make(map[string]HubInterface),
 		// Do NOT initialize defaultHubClients or groupManager yet
-		partyBase:        newPartyBase(ctx, info, dbg),
-		reconnectAllowed: true,
+		partyBase:                  newPartyBase(ctx, info, dbg),
+		reconnectAllowed:           true,
+		negotiationConnectionLimit: 1000,
 	}
 	// apply any option including lifetime manager, logger, etc.
 	for _, option := range options {
@@ -136,6 +139,10 @@ func (s *server) Serve(conn Connection) error {
 
 func (s *server) HubClients() HubClients {
 	return s.defaultHubClients
+}
+
+func (s *server) maxNegotiationConnections() int {
+	return s.negotiationConnectionLimit
 }
 
 func (s *server) availableTransports() []TransportType {

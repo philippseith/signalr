@@ -11,8 +11,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/teivah/onecontext"
 	"github.com/coder/websocket"
+	"github.com/teivah/onecontext"
 )
 
 type httpMux struct {
@@ -22,9 +22,31 @@ type httpMux struct {
 }
 
 func newHTTPMux(server Server) *httpMux {
-	return &httpMux{
+	h := &httpMux{
 		connectionMap: make(map[string]Connection),
 		server:        server,
+	}
+	go h.reaperLoop()
+	return h
+}
+
+func (h *httpMux) reaperLoop() {
+	ttl := h.server.handshakeTimeout()
+	ticker := time.NewTicker(ttl)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-h.server.Context().Done():
+			return
+		case now := <-ticker.C:
+			h.mx.Lock()
+			for key, c := range h.connectionMap {
+				if nc, ok := c.(*negotiateConnection); ok && now.Sub(nc.createdAt) > ttl {
+					delete(h.connectionMap, key)
+				}
+			}
+			h.mx.Unlock()
+		}
 	}
 }
 
@@ -163,7 +185,8 @@ func (h *httpMux) handleWebsocket(writer http.ResponseWriter, request *http.Requ
 		connectionMapKey = newConnectionID()
 		h.mx.Lock()
 		h.connectionMap[connectionMapKey] = &negotiateConnection{
-			ConnectionBase{connectionID: connectionMapKey},
+			ConnectionBase: ConnectionBase{connectionID: connectionMapKey},
+			createdAt:      time.Now(),
 		}
 		h.mx.Unlock()
 	}
@@ -219,8 +242,22 @@ func (h *httpMux) negotiate(w http.ResponseWriter, req *http.Request) {
 			connectionMapKey = connectionToken
 		}
 		h.mx.Lock()
+		if max := h.server.maxNegotiationConnections(); max > 0 {
+			var pending int
+			for _, c := range h.connectionMap {
+				if _, ok := c.(*negotiateConnection); ok {
+					pending++
+				}
+			}
+			if pending >= max {
+				h.mx.Unlock()
+				w.WriteHeader(http.StatusTooManyRequests)
+				return
+			}
+		}
 		h.connectionMap[connectionMapKey] = &negotiateConnection{
-			ConnectionBase{connectionID: connectionID},
+			ConnectionBase: ConnectionBase{connectionID: connectionID},
+			createdAt:      time.Now(),
 		}
 		h.mx.Unlock()
 		var availableTransports []availableTransport
@@ -257,7 +294,11 @@ func (h *httpMux) serveConnection(c Connection) error {
 	h.mx.Lock()
 	h.connectionMap[c.ConnectionID()] = c
 	h.mx.Unlock()
-	return h.server.Serve(c)
+	err := h.server.Serve(c)
+	h.mx.Lock()
+	delete(h.connectionMap, c.ConnectionID())
+	h.mx.Unlock()
+	return err
 }
 
 func newConnectionID() string {
@@ -270,6 +311,7 @@ func newConnectionID() string {
 
 type negotiateConnection struct {
 	ConnectionBase
+	createdAt time.Time
 }
 
 func (n *negotiateConnection) Read([]byte) (int, error) {

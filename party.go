@@ -23,6 +23,7 @@ type Party interface {
 	setTimeout(timeout time.Duration)
 
 	setHandshakeTimeout(timeout time.Duration)
+	handshakeTimeout() time.Duration
 
 	keepAliveInterval() time.Duration
 	setKeepAliveInterval(interval time.Duration)
@@ -118,6 +119,10 @@ func (p *partyBase) HandshakeTimeout() time.Duration {
 
 func (p *partyBase) setHandshakeTimeout(timeout time.Duration) {
 	p._handshakeTimeout = timeout
+}
+
+func (p *partyBase) handshakeTimeout() time.Duration {
+	return p._handshakeTimeout
 }
 
 func (p *partyBase) keepAliveInterval() time.Duration {

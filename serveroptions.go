@@ -111,3 +111,17 @@ func PerConnectionHubFactory(factory func(connectionID string) HubInterface) fun
 		return errors.New("option PerConnectionHubFactory is server only")
 	}
 }
+
+// MaxNegotiationConnections limits the number of pending (unfinished) negotiate connections.
+// When the limit is reached, new negotiate requests are rejected with 429 Too Many Requests.
+// Default is 1000. Use 0 to disable the limit, but be aware that this can lead to 
+// resource exhaustion if many clients connect at once and never finish the negotiation.
+func MaxNegotiationConnections(max int) func(Party) error {
+	return func(p Party) error {
+		if s, ok := p.(*server); ok {
+			s.negotiationConnectionLimit = max
+			return nil
+		}
+		return errors.New("option MaxNegotiationConnections is server only")
+	}
+}
