@@ -602,7 +602,7 @@ func (c *client) receiveHandshakeResponse() (hubProtocol, error) {
 	readJSONFramesChan := make(chan []interface{}, 1)
 	go func() {
 		var remainBuf bytes.Buffer
-		rawHandshake, err := readJSONFrames(c.conn, &remainBuf)
+		rawHandshake, err := readJSONFrames(c.conn, &remainBuf, 0)
 		readJSONFramesChan <- []interface{}{rawHandshake, err}
 	}()
 	select {

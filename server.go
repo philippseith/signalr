@@ -261,7 +261,7 @@ func (s *server) receiveHandshakeRequest(conn Connection) (handshakeRequest, err
 	readJSONFramesChan := make(chan []interface{}, 1)
 	go func() {
 		var remainBuf bytes.Buffer
-		rawHandshake, err := readJSONFrames(conn, &remainBuf)
+		rawHandshake, err := readJSONFrames(conn, &remainBuf, 0)
 		readJSONFramesChan <- []interface{}{rawHandshake, err}
 	}()
 	request := handshakeRequest{}
