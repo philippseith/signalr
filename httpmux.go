@@ -76,6 +76,7 @@ func (h *httpMux) handlePost(writer http.ResponseWriter, request *http.Request) 
 			// Connection is initiated
 			switch conn := c.(type) {
 			case *serverSSEConnection:
+				request.Body = http.MaxBytesReader(writer, request.Body, int64(h.server.maximumReceiveMessageSize()))
 				writer.WriteHeader(conn.consumeRequest(request))
 				return
 			case *negotiateConnection:
