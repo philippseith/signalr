@@ -390,3 +390,50 @@ func (m *mockHubConn) LastWriteStamp() time.Time                    { return tim
 func (m *mockHubConn) Items() *sync.Map                             { return &sync.Map{} }
 func (m *mockHubConn) Context() context.Context                     { return context.Background() }
 func (m *mockHubConn) Abort()                                       {}
+
+// TestDisconnectedConnectionRemovedFromGroup verifies that OnDisconnected removes
+// the connection from all groups so InvokeGroup no longer reaches it.
+func TestDisconnectedConnectionRemovedFromGroup(t *testing.T) {
+	mgr := newLifeTimeManager(testLogger())
+
+	called1 := make(chan struct{}, 1)
+	called2 := make(chan struct{}, 1)
+	conn1 := &invokingHubConn{mockHubConn: mockHubConn{id: "c1"}, called: called1}
+	conn2 := &invokingHubConn{mockHubConn: mockHubConn{id: "c2"}, called: called2}
+
+	mgr.OnConnected(conn1)
+	mgr.OnConnected(conn2)
+	mgr.AddToGroup("g", "c1")
+	mgr.AddToGroup("g", "c2")
+
+	mgr.OnDisconnected(conn2)
+
+	mgr.InvokeGroup("g", "m", nil)
+
+	select {
+	case <-called1:
+		// expected: conn1 still in group
+	case <-time.After(200 * time.Millisecond):
+		assert.Fail(t, "conn1 should have been invoked")
+	}
+	select {
+	case <-called2:
+		assert.Fail(t, "disconnected conn2 should not be invoked")
+	case <-time.After(50 * time.Millisecond):
+		// expected: conn2 was removed from group on disconnect
+	}
+}
+
+type invokingHubConn struct {
+	mockHubConn
+	called chan struct{}
+}
+
+func (m *invokingHubConn) ConnectionID() string { return m.mockHubConn.id }
+func (m *invokingHubConn) SendInvocation(string, string, []interface{}) error {
+	select {
+	case m.called <- struct{}{}:
+	default:
+	}
+	return nil
+}
