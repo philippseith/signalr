@@ -40,6 +40,9 @@ type Party interface {
 	streamBufferCapacity() uint
 	setStreamBufferCapacity(capacity uint)
 
+	maxConcurrentStreams() uint
+	setMaxConcurrentStreams(max uint)
+
 	allowReconnect() bool
 
 	enableDetailedErrors() bool
@@ -69,6 +72,7 @@ func newPartyBase(parentContext context.Context, info log.Logger, dbg log.Logger
 		_keepAliveInterval:         time.Second * 5,
 		_chanReceiveTimeout:        time.Second * 5,
 		_streamBufferCapacity:      10,
+		_maxConcurrentStreams:      100,
 		_maximumReceiveMessageSize: 1 << 15, // 32KB
 		_enableDetailedErrors:      false,
 		_insecureSkipVerify:        false,
@@ -87,6 +91,7 @@ type partyBase struct {
 	_keepAliveInterval         time.Duration
 	_chanReceiveTimeout        time.Duration
 	_streamBufferCapacity      uint
+	_maxConcurrentStreams      uint
 	_maximumReceiveMessageSize uint
 	_enableDetailedErrors      bool
 	_insecureSkipVerify        bool
@@ -161,6 +166,14 @@ func (p *partyBase) streamBufferCapacity() uint {
 
 func (p *partyBase) setStreamBufferCapacity(capacity uint) {
 	p._streamBufferCapacity = capacity
+}
+
+func (p *partyBase) maxConcurrentStreams() uint {
+	return p._maxConcurrentStreams
+}
+
+func (p *partyBase) setMaxConcurrentStreams(max uint) {
+	p._maxConcurrentStreams = max
 }
 
 func (p *partyBase) maximumReceiveMessageSize() uint {

@@ -3,6 +3,7 @@ package signalr
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"strings"
 	"time"
 
@@ -608,6 +609,28 @@ var _ = Describe("ClientStreaming", func() {
 				server.cancel()
 				close(done)
 			})
+		})
+	})
+})
+
+var _ = Describe("MaxConcurrentStreams", func() {
+	Context("When more stream registrations than maxConcurrentStreams are attempted", func() {
+		It("should reject the excess registration with an error", func() {
+			sc := newStreamClient(&jsonHubProtocol{}, time.Second, 10, 2)
+			argType := reflect.TypeOf(make(chan int))
+			inv := invocationMessage{Target: "method", StreamIds: []string{"s1", "s2", "s3"}}
+
+			_, ok, err := sc.buildChannelArgument(inv, argType, 0)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(ok).To(BeTrue())
+
+			_, ok, err = sc.buildChannelArgument(inv, argType, 1)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(ok).To(BeTrue())
+
+			_, _, err = sc.buildChannelArgument(inv, argType, 2)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("concurrent streams"))
 		})
 	})
 })
