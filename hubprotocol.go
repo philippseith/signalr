@@ -15,6 +15,7 @@ type hubProtocol interface {
 	WriteMessage(message interface{}, writer io.Writer) error
 	UnmarshalArgument(src interface{}, dst interface{}) error
 	setDebugLogger(dbg StructuredLogger)
+	setMaxReceiveMessageSize(size uint)
 	transferMode() TransferMode
 }
 

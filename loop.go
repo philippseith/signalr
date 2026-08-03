@@ -28,6 +28,7 @@ func newLoop(p Party, conn Connection, protocol hubProtocol) *loop {
 	protocol = reflect.New(reflect.ValueOf(protocol).Elem().Type()).Interface().(hubProtocol)
 	_, dbg := p.loggers()
 	protocol.setDebugLogger(dbg)
+	protocol.setMaxReceiveMessageSize(p.maximumReceiveMessageSize())
 	pInfo, pDbg := p.prefixLoggers(conn.ConnectionID())
 	hubConn := newHubConnection(conn, protocol, p.maximumReceiveMessageSize(), pInfo)
 	return &loop{

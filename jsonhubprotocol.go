@@ -220,3 +220,5 @@ func (j *jsonHubProtocol) transferMode() TransferMode {
 func (j *jsonHubProtocol) setDebugLogger(dbg StructuredLogger) {
 	j.dbg = log.WithPrefix(dbg, "ts", log.DefaultTimestampUTC, "protocol", "JSON")
 }
+
+func (j *jsonHubProtocol) setMaxReceiveMessageSize(_ uint) {}

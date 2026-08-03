@@ -12,7 +12,8 @@ import (
 )
 
 type messagePackHubProtocol struct {
-	dbg log.Logger
+	dbg                       log.Logger
+	maximumReceiveMessageSize uint
 }
 
 func (m *messagePackHubProtocol) ParseMessages(reader io.Reader, remainBuf *bytes.Buffer) ([]interface{}, error) {
@@ -61,6 +62,9 @@ func (m *messagePackHubProtocol) readFrames(reader io.Reader, remainBuf *bytes.B
 			// Store the overread bytes for the next iteration
 			_, _ = remainBuf.Write(frameLenBuf[lenLen:])
 			continue
+		}
+		if m.maximumReceiveMessageSize > 0 && frameLen > uint64(m.maximumReceiveMessageSize) {
+			return nil, fmt.Errorf("messagepack frame length %d exceeds maximum receive message size %d", frameLen, m.maximumReceiveMessageSize)
 		}
 		// Try getting data until at least one frame is available
 		readBuf := make([]byte, frameLen)
@@ -398,6 +402,10 @@ func (m *messagePackHubProtocol) transferMode() TransferMode {
 
 func (m *messagePackHubProtocol) setDebugLogger(dbg StructuredLogger) {
 	m.dbg = log.WithPrefix(dbg, "ts", log.DefaultTimestampUTC, "protocol", "MSGP")
+}
+
+func (m *messagePackHubProtocol) setMaxReceiveMessageSize(size uint) {
+	m.maximumReceiveMessageSize = size
 }
 
 // UnmarshalArgument unmarshals raw bytes to a destination value. dst is the pointer to the destination value.
