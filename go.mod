@@ -10,7 +10,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/onsi/ginkgo v1.16.5
 	github.com/onsi/gomega v1.38.0
-	github.com/quic-go/webtransport-go v0.10.0
+	github.com/quic-go/webtransport-go v0.11.1
 	github.com/stretchr/testify v1.11.1
 	github.com/teivah/onecontext v1.3.0
 	github.com/vmihailenco/msgpack/v5 v5.4.1
@@ -25,9 +25,9 @@ require (
 	github.com/nxadm/tail v1.4.11 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/quic-go/qpack v0.6.0 // indirect
-	github.com/quic-go/quic-go v0.59.1 // indirect
+	github.com/quic-go/quic-go v0.60.0 // indirect
 	github.com/vmihailenco/tagparser/v2 v2.0.0 // indirect
-	golang.org/x/crypto v0.51.0 // indirect
+	golang.org/x/crypto v0.52.0 // indirect
 	golang.org/x/net v0.55.0 // indirect
 	golang.org/x/sys v0.45.0 // indirect
 	golang.org/x/text v0.37.0 // indirect
