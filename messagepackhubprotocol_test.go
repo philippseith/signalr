@@ -2,6 +2,7 @@ package signalr
 
 import (
 	"bytes"
+	"encoding/binary"
 	"reflect"
 
 	. "github.com/onsi/ginkgo"
@@ -77,6 +78,19 @@ var _ = Describe("MessagePackHubProtocol", func() {
 			Expect(got[0]).To(BeAssignableToTypeOf(closeMessage{}))
 			gotMsg := got[0].(closeMessage)
 			Expect(gotMsg.Type).To(Equal(message.Type))
+		})
+		It("should reject a frame whose length prefix exceeds maximumReceiveMessageSize", func() {
+			p := messagePackHubProtocol{}
+			p.setDebugLogger(testLogger())
+			p.setMaxReceiveMessageSize(100)
+			// Build a 5-byte frame: Uvarint encoding of 1 GiB followed by no payload
+			lenBuf := make([]byte, binary.MaxVarintLen32)
+			binary.PutUvarint(lenBuf, 1<<30)
+			buf := bytes.NewBuffer(lenBuf)
+			var remainBuf bytes.Buffer
+			_, err := p.ParseMessages(buf, &remainBuf)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("exceeds maximum receive message size"))
 		})
 	})
 })
