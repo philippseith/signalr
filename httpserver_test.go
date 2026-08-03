@@ -15,10 +15,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/coder/websocket"
 	"github.com/go-kit/log/level"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	"github.com/coder/websocket"
 )
 
 type addHub struct {
@@ -172,6 +172,36 @@ var _ = Describe("HTTP server", func() {
 			waitForPort(port)
 			handShakeAndCallWebSocketTestServer(port, "")
 			testServer.Close()
+			close(done)
+		}, 5.0)
+	})
+	Context("SSE POST before GET is established", func() {
+		It("should return 425 Too Early after handshakeTimeout instead of spinning forever", func(done Done) {
+			server, err := NewServer(context.TODO(),
+				SimpleHubFactory(&addHub{}),
+				HTTPTransports(TransportServerSentEvents),
+				HandshakeTimeout(150*time.Millisecond),
+				testLoggerOption())
+			Expect(err).NotTo(HaveOccurred())
+			router := http.NewServeMux()
+			server.MapHTTP(WithHTTPServeMux(router), "/hub")
+			testServer := httptest.NewServer(router)
+			defer testServer.Close()
+			url, _ := url.Parse(testServer.URL)
+			port, _ := strconv.Atoi(url.Port())
+			negResp := negotiateWebSocketTestServer(port)
+			token, _ := negResp["connectionToken"].(string)
+			if token == "" {
+				token = negResp["connectionId"].(string)
+			}
+			// POST data immediately without establishing the SSE GET first
+			resp, err := http.Post(
+				fmt.Sprintf("http://127.0.0.1:%v/hub?id=%v", port, token),
+				"application/json",
+				bytes.NewBufferString(`{}`))
+			Expect(err).NotTo(HaveOccurred())
+			defer func() { _ = resp.Body.Close() }()
+			Expect(resp.StatusCode).To(Equal(http.StatusTooEarly))
 			close(done)
 		}, 5.0)
 	})

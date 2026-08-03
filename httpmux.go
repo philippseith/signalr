@@ -1,6 +1,7 @@
 package signalr
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
@@ -68,6 +69,8 @@ func (h *httpMux) handlePost(writer http.ResponseWriter, request *http.Request) 
 		return
 	}
 	info, _ := h.server.prefixLoggers("")
+	ctx, cancel := context.WithTimeout(request.Context(), h.server.handshakeTimeout())
+	defer cancel()
 	for {
 		h.mx.RLock()
 		c, ok := h.connectionMap[connectionID]
@@ -90,8 +93,13 @@ func (h *httpMux) handlePost(writer http.ResponseWriter, request *http.Request) 
 			writer.WriteHeader(http.StatusNotFound)
 			return
 		}
-		<-time.After(10 * time.Millisecond)
-		_ = info.Log("event", "handlePost for SSE connection repeated")
+		select {
+		case <-ctx.Done():
+			writer.WriteHeader(http.StatusTooEarly)
+			return
+		case <-time.After(10 * time.Millisecond):
+			_ = info.Log("event", "handlePost for SSE connection repeated")
+		}
 	}
 }
 
