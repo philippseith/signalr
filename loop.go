@@ -36,7 +36,7 @@ func newLoop(p Party, conn Connection, protocol hubProtocol) *loop {
 		protocol:     protocol,
 		hubConn:      hubConn,
 		invokeClient: newInvokeClient(protocol, p.chanReceiveTimeout()),
-		streamer:     &streamer{conn: hubConn},
+		streamer:     &streamer{conn: hubConn, maxCancels: p.maxConcurrentStreams()},
 		streamClient: newStreamClient(protocol, p.chanReceiveTimeout(), p.streamBufferCapacity(), p.maxConcurrentStreams()),
 		info:         pInfo,
 		dbg:          pDbg,
