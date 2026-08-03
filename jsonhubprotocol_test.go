@@ -4,13 +4,13 @@ import (
 	"bytes"
 	"io"
 
-	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
 
 var _ = Describe("JSONHubProtocol", func() {
 	Context("ParseMessages", func() {
-		It("should reject a frame buffer that exceeds maximumReceiveMessageSize", func(done Done) {
+		It("should reject a frame buffer that exceeds maximumReceiveMessageSize", func() {
 			p := jsonHubProtocol{}
 			p.setDebugLogger(testLogger())
 			p.setMaxReceiveMessageSize(100)
@@ -26,7 +26,6 @@ var _ = Describe("JSONHubProtocol", func() {
 			_, err := p.ParseMessages(reader, &remainBuf)
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("exceeded maximum receive message size"))
-			close(done)
-		}, 5)
+		})
 	})
 })

@@ -17,7 +17,7 @@ import (
 
 	"github.com/coder/websocket"
 	"github.com/go-kit/log/level"
-	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
 
@@ -50,7 +50,7 @@ var _ = Describe("HTTP server", func() {
 		}
 		Context(fmt.Sprintf("%v %v", transport, transferFormat), func() {
 			Context("A correct negotiation request is sent", func() {
-				It(fmt.Sprintf("should send a correct negotiation response with support for %v with text protocol", transport), func(done Done) {
+				It(fmt.Sprintf("should send a correct negotiation response with support for %v with text protocol", transport), func() {
 					// Start server
 					server, err := NewServer(context.TODO(), SimpleHubFactory(&addHub{}), HTTPTransports(transport), testLoggerOption())
 					Expect(err).NotTo(HaveOccurred())
@@ -75,12 +75,11 @@ var _ = Describe("HTTP server", func() {
 						Expect(tf).To(ContainElement("Binary"))
 					}
 					testServer.Close()
-					close(done)
-				}, 2.0)
+				})
 			})
 
 			Context("A invalid negotiation request is sent", func() {
-				It(fmt.Sprintf("should send a correct negotiation response with support for %v with text protocol", transport), func(done Done) {
+				It(fmt.Sprintf("should send a correct negotiation response with support for %v with text protocol", transport), func() {
 					// Start server
 					server, err := NewServer(context.TODO(), SimpleHubFactory(&addHub{}), HTTPTransports(transport), testLoggerOption())
 					Expect(err).NotTo(HaveOccurred())
@@ -96,12 +95,11 @@ var _ = Describe("HTTP server", func() {
 					Expect(resp).NotTo(BeNil())
 					Expect(resp.StatusCode).ToNot(Equal(200))
 					testServer.Close()
-					close(done)
-				}, 2.0)
+				})
 			})
 
 			Context("Connection with client", func() {
-				It("should successfully handle an Invoke call", func(done Done) {
+				It("should successfully handle an Invoke call", func() {
 					logger := &nonProtocolLogger{testLogger()}
 					// Start server
 					ctx, cancel := context.WithCancel(context.Background())
@@ -154,13 +152,12 @@ var _ = Describe("HTTP server", func() {
 					Expect(s).To(Equal(hugo))
 					cancel()
 					go testServer.Close()
-					close(done)
-				}, 2.0)
+				})
 			})
 		})
 	}
 	Context("When no negotiation is send", func() {
-		It("should serve websocket requests", func(done Done) {
+		It("should serve websocket requests", func() {
 			// Start server
 			server, err := NewServer(context.TODO(), SimpleHubFactory(&addHub{}), HTTPTransports(TransportWebSockets), testLoggerOption())
 			Expect(err).NotTo(HaveOccurred())
@@ -172,11 +169,10 @@ var _ = Describe("HTTP server", func() {
 			waitForPort(port)
 			handShakeAndCallWebSocketTestServer(port, "")
 			testServer.Close()
-			close(done)
-		}, 5.0)
+		})
 	})
 	Context("SSE POST before GET is established", func() {
-		It("should return 425 Too Early after handshakeTimeout instead of spinning forever", func(done Done) {
+		It("should return 425 Too Early after handshakeTimeout instead of spinning forever", func() {
 			server, err := NewServer(context.TODO(),
 				SimpleHubFactory(&addHub{}),
 				HTTPTransports(TransportServerSentEvents),
@@ -202,14 +198,13 @@ var _ = Describe("HTTP server", func() {
 			Expect(err).NotTo(HaveOccurred())
 			defer func() { _ = resp.Body.Close() }()
 			Expect(resp.StatusCode).To(Equal(http.StatusTooEarly))
-			close(done)
-		}, 5.0)
+		})
 	})
 })
 
 var _ = Describe("HTTP client", func() {
 	Context("WithHTTPClient over TLS", func() {
-		It("should connect via WebSocket to a TLS server using the supplied *http.Client", func(done Done) {
+		It("should connect via WebSocket to a TLS server using the supplied *http.Client", func() {
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 
@@ -235,12 +230,11 @@ var _ = Describe("HTTP client", func() {
 			Expect(result.Error).NotTo(HaveOccurred())
 			Expect(result.Value).To(BeEquivalentTo(3))
 
-			close(done)
-		}, 5.0)
+		})
 	})
 
 	Context("WithHttpConnection", func() {
-		It("should fallback to SSE (this can only be tested when httpConnection is tampered with)", func(done Done) {
+		It("should fallback to SSE (this can only be tested when httpConnection is tampered with)", func() {
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 
@@ -261,8 +255,7 @@ var _ = Describe("HTTP client", func() {
 			result := <-client.Invoke("Add2", 2)
 			Expect(result.Error).NotTo(HaveOccurred())
 
-			close(done)
-		}, 2.0)
+		})
 	})
 })
 

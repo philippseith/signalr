@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
 
@@ -154,7 +154,7 @@ var _ = Describe("ClientStreaming", func() {
 
 	Describe("Simple stream invocation", func() {
 		Context("When invoked by the client with streamIds", func() {
-			It("should be invoked on the server, and receive stream items until the caller sends a completion", func(done Done) {
+			It("should be invoked on the server, and receive stream items until the caller sends a completion", func() {
 				client, receiver, cancel := makeStreamingClientAndServer()
 				ch1 := make(chan int, 1)
 				ch2 := make(chan float64, 1)
@@ -198,8 +198,7 @@ var _ = Describe("ClientStreaming", func() {
 					}
 				}
 				cancel()
-				close(done)
-			}, 2.0)
+			})
 		})
 	})
 
@@ -207,7 +206,7 @@ var _ = Describe("ClientStreaming", func() {
 		Context(" When stream item type that could not be converted to the receiving hub methods channel type is sent", func() {
 			for i := 0; i < 1; i++ {
 				j := i
-				It(fmt.Sprintf("should end the connection with an error %v", j), func(done Done) {
+				It(fmt.Sprintf("should end the connection with an error %v", j), func() {
 					client, _, cancel := makeStreamingClientAndServer()
 					ch := make(chan string, 1)
 					client.PushStreams("UploadInt", ch)
@@ -215,15 +214,14 @@ var _ = Describe("ClientStreaming", func() {
 					<-client.WaitForState(context.Background(), ClientClosed)
 					Expect(client.Err()).To(HaveOccurred())
 					cancel()
-					close(done)
-				}, 2.0)
+				})
 			}
 		})
 	})
 
 	Describe("Stream invocation to the StreamBufferCapacity", func() {
 		Context(" When hub method is called as streaming receiver but does not handle channel input", func() {
-			It("should send a completion with error, but wait at least ChanReceiveTimeout", func(done Done) {
+			It("should send a completion with error, but wait at least ChanReceiveTimeout", func() {
 				client, _, cancel := makeStreamingClientAndServer(ChanReceiveTimeout(500*time.Millisecond),
 					StreamBufferCapacity(5))
 				<-client.WaitForState(context.Background(), ClientConnected)
@@ -239,14 +237,13 @@ var _ = Describe("ClientStreaming", func() {
 				// ChanReceiveTimeout 200 ms should be over
 				Expect(time.Now().UnixNano()).To(BeNumerically(">", sent.Add(500*time.Millisecond).UnixNano()))
 				cancel()
-				close(done)
 			})
 		})
 	})
 
 	Describe("Stream invocation with wrong streamId", func() {
 		Context("When invoked by the client with streamIds", func() {
-			It("should be invoked on the server, and receive stream items until the caller sends a completion. Unknown streamIds should be ignored", func(done Done) {
+			It("should be invoked on the server, and receive stream items until the caller sends a completion. Unknown streamIds should be ignored", func() {
 				hub := &clientStreamHub{ch: make(chan string, 20)}
 				server, err := NewServer(context.TODO(), HubFactory(func() HubInterface {
 					return hub
@@ -276,14 +273,13 @@ var _ = Describe("ClientStreaming", func() {
 				// Read finished value from queue
 				<-hub.ch
 				server.cancel()
-				close(done)
 			})
 		})
 	})
 	Describe("Stream invocation with wrong count of streamid", func() {
 
 		Context("When invoked by the client with to many streamIds", func() {
-			It("should end the connection with an error", func(done Done) {
+			It("should end the connection with an error", func() {
 				server, conn := connect(&clientStreamHub{})
 				conn.ClientSend(fmt.Sprintf(`{"type":1,"invocationId":"upstream","target":"uploadstreamsmoke","arguments":[%v],"streamIds":["123","456","789"]}`, 5))
 				message := <-conn.received
@@ -291,11 +287,10 @@ var _ = Describe("ClientStreaming", func() {
 				completionMessage := message.(completionMessage)
 				Expect(completionMessage.Error).NotTo(BeNil())
 				server.cancel()
-				close(done)
-			}, 2.0)
+			})
 		})
 		Context("When invoked by the client with not enough streamIds", func() {
-			It("should end the connection with an error", func(done Done) {
+			It("should end the connection with an error", func() {
 				server, conn := connect(&clientStreamHub{})
 				conn.ClientSend(fmt.Sprintf(`{"type":1,"invocationId":"upstream","target":"uploadstreamsmoke","arguments":[%v],"streamIds":["123"]}`, 5))
 				message := <-conn.received
@@ -303,26 +298,24 @@ var _ = Describe("ClientStreaming", func() {
 				completionMessage := message.(completionMessage)
 				Expect(completionMessage.Error).NotTo(BeNil())
 				server.cancel()
-				close(done)
-			}, 2.0)
+			})
 		})
 	})
 
 	Describe("Panic in invoked stream client func", func() {
 		Context("When a func is invoked by the client and panics", func() {
-			It("should return a completion with error", func(done Done) {
+			It("should return a completion with error", func() {
 				client, _, cancel := makeStreamingClientAndServer()
 				client.PushStreams("UploadPanic", make(chan int))
 				<-client.WaitForState(context.Background(), ClientClosed)
 				Expect(client.Err()).To(HaveOccurred())
 				cancel()
-				close(done)
 			})
 		})
 	})
 	Describe("Stream client with all numbertypes of channels", func() {
 		Context("When a func is invoked by the client with all number types of channels", func() {
-			It("should receive values on all of these types", func(done Done) {
+			It("should receive values on all of these types", func() {
 				u1 := make(chan int8, 1)
 				u2 := make(chan int16, 1)
 				u3 := make(chan int32, 1)
@@ -351,14 +344,13 @@ var _ = Describe("ClientStreaming", func() {
 				u12 <- "Some String"
 				Expect(<-receiver.ch).To(Equal("UPT finished"))
 				cancel()
-				close(done)
 			})
 		})
 	})
 
 	Describe("Stream client with array channel", func() {
 		Context("When a func with an array channel is invoked by the client and stream items are send", func() {
-			It("should receive values and end after that", func(done Done) {
+			It("should receive values and end after that", func() {
 				client, receiver, cancel := makeStreamingClientAndServer()
 				ch := make(chan []int)
 				client.PushStreams("UploadArray", ch)
@@ -367,14 +359,13 @@ var _ = Describe("ClientStreaming", func() {
 				close(ch)
 				Expect(<-receiver.ch).To(Equal("UploadArray finished"))
 				cancel()
-				close(done)
 			})
 		})
 	})
 
 	Describe("Client sending invalid streamitems", func() {
 		Context("When an invalid streamitem message with missing id and item is sent", func() {
-			It("should end the connection with an error", func(done Done) {
+			It("should end the connection with an error", func() {
 				hub := &clientStreamHub{ch: make(chan string, 20)}
 				server, err := NewServer(context.TODO(), HubFactory(func() HubInterface {
 					return hub
@@ -391,11 +382,10 @@ var _ = Describe("ClientStreaming", func() {
 				Expect(message).To(BeAssignableToTypeOf(closeMessage{}))
 				Expect(message.(closeMessage).Error).NotTo(BeNil())
 				server.cancel()
-				close(done)
-			}, 2.0)
+			})
 		})
 		Context("When an invalid streamitem message with missing item is received", func() {
-			It("should end the connection with an error", func(done Done) {
+			It("should end the connection with an error", func() {
 				hub := &clientStreamHub{ch: make(chan string, 20)}
 				server, err := NewServer(context.TODO(), HubFactory(func() HubInterface {
 					return hub
@@ -412,11 +402,10 @@ var _ = Describe("ClientStreaming", func() {
 				Expect(message).To(BeAssignableToTypeOf(closeMessage{}))
 				Expect(message.(closeMessage).Error).NotTo(BeNil())
 				server.cancel()
-				close(done)
-			}, 2.0)
+			})
 		})
 		Context("When an invalid streamitem message with wrong itemtype is received", func() {
-			It("should end the connection with an error", func(done Done) {
+			It("should end the connection with an error", func() {
 				hub := &clientStreamHub{ch: make(chan string, 20)}
 				server, err := NewServer(context.TODO(), HubFactory(func() HubInterface {
 					return hub
@@ -433,11 +422,10 @@ var _ = Describe("ClientStreaming", func() {
 				Expect(message).To(BeAssignableToTypeOf(closeMessage{}))
 				Expect(message.(closeMessage).Error).NotTo(BeNil())
 				server.cancel()
-				close(done)
-			}, 2.0)
+			})
 		})
 		Context("When an invalid stream item message with invalid invocation id is sent", func() {
-			It("should end the connection with an error", func(done Done) {
+			It("should end the connection with an error", func() {
 				hub := &clientStreamHub{ch: make(chan string, 20)}
 				server, err := NewServer(context.TODO(), HubFactory(func() HubInterface {
 					return hub
@@ -454,14 +442,13 @@ var _ = Describe("ClientStreaming", func() {
 				Expect(message).To(BeAssignableToTypeOf(closeMessage{}))
 				Expect(message.(closeMessage).Error).NotTo(BeNil())
 				server.cancel()
-				close(done)
-			}, 2.0)
+			})
 		})
 	})
 
 	Describe("Client sending invalid completion", func() {
 		Context("When an invalid completion message with missing id is sent", func() {
-			It("should end the connection with an error", func(done Done) {
+			It("should end the connection with an error", func() {
 				hub := &clientStreamHub{ch: make(chan string, 20)}
 				server, err := NewServer(context.TODO(), HubFactory(func() HubInterface {
 					return hub
@@ -478,12 +465,11 @@ var _ = Describe("ClientStreaming", func() {
 				Expect(message).To(BeAssignableToTypeOf(closeMessage{}))
 				Expect(message.(closeMessage).Error).NotTo(BeNil())
 				server.cancel()
-				close(done)
-			}, 2.0)
+			})
 		})
 
 		Context("When an invalid completion message with unknown id is sent", func() {
-			It("should end the connection with an error", func(done Done) {
+			It("should end the connection with an error", func() {
 				hub := &clientStreamHub{ch: make(chan string, 20)}
 				server, err := NewServer(context.TODO(), HubFactory(func() HubInterface {
 					return hub
@@ -500,12 +486,11 @@ var _ = Describe("ClientStreaming", func() {
 				Expect(message).To(BeAssignableToTypeOf(closeMessage{}))
 				Expect(message.(closeMessage).Error).NotTo(BeNil())
 				server.cancel()
-				close(done)
-			}, 2.0)
+			})
 		})
 
 		Context("When an completion message with an result is sent before any stream item was received", func() {
-			It("should take the result as stream item and consider the streaming as finished", func(done Done) {
+			It("should take the result as stream item and consider the streaming as finished", func() {
 				hub := &clientStreamHub{ch: make(chan string, 20)}
 				server, err := NewServer(context.TODO(), HubFactory(func() HubInterface {
 					return hub
@@ -518,12 +503,11 @@ var _ = Describe("ClientStreaming", func() {
 				Expect(<-hub.ch).To(Equal("received [1 2]"))
 				Expect(<-hub.ch).To(Equal("UploadArray finished"))
 				server.cancel()
-				close(done)
 			})
 		})
 
 		Context("When an invalid completion message is sent", func() {
-			It("should close the connection with an error", func(done Done) {
+			It("should close the connection with an error", func() {
 				hub := &clientStreamHub{ch: make(chan string, 20)}
 				server, err := NewServer(context.TODO(), HubFactory(func() HubInterface {
 					return hub
@@ -537,12 +521,11 @@ var _ = Describe("ClientStreaming", func() {
 				Expect(message).To(BeAssignableToTypeOf(closeMessage{}))
 				Expect(message.(closeMessage).Error).NotTo(BeNil())
 				server.cancel()
-				close(done)
-			}, 2.0)
+			})
 		})
 
 		Context("When an completion message with an result is sent after a stream item was received", func() {
-			It("should end the connection with an error", func(done Done) {
+			It("should end the connection with an error", func() {
 				hub := &clientStreamHub{ch: make(chan string, 20)}
 				server, err := NewServer(context.TODO(), HubFactory(func() HubInterface {
 					return hub
@@ -563,12 +546,11 @@ var _ = Describe("ClientStreaming", func() {
 				Expect(message).To(BeAssignableToTypeOf(closeMessage{}))
 				Expect(message.(closeMessage).Error).NotTo(BeNil())
 				server.cancel()
-				close(done)
 			})
 		})
 
 		Context("When the stream item type could not converted to the hub methods receive channel type", func() {
-			It("should end the connection with an error", func(done Done) {
+			It("should end the connection with an error", func() {
 				hub := &clientStreamHub{ch: make(chan string, 20)}
 				server, err := NewServer(context.TODO(), HubFactory(func() HubInterface {
 					return hub
@@ -585,12 +567,11 @@ var _ = Describe("ClientStreaming", func() {
 				Expect(message).To(BeAssignableToTypeOf(closeMessage{}))
 				Expect(message.(closeMessage).Error).NotTo(BeNil())
 				server.cancel()
-				close(done)
 			})
 		})
 
 		Context("When the stream item array type could not converted to the hub methods receive channel array type", func() {
-			It("should end the connection with an error", func(done Done) {
+			It("should end the connection with an error", func() {
 				hub := &clientStreamHub{ch: make(chan string, 20)}
 				server, err := NewServer(context.TODO(), HubFactory(func() HubInterface {
 					return hub
@@ -607,7 +588,6 @@ var _ = Describe("ClientStreaming", func() {
 				Expect(message).To(BeAssignableToTypeOf(closeMessage{}))
 				Expect(message.(closeMessage).Error).NotTo(BeNil())
 				server.cancel()
-				close(done)
 			})
 		})
 	})

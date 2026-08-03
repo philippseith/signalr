@@ -3,7 +3,7 @@ package signalr
 import (
 	"time"
 
-	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
 
@@ -62,16 +62,14 @@ var _ = Describe("StreamInvocation", func() {
 	Describe("Simple stream invocation", func() {
 		var server Server
 		var conn *testingConnection
-		BeforeEach(func(done Done) {
+		BeforeEach(func() {
 			server, conn = connect(&streamHub{})
-			close(done)
 		})
-		AfterEach(func(done Done) {
+		AfterEach(func() {
 			server.cancel()
-			close(done)
 		})
 		Context("When invoked by the client", func() {
-			It("should be invoked on the server, return stream items and a final completion without result", func(done Done) {
+			It("should be invoked on the server, return stream items and a final completion without result", func() {
 				p := &jsonHubProtocol{dbg: testLogger()}
 				conn.ClientSend(`{"type":4,"invocationId": "zzz","target":"simplestream"}`)
 				Expect(<-streamInvocationQueue).To(Equal("SimpleStream()"))
@@ -88,7 +86,6 @@ var _ = Describe("StreamInvocation", func() {
 				Expect(recv.InvocationID).To(Equal("zzz"))
 				Expect(recv.Result).To(BeNil())
 				Expect(recv.Error).To(Equal(""))
-				close(done)
 			})
 		})
 	})
@@ -96,16 +93,14 @@ var _ = Describe("StreamInvocation", func() {
 	Describe("Slice stream invocation", func() {
 		var server Server
 		var conn *testingConnection
-		BeforeEach(func(done Done) {
+		BeforeEach(func() {
 			server, conn = connect(&streamHub{})
-			close(done)
 		})
-		AfterEach(func(done Done) {
+		AfterEach(func() {
 			server.cancel()
-			close(done)
 		})
 		Context("When invoked by the client", func() {
-			It("should be invoked on the server, return stream items and a final completion without result", func(done Done) {
+			It("should be invoked on the server, return stream items and a final completion without result", func() {
 				protocol := jsonHubProtocol{dbg: testLogger()}
 				conn.ClientSend(`{"type":4,"invocationId": "slice","target":"slicestream"}`)
 				Expect(<-streamInvocationQueue).To(Equal("SliceStream()"))
@@ -125,7 +120,6 @@ var _ = Describe("StreamInvocation", func() {
 				Expect(recv.InvocationID).To(Equal("slice"))
 				Expect(recv.Result).To(BeNil())
 				Expect(recv.Error).To(Equal(""))
-				close(done)
 			})
 		})
 	})
@@ -133,16 +127,14 @@ var _ = Describe("StreamInvocation", func() {
 	Describe("Stop simple stream invocation", func() {
 		var server Server
 		var conn *testingConnection
-		BeforeEach(func(done Done) {
+		BeforeEach(func() {
 			server, conn = connect(&streamHub{})
-			close(done)
 		})
-		AfterEach(func(done Done) {
+		AfterEach(func() {
 			server.cancel()
-			close(done)
 		})
 		Context("When invoked by the client and stop after one result", func() {
-			It("should be invoked on the server, return stream one item and a final completion without result", func(done Done) {
+			It("should be invoked on the server, return stream one item and a final completion without result", func() {
 				protocol := jsonHubProtocol{dbg: testLogger()}
 				conn.ClientSend(`{"type":4,"invocationId": "xxx","target":"endlessstream"}`)
 				Expect(<-streamInvocationQueue).To(Equal("EndlessStream()"))
@@ -168,7 +160,6 @@ var _ = Describe("StreamInvocation", func() {
 						break loop
 					}
 				}
-				close(done)
 			})
 		})
 	})
@@ -176,16 +167,14 @@ var _ = Describe("StreamInvocation", func() {
 	Describe("Invalid CancelInvocation", func() {
 		var server Server
 		var conn *testingConnection
-		BeforeEach(func(done Done) {
+		BeforeEach(func() {
 			server, conn = connect(&streamHub{})
-			close(done)
 		})
-		AfterEach(func(done Done) {
+		AfterEach(func() {
 			server.cancel()
-			close(done)
 		})
 		Context("When invoked by the client and receiving an invalid CancelInvocation", func() {
-			It("should close the connection with an error", func(done Done) {
+			It("should close the connection with an error", func() {
 				protocol := &jsonHubProtocol{dbg: testLogger()}
 				conn.ClientSend(`{"type":4,"invocationId": "xyz","target":"endlessstream"}`)
 				Expect(<-streamInvocationQueue).To(Equal("EndlessStream()"))
@@ -207,7 +196,6 @@ var _ = Describe("StreamInvocation", func() {
 					default:
 					}
 				}
-				close(done)
 			})
 		})
 	})
@@ -215,16 +203,14 @@ var _ = Describe("StreamInvocation", func() {
 	Describe("Stream invocation of method with no stream result", func() {
 		var server Server
 		var conn *testingConnection
-		BeforeEach(func(done Done) {
+		BeforeEach(func() {
 			server, conn = connect(&streamHub{})
-			close(done)
 		})
-		AfterEach(func(done Done) {
+		AfterEach(func() {
 			server.cancel()
-			close(done)
 		})
 		Context("When invoked by the client", func() {
-			It("should be invoked on the server, return one stream item with the \"no stream\" result and a final completion without result", func(done Done) {
+			It("should be invoked on the server, return one stream item with the \"no stream\" result and a final completion without result", func() {
 				protocol := &jsonHubProtocol{dbg: testLogger()}
 				conn.ClientSend(`{"type":4,"invocationId": "yyy","target":"simpleint"}`)
 				Expect(<-streamInvocationQueue).To(Equal("SimpleInt()"))
@@ -239,7 +225,6 @@ var _ = Describe("StreamInvocation", func() {
 				Expect(cRecv.InvocationID).To(Equal("yyy"))
 				Expect(cRecv.Result).To(BeNil())
 				Expect(cRecv.Error).To(Equal(""))
-				close(done)
 			})
 		})
 	})
@@ -247,16 +232,14 @@ var _ = Describe("StreamInvocation", func() {
 	Describe("invalid messages", func() {
 		var server Server
 		var conn *testingConnection
-		BeforeEach(func(done Done) {
+		BeforeEach(func() {
 			server, conn = connect(&streamHub{})
-			close(done)
 		})
-		AfterEach(func(done Done) {
+		AfterEach(func() {
 			server.cancel()
-			close(done)
 		})
 		Context("When an invalid stream invocation message is sent", func() {
-			It("should return a completion with error", func(done Done) {
+			It("should return a completion with error", func() {
 				conn.ClientSend(`{"type":4}`)
 				select {
 				case message := <-conn.received:
@@ -265,7 +248,6 @@ var _ = Describe("StreamInvocation", func() {
 					Expect(completionMessage.Error).NotTo(BeNil())
 				case <-time.After(100 * time.Millisecond):
 				}
-				close(done)
 			})
 		})
 	})

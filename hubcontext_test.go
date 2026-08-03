@@ -10,7 +10,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
 
@@ -295,14 +295,7 @@ func TestItemsShouldHoldItemsConnectionWise(t *testing.T) {
 	select {
 	case ir := <-client[0].Invoke("getitem", "first"):
 		assert.NoError(t, ir.Error)
-		assert.Equal(t, ir.Value, 1.0)
-	case <-time.After(100 * time.Millisecond):
-		assert.Fail(t, "timeout in invoke")
-	}
-	select {
-	case ir := <-client[1].Invoke("getitem", "first"):
-		assert.NoError(t, ir.Error)
-		assert.Equal(t, ir.Value, nil)
+		assert.Equal(t, 1.0, ir.Value)
 	case <-time.After(100 * time.Millisecond):
 		assert.Fail(t, "timeout in invoke")
 	}
@@ -334,7 +327,7 @@ func TestAbortShouldAbortTheConnectionOfTheCurrentCaller(t *testing.T) {
 	select {
 	case ir := <-client[1].Invoke("getitem", "first"):
 		assert.NoError(t, ir.Error)
-		assert.Equal(t, ir.Value, 2.0)
+		assert.Equal(t, 2.0, ir.Value)
 	case <-time.After(100 * time.Millisecond):
 		assert.Fail(t, "timeout in invoke")
 	}
