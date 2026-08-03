@@ -339,3 +339,54 @@ func TestAbortShouldAbortTheConnectionOfTheCurrentCaller(t *testing.T) {
 		assert.Fail(t, "timeout in invoke")
 	}
 }
+
+// TestGroupMapConcurrentAccess verifies no data race when AddToGroup, RemoveFromGroup
+// and InvokeGroup run concurrently on the same group — detectable by go test -race.
+func TestGroupMapConcurrentAccess(t *testing.T) {
+	mgr := newLifeTimeManager(testLogger())
+
+	const n = 50
+	conns := make([]*mockHubConn, n)
+	for i := range conns {
+		conns[i] = &mockHubConn{id: fmt.Sprintf("conn-%d", i)}
+		mgr.OnConnected(conns[i])
+	}
+
+	var wg sync.WaitGroup
+	for i := range conns {
+		id := conns[i].ConnectionID()
+		wg.Add(3)
+		go func() {
+			defer wg.Done()
+			mgr.AddToGroup("g", id)
+		}()
+		go func() {
+			defer wg.Done()
+			mgr.RemoveFromGroup("g", id)
+		}()
+		go func() {
+			defer wg.Done()
+			mgr.InvokeGroup("g", "noop", nil)
+		}()
+	}
+	wg.Wait()
+}
+
+// mockHubConn is a no-op HubConnection used for concurrency tests.
+type mockHubConn struct{ id string }
+
+func (m *mockHubConn) ConnectionID() string                                     { return m.id }
+func (m *mockHubConn) Receive() <-chan receiveResult                            { return nil }
+func (m *mockHubConn) SendInvocation(string, string, []interface{}) error       { return nil }
+func (m *mockHubConn) SendStreamInvocation(string, string, []interface{}) error { return nil }
+func (m *mockHubConn) SendInvocationWithStreamIds(string, string, []interface{}, []string) error {
+	return nil
+}
+func (m *mockHubConn) StreamItem(string, interface{}) error         { return nil }
+func (m *mockHubConn) Completion(string, interface{}, string) error { return nil }
+func (m *mockHubConn) Close(string, bool) error                     { return nil }
+func (m *mockHubConn) Ping() error                                  { return nil }
+func (m *mockHubConn) LastWriteStamp() time.Time                    { return time.Time{} }
+func (m *mockHubConn) Items() *sync.Map                             { return &sync.Map{} }
+func (m *mockHubConn) Context() context.Context                     { return context.Background() }
+func (m *mockHubConn) Abort()                                       {}
