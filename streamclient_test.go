@@ -175,26 +175,24 @@ var _ = Describe("ClientStreaming", func() {
 				}()
 				u1 := 0
 				u2 := 5
-			loop:
-				for {
-					select {
-					case r := <-receiver.ch:
-						switch {
-						case strings.HasPrefix(r, "u1"):
-							Expect(r).To(Equal(fmt.Sprintf("u1: %v", u1)))
-							u1++
-							if u1 == 10 {
-								close(ch1)
-							}
-						case strings.HasPrefix(r, "u2"):
-							Expect(r).To(Equal(fmt.Sprintf("u2: %v", float64(u2)*7.1)))
-							u2++
-							if u2 == 10 {
-								close(ch2)
-							}
-						case r == "Finished":
-							break loop
+				for r := range receiver.ch {
+					switch {
+					case strings.HasPrefix(r, "u1"):
+						Expect(r).To(Equal(fmt.Sprintf("u1: %v", u1)))
+						u1++
+						if u1 == 10 {
+							close(ch1)
 						}
+					case strings.HasPrefix(r, "u2"):
+						Expect(r).To(Equal(fmt.Sprintf("u2: %v", float64(u2)*7.1)))
+						u2++
+						if u2 == 10 {
+							close(ch2)
+						}
+					case r == "Finished":
+						cancel()
+						close(done)
+						return
 					}
 				}
 				cancel()

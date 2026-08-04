@@ -87,6 +87,9 @@ func makeTCPServerAndClients(ctx context.Context, clientCount int) (Server, []Cl
 	}
 	for i := 0; i < clientCount; i++ {
 		listener, err := net.ListenTCP("tcp", addr)
+		if err != nil {
+			return nil, nil, nil, nil, nil, err
+		}
 		go func(i int) {
 			for {
 				tcpConn, _ := listener.Accept()
@@ -228,17 +231,19 @@ func TestGroupShouldInvokeOnlyTheClientsInTheGroup(t *testing.T) {
 	case <-time.After(100 * time.Millisecond):
 		assert.Fail(t, "timeout in invoke")
 	}
-	gotCalled := 0
-	select {
-	case <-receiver[0].ch:
-		assert.Fail(t, "client 1 received message for client 2, 3")
-	case <-receiver[1].ch:
-		gotCalled++
-	case <-receiver[2].ch:
-		gotCalled++
-	case <-time.After(100 * time.Millisecond):
-		if gotCalled < 2 {
+	received := 0
+	for received < 2 {
+		select {
+		case <-receiver[0].ch:
+			assert.Fail(t, "client 1 received message for client 2, 3")
+			return
+		case <-receiver[1].ch:
+			received++
+		case <-receiver[2].ch:
+			received++
+		case <-time.After(100 * time.Millisecond):
 			assert.Fail(t, "timeout without client 2 and 3 got called")
+			return
 		}
 	}
 }
@@ -266,18 +271,15 @@ func TestRemoveClientsShouldRemoveClientsFromTheGroup(t *testing.T) {
 	case <-time.After(100 * time.Millisecond):
 		assert.Fail(t, "timeout in invoke")
 	}
-	gotCalled := false
 	select {
 	case <-receiver[0].ch:
 		assert.Fail(t, "client 1 received message for client 2")
 	case <-receiver[1].ch:
-		gotCalled = true
+		// expected: client 2 receives the group invocation
 	case <-receiver[2].ch:
 		assert.Fail(t, "client 3 received message for client 2")
 	case <-time.After(100 * time.Millisecond):
-		if !gotCalled {
-			assert.Fail(t, "timeout without client 3 got called")
-		}
+		assert.Fail(t, "timeout without client 2 got called")
 	}
 }
 
@@ -429,7 +431,7 @@ type invokingHubConn struct {
 	called chan struct{}
 }
 
-func (m *invokingHubConn) ConnectionID() string { return m.mockHubConn.id }
+func (m *invokingHubConn) ConnectionID() string { return m.id }
 func (m *invokingHubConn) SendInvocation(string, string, []interface{}) error {
 	select {
 	case m.called <- struct{}{}:

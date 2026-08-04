@@ -81,7 +81,7 @@ const (
 //
 //	Invoke(method string, arguments ...interface{}) <-chan InvokeResult
 //
-// Invoke invokes a method on the server and returns a channel wich will return the InvokeResult.
+// Invoke invokes a method on the server and returns a channel which will return the InvokeResult.
 // When failing, InvokeResult.Error contains the client side error.
 //
 //	Send(method string, arguments ...interface{}) <-chan error
