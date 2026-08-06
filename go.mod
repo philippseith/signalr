@@ -10,7 +10,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/onsi/ginkgo v1.16.5
 	github.com/onsi/gomega v1.42.1
-	github.com/quic-go/webtransport-go v0.11.0
+	github.com/quic-go/webtransport-go v0.12.0
 	github.com/stretchr/testify v1.11.1
 	github.com/teivah/onecontext v1.3.0
 	github.com/vmihailenco/msgpack/v5 v5.4.1
