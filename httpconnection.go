@@ -9,8 +9,8 @@ import (
 	"net/url"
 	"path"
 
-	"github.com/quic-go/webtransport-go"
 	"github.com/coder/websocket"
+	"github.com/quic-go/webtransport-go"
 )
 
 // Doer is the *http.Client interface
@@ -144,8 +144,8 @@ func NewHTTPConnection(ctx context.Context, address string, options ...func(*htt
 	var conn Connection
 	switch {
 	case httpConn.hasTransport(TransportWebTransports) && negotiateResponse.hasTransport(TransportWebTransports):
-		var d webtransport.Dialer
-		_, wtConn, err := d.Dial(ctx, reqURL.String(), req.Header)
+		var t webtransport.Transport
+		_, wtConn, err := t.Dial(ctx, reqURL.String(), req.Header)
 		if err != nil {
 			return nil, err
 		}
