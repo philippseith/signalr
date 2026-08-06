@@ -9,7 +9,7 @@ import (
 
 	"github.com/go-kit/log"
 	"github.com/google/uuid"
-	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
 
@@ -41,7 +41,7 @@ var _ = Describe("Server options", func() {
 
 	Describe("UseHub option", func() {
 		Context("When the UseHub option is used", func() {
-			It("should use the same hub instance on all invocations", func(done Done) {
+			It("should use the same hub instance on all invocations", func() {
 				server, err := NewServer(context.TODO(), UseHub(&singleHub{}))
 				Expect(server).NotTo(BeNil())
 				Expect(err).To(BeNil())
@@ -83,21 +83,19 @@ var _ = Describe("Server options", func() {
 				case <-time.After(1000 * time.Millisecond):
 					Fail("timed out")
 				}
-				close(done)
-			}, 3.0)
+			})
 		})
 		Context("When UseHub is used on a client", func() {
-			It("should return an error", func(done Done) {
+			It("should return an error", func() {
 				_, err := NewClient(context.TODO(), WithConnection(newTestingConnection()), testLoggerOption(), UseHub(&singleHub{}))
 				Expect(err).To(HaveOccurred())
-				close(done)
 			})
 		})
 	})
 
 	Describe("SimpleHubFactory option", func() {
 		Context("When the SimpleHubFactory option is used", func() {
-			It("should call the hub factory on each hub method invocation", func(done Done) {
+			It("should call the hub factory on each hub method invocation", func() {
 				server, err := NewServer(context.TODO(), SimpleHubFactory(&singleHub{}), testLoggerOption())
 				Expect(server).NotTo(BeNil())
 				Expect(err).To(BeNil())
@@ -133,21 +131,19 @@ var _ = Describe("Server options", func() {
 				case <-time.After(1000 * time.Millisecond):
 					Fail("timed out")
 				}
-				close(done)
-			}, 2.0)
+			})
 		})
 		Context("When SimpleHubFactory is used on a client", func() {
-			It("should return an error", func(done Done) {
+			It("should return an error", func() {
 				_, err := NewClient(context.TODO(), WithConnection(newTestingConnection()), testLoggerOption(), SimpleHubFactory(&singleHub{}))
 				Expect(err).To(HaveOccurred())
-				close(done)
 			})
 		})
 	})
 
 	Describe("Logger option", func() {
 		Context("When the Logger option with debug false is used", func() {
-			It("calling a method correctly should log no events", func(done Done) {
+			It("calling a method correctly should log no events", func() {
 				cw := newChannelWriter()
 				server, err := NewServer(context.TODO(), UseHub(&invocationHub{}), Logger(log.NewLogfmtLogger(cw), false))
 				Expect(server).NotTo(BeNil())
@@ -163,11 +159,10 @@ var _ = Describe("Server options", func() {
 				case <-time.After(1000 * time.Millisecond):
 					break
 				}
-				close(done)
-			}, 2.0)
+			})
 		})
 		Context("When the Logger option with debug true is used", func() {
-			It("calling a method correctly should log events", func(done Done) {
+			It("calling a method correctly should log events", func() {
 				cw := newChannelWriter()
 				server, err := NewServer(context.TODO(), UseHub(&invocationHub{}), Logger(log.NewLogfmtLogger(cw), true))
 				Expect(server).NotTo(BeNil())
@@ -183,11 +178,10 @@ var _ = Describe("Server options", func() {
 				case <-time.After(1000 * time.Millisecond):
 					Fail("timed out")
 				}
-				close(done)
-			}, 2.0)
+			})
 		})
 		Context("When the Logger option with debug false is used", func() {
-			It("calling a method incorrectly should log events", func(done Done) {
+			It("calling a method incorrectly should log events", func() {
 				cw := newChannelWriter()
 				server, err := NewServer(context.TODO(), UseHub(&invocationHub{}), Logger(log.NewLogfmtLogger(cw), false))
 				Expect(server).NotTo(BeNil())
@@ -202,28 +196,25 @@ var _ = Describe("Server options", func() {
 				case <-time.After(1000 * time.Millisecond):
 					Fail("timed out")
 				}
-				close(done)
-			}, 2.0)
+			})
 		})
 		Context("When no option which sets the hub type is used, NewServer", func() {
-			It("should return an error", func(done Done) {
+			It("should return an error", func() {
 				_, err := NewServer(context.TODO(), testLoggerOption())
 				Expect(err).NotTo(BeNil())
-				close(done)
 			})
 		})
 		Context("When an option returns an error, NewServer", func() {
-			It("should return an error", func(done Done) {
+			It("should return an error", func() {
 				_, err := NewServer(context.TODO(), func(Party) error { return errors.New("bad option") })
 				Expect(err).NotTo(BeNil())
-				close(done)
 			})
 		})
 	})
 
 	Describe("EnableDetailedErrors option", func() {
 		Context("When the EnableDetailedErrors option false is used, calling a method which panics", func() {
-			It("should return a completion, which contains only the panic", func(done Done) {
+			It("should return a completion, which contains only the panic", func() {
 				server, err := NewServer(context.TODO(), UseHub(&invocationHub{}), testLoggerOption())
 				Expect(server).NotTo(BeNil())
 				Expect(err).To(BeNil())
@@ -240,11 +231,10 @@ var _ = Describe("Server options", func() {
 				case <-time.After(100 * time.Millisecond):
 					Fail("timed out")
 				}
-				close(done)
-			}, 1.0)
+			})
 		})
 		Context("When the EnableDetailedErrors option true is used, calling a method which panics", func() {
-			It("should return a completion, which contains only the panic", func(done Done) {
+			It("should return a completion, which contains only the panic", func() {
 				server, err := NewServer(context.TODO(), UseHub(&invocationHub{}), EnableDetailedErrors(true), testLoggerOption())
 				Expect(server).NotTo(BeNil())
 				Expect(err).To(BeNil())
@@ -261,14 +251,13 @@ var _ = Describe("Server options", func() {
 				case <-time.After(100 * time.Millisecond):
 					Fail("timed out")
 				}
-				close(done)
-			}, 1.0)
+			})
 		})
 	})
 
 	Describe("TimeoutInterval option", func() {
 		Context("When the TimeoutInterval has expired without any client message", func() {
-			It("the connection should be closed", func(done Done) {
+			It("the connection should be closed", func() {
 				server, err := NewServer(context.TODO(), UseHub(&invocationHub{}), TimeoutInterval(100*time.Millisecond), testLoggerOption())
 				Expect(server).NotTo(BeNil())
 				Expect(err).To(BeNil())
@@ -287,14 +276,13 @@ var _ = Describe("Server options", func() {
 				case <-invocationQueue:
 					Fail("hub method invoked")
 				}
-				close(done)
-			}, 2.0)
+			})
 		})
 	})
 
 	Describe("KeepAliveInterval option", func() {
 		Context("When the KeepAliveInterval has expired without any server message", func() {
-			It("a ping should have been sent", func(done Done) {
+			It("a ping should have been sent", func() {
 				server, err := NewServer(context.TODO(), UseHub(&invocationHub{}), KeepAliveInterval(200*time.Millisecond), testLoggerOption())
 				Expect(server).NotTo(BeNil())
 				Expect(err).To(BeNil())
@@ -320,64 +308,56 @@ var _ = Describe("Server options", func() {
 					}
 				}
 				server.cancel()
-				close(done)
-			}, 2.0)
+			})
 		})
 	})
 
 	Describe("StreamBufferCapacity option", func() {
 		Context("When the StreamBufferCapacity is 0", func() {
-			It("should return an error", func(done Done) {
+			It("should return an error", func() {
 				_, err := NewServer(context.TODO(), UseHub(&singleHub{}), StreamBufferCapacity(0), testLoggerOption())
 				Expect(err).NotTo(BeNil())
-				close(done)
 			})
 		})
 	})
 
 	Describe("MaximumReceiveMessageSize option", func() {
 		Context("When the MaximumReceiveMessageSize is 0", func() {
-			It("should return an error", func(done Done) {
+			It("should return an error", func() {
 				_, err := NewServer(context.TODO(), UseHub(&singleHub{}), MaximumReceiveMessageSize(0), testLoggerOption())
 				Expect(err).NotTo(BeNil())
-				close(done)
 			})
 		})
 	})
 	Describe("HTTPTransports option", func() {
 		Context("When HTTPTransports is one of WebSockets, ServerSentEvents or both", func() {
-			It("should set these transports", func(done Done) {
+			It("should set these transports", func() {
 				s, err := NewServer(context.TODO(), UseHub(&singleHub{}), HTTPTransports(TransportWebSockets), testLoggerOption())
 				Expect(err).NotTo(HaveOccurred())
 				Expect(s.availableTransports()).To(ContainElement(TransportWebSockets))
-				close(done)
 			})
-			It("should set these transports", func(done Done) {
+			It("should set these transports", func() {
 				s, err := NewServer(context.TODO(), UseHub(&singleHub{}), HTTPTransports(TransportServerSentEvents), testLoggerOption())
 				Expect(err).NotTo(HaveOccurred())
 				Expect(s.availableTransports()).To(ContainElement(TransportServerSentEvents))
-				close(done)
 			})
-			It("should set these transports", func(done Done) {
+			It("should set these transports", func() {
 				s, err := NewServer(context.TODO(), UseHub(&singleHub{}), HTTPTransports(TransportServerSentEvents, TransportWebSockets), testLoggerOption())
 				Expect(err).NotTo(HaveOccurred())
 				Expect(s.availableTransports()).To(ContainElement(TransportWebSockets))
 				Expect(s.availableTransports()).To(ContainElement(TransportServerSentEvents))
-				close(done)
 			})
 		})
 		Context("When HTTPTransports is none of WebSockets, ServerSentEvents", func() {
-			It("should return an error", func(done Done) {
+			It("should return an error", func() {
 				_, err := NewServer(context.TODO(), UseHub(&singleHub{}), HTTPTransports("WebTransport"), testLoggerOption())
 				Expect(err).To(HaveOccurred())
-				close(done)
 			})
 		})
 		Context("When HTTPTransports is used on a client", func() {
-			It("should return an error", func(done Done) {
+			It("should return an error", func() {
 				_, err := NewClient(context.TODO(), WithConnection(newTestingConnection()), HTTPTransports(TransportServerSentEvents), testLoggerOption())
 				Expect(err).To(HaveOccurred())
-				close(done)
 			})
 		})
 

@@ -4,7 +4,7 @@ import (
 	"context"
 	"github.com/cenkalti/backoff/v4"
 
-	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
 
@@ -15,7 +15,7 @@ var _ = Describe("Client options", func() {
 			It("NewClient should fail", func() {
 				_, err := NewClient(context.TODO())
 				Expect(err).To(HaveOccurred())
-			}, 3.0)
+			})
 		})
 		Context("both are given", func() {
 			It("NewClient should fail", func() {
@@ -24,14 +24,14 @@ var _ = Describe("Client options", func() {
 					return conn, nil
 				}))
 				Expect(err).To(HaveOccurred())
-			}, 3.0)
+			})
 		})
 		Context("only WithConnection is given", func() {
 			It("NewClient should not fail", func() {
 				conn := NewNetConnection(context.TODO(), nil)
 				_, err := NewClient(context.TODO(), WithConnection(conn))
 				Expect(err).NotTo(HaveOccurred())
-			}, 3.0)
+			})
 		})
 		Context("only WithConnector is given", func() {
 			It("NewClient should not fail", func() {
@@ -40,7 +40,7 @@ var _ = Describe("Client options", func() {
 					return conn, nil
 				}))
 				Expect(err).NotTo(HaveOccurred())
-			}, 3.0)
+			})
 		})
 		Context("only WithBackoff is given", func() {
 			It("NewClient should not fail", func() {
@@ -49,7 +49,7 @@ var _ = Describe("Client options", func() {
 					return backoff.NewExponentialBackOff()
 				}))
 				Expect(err).NotTo(HaveOccurred())
-			}, 3.0)
+			})
 		})
 	})
 

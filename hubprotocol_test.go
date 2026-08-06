@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/dave/jennifer/jen"
-	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
 
@@ -82,7 +82,7 @@ var _ = Describe("Protocol", func() {
 					{Type: 2, InvocationID: "9"},
 				} {
 					want := w
-					It(fmt.Sprintf("should be equal after roundtrip of %#v", want), func(done Done) {
+					It(fmt.Sprintf("should be equal after roundtrip of %#v", want), func() {
 						buf := bytes.Buffer{}
 						Expect(protocol.WriteMessage(want, &buf)).NotTo(HaveOccurred())
 						var remainBuf bytes.Buffer
@@ -104,7 +104,6 @@ var _ = Describe("Protocol", func() {
 							Expect(protocol.UnmarshalArgument(gotMsg.Item, value.Interface())).NotTo(HaveOccurred())
 							Expect(reflect.Indirect(value).Interface()).To(Equal(want.Item))
 						}
-						close(done)
 					})
 				}
 			})
@@ -121,7 +120,7 @@ var _ = Describe("Protocol", func() {
 					{Type: 3, InvocationID: "9", Error: "Failed"},
 				} {
 					want := w
-					It(fmt.Sprintf("should be equal after roundtrip of %#v", want), func(done Done) {
+					It(fmt.Sprintf("should be equal after roundtrip of %#v", want), func() {
 						buf := bytes.Buffer{}
 						Expect(protocol.WriteMessage(want, &buf)).NotTo(HaveOccurred())
 						var remainBuf bytes.Buffer
@@ -146,12 +145,11 @@ var _ = Describe("Protocol", func() {
 							Expect(reflect.Indirect(value).Interface()).To(Equal(want.Result))
 							Expect(gotMsg.Error).To(Equal(want.Error))
 						}
-						close(done)
 					})
 				}
 			})
 			Context("Multiple messages", func() {
-				It("should parse multiple messages sent in one step", func(done Done) {
+				It("should parse multiple messages sent in one step", func() {
 					buf := bytes.Buffer{}
 					streamItem := streamItemMessage{Type: 2, InvocationID: "2", Item: "A"}
 					completion := completionMessage{Type: 3, InvocationID: "2", Result: "B"}
@@ -171,11 +169,10 @@ var _ = Describe("Protocol", func() {
 					var result string
 					Expect(protocol.UnmarshalArgument(gotCompletion.Result, &result)).NotTo(HaveOccurred())
 					Expect(result).To(Equal(completion.Result))
-					close(done)
 				})
 			})
 			Context("Partial messages", func() {
-				It("should parse a message sent in two steps", func(done Done) {
+				It("should parse a message sent in two steps", func() {
 					messageBuf := &bytes.Buffer{}
 					streamItem := streamItemMessage{Type: 2, InvocationID: "2", Item: "A"}
 					Expect(protocol.WriteMessage(streamItem, messageBuf)).NotTo(HaveOccurred())
@@ -199,7 +196,6 @@ var _ = Describe("Protocol", func() {
 						var item string
 						Expect(protocol.UnmarshalArgument(gotStreamItem.Item, &item)).NotTo(HaveOccurred())
 						Expect(item).To(Equal(streamItem.Item))
-						close(done)
 					}()
 					// Wait for parse to be started
 					<-up
@@ -208,7 +204,7 @@ var _ = Describe("Protocol", func() {
 					// Write the rest of the frame
 					_, err := writer.Write(messageBuf.Bytes()[messageBuf.Len()-2:])
 					Expect(err).NotTo(HaveOccurred())
-				}, 2.0)
+				})
 			})
 		})
 	}

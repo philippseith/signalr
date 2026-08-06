@@ -9,7 +9,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
 
@@ -139,7 +139,7 @@ var _ = Describe("Client", func() {
 	formatOption := TransferFormat("Text")
 	j := 1
 	Context("Start/Cancel", func() {
-		It("should connect to the server and then be stopped without error", func(done Done) {
+		It("should connect to the server and then be stopped without error", func() {
 			// Create a simple server
 			server, err := NewServer(context.TODO(), SimpleHubFactory(&simpleHub{}),
 				testLoggerOption(),
@@ -161,11 +161,10 @@ var _ = Describe("Client", func() {
 			Expect(<-clientConn.WaitForState(context.Background(), ClientConnected)).NotTo(HaveOccurred())
 			cancelClient()
 			server.cancel()
-			close(done)
-		}, 1.0)
+		})
 	})
 	Context("Stop", func() {
-		It("should stop the client properly", func(done Done) {
+		It("should stop the client properly", func() {
 			// Create a simple server
 			server, err := NewServer(context.TODO(), SimpleHubFactory(&simpleHub{}),
 				testLoggerOption(),
@@ -187,9 +186,8 @@ var _ = Describe("Client", func() {
 			clientConn.Stop()
 			Expect(clientConn.State()).To(BeEquivalentTo(ClientClosed))
 			server.cancel()
-			close(done)
 		})
-		It("should not log after stop", func(done Done) {
+		It("should not log after stop", func() {
 			// Create a simple server
 			server, err := NewServer(context.TODO(), SimpleHubFactory(&simpleHub{}),
 				testLoggerOption(),
@@ -219,45 +217,40 @@ var _ = Describe("Client", func() {
 			time.Sleep(500 * time.Millisecond)
 			Expect(clientConn.State()).To(BeEquivalentTo(ClientClosed))
 			server.cancel()
-			close(done)
 		})
 	})
 	Context("Invoke", func() {
-		It("should invoke a server method and return the result", func(done Done) {
+		It("should invoke a server method and return the result", func() {
 			_, client, _, cancelClient := getTestBed(&simpleReceiver{}, formatOption)
 			r := <-client.Invoke("InvokeMe", "A", 1)
 			Expect(r.Value).To(Equal("A1"))
 			Expect(r.Error).NotTo(HaveOccurred())
 			cancelClient()
-			close(done)
-		}, 5.0)
-		It("should invoke a server method and return the error when arguments don't match", func(done Done) {
+		})
+		It("should invoke a server method and return the error when arguments don't match", func() {
 			_, client, _, cancelClient := getTestBed(&simpleReceiver{}, formatOption)
 			r := <-client.Invoke("InvokeMe", "A", "B")
 			Expect(r.Error).To(HaveOccurred())
 			cancelClient()
-			close(done)
-		}, 5.0)
-		It("should invoke a server method and return the result after a bad invocation", func(done Done) {
+		})
+		It("should invoke a server method and return the result after a bad invocation", func() {
 			_, client, _, cancelClient := getTestBed(&simpleReceiver{}, formatOption)
 			client.Invoke("InvokeMe", "A", "B")
 			r := <-client.Invoke("InvokeMe", "A", 1)
 			Expect(r.Value).To(Equal("A1"))
 			Expect(r.Error).NotTo(HaveOccurred())
 			cancelClient()
-			close(done)
-		}, 5.0)
-		It(fmt.Sprintf("should return an error when the connection fails: invocation %v", j), func(done Done) {
+		})
+		It(fmt.Sprintf("should return an error when the connection fails: invocation %v", j), func() {
 			_, client, cliConn, cancelClient := getTestBed(&simpleReceiver{}, formatOption)
 			cliConn.fail.Store(errors.New("fail"))
 			r := <-client.Invoke("InvokeMe", "A", 1)
 			Expect(r.Error).To(HaveOccurred())
 			cancelClient()
-			close(done)
-		}, 5.0)
+		})
 	})
 	Context("Send", func() {
-		It("should invoke a server method and get the result via callback", func(done Done) {
+		It("should invoke a server method and get the result via callback", func() {
 			receiver := &simpleReceiver{}
 			_, client, _, cancelClient := getTestBed(receiver, formatOption)
 			receiver.result.Store("x")
@@ -280,9 +273,8 @@ var _ = Describe("Client", func() {
 				Expect(err).NotTo(HaveOccurred())
 			}
 			cancelClient()
-			close(done)
-		}, 5.0)
-		It("should invoke a server method and get the result via callback with alternate name", func(done Done) {
+		})
+		It("should invoke a server method and get the result via callback with alternate name", func() {
 			receiver := &simpleReceiver{}
 			_, client, _, cancelClient := getTestBed(receiver, formatOption)
 			receiver.result.Store("x")
@@ -305,9 +297,8 @@ var _ = Describe("Client", func() {
 				Expect(err).NotTo(HaveOccurred())
 			}
 			cancelClient()
-			close(done)
-		}, 5.0)
-		It("should invoke a server method and return the error when arguments don't match", func(done Done) {
+		})
+		It("should invoke a server method and return the error when arguments don't match", func() {
 			receiver := &simpleReceiver{}
 			_, client, _, cancelClient := getTestBed(receiver, formatOption)
 			receiver.result.Store("x")
@@ -332,20 +323,18 @@ var _ = Describe("Client", func() {
 			// Stop the above go func
 			receiver.result.Store("Stop")
 			cancelClient()
-			close(done)
-		}, 5.0)
-		It(fmt.Sprintf("should return an error when the connection fails: invocation %v", j), func(done Done) {
+		})
+		It(fmt.Sprintf("should return an error when the connection fails: invocation %v", j), func() {
 			_, client, cliConn, cancelClient := getTestBed(&simpleReceiver{}, formatOption)
 			cliConn.fail.Store(errors.New("fail"))
 			err := <-client.Send("Callback", 1)
 			Expect(err).To(HaveOccurred())
 			cancelClient()
-			close(done)
-		}, 5.0)
+		})
 	})
 	Context("PullStream", func() {
 		j := 1
-		It("should pull a stream from the server", func(done Done) {
+		It("should pull a stream from the server", func() {
 			_, client, _, cancelClient := getTestBed(&simpleReceiver{}, formatOption)
 			ch := client.PullStream("ReadStream", j)
 			values := make([]interface{}, 0)
@@ -360,45 +349,39 @@ var _ = Describe("Client", func() {
 				fmt.Sprintf("D%v", j),
 			}))
 			cancelClient()
-			close(done)
 		})
-		It("should return no error when the method returns no stream but a single result", func(done Done) {
+		It("should return no error when the method returns no stream but a single result", func() {
 			_, client, _, cancelClient := getTestBed(&simpleReceiver{}, formatOption)
 			r := <-client.PullStream("InvokeMe", "A", 1)
 			Expect(r.Error).NotTo(HaveOccurred())
 			Expect(r.Value).To(Equal("A1"))
 			cancelClient()
-			close(done)
-		}, 5.0)
-		It("should return an error when the method returns no result", func(done Done) {
+		})
+		It("should return an error when the method returns no result", func() {
 			_, client, _, cancelClient := getTestBed(&simpleReceiver{}, formatOption)
 			r := <-client.PullStream("Callback", "A")
 			Expect(r.Error).To(HaveOccurred())
 			cancelClient()
-			close(done)
-		}, 5.0)
-		It("should return an error when the method does not exist on the server", func(done Done) {
+		})
+		It("should return an error when the method does not exist on the server", func() {
 			_, client, _, cancelClient := getTestBed(&simpleReceiver{}, formatOption)
 			r := <-client.PullStream("ReadStream2")
 			Expect(r.Error).To(HaveOccurred())
 			cancelClient()
-			close(done)
-		}, 5.0)
-		It("should return an error when the method arguments are not matching", func(done Done) {
+		})
+		It("should return an error when the method arguments are not matching", func() {
 			_, client, _, cancelClient := getTestBed(&simpleReceiver{}, formatOption)
 			r := <-client.PullStream("ReadStream", "A", 1)
 			Expect(r.Error).To(HaveOccurred())
 			cancelClient()
-			close(done)
-		}, 5.0)
-		It("should return an error when the connection fails", func(done Done) {
+		})
+		It("should return an error when the connection fails", func() {
 			_, client, cliConn, cancelClient := getTestBed(&simpleReceiver{}, formatOption)
 			cliConn.fail.Store(errors.New("fail"))
 			r := <-client.PullStream("ReadStream")
 			Expect(r.Error).To(HaveOccurred())
 			cancelClient()
-			close(done)
-		}, 5.0)
+		})
 	})
 	Context("PushStreams", func() {
 		var cliConn *pipeConnection
@@ -407,7 +390,7 @@ var _ = Describe("Client", func() {
 		var cancelClient context.CancelFunc
 		var server Server
 		hub := &simpleHub{}
-		BeforeEach(func(done Done) {
+		BeforeEach(func() {
 			hub.receiveStreamDone = make(chan struct{}, 1)
 			server, _ = NewServer(context.TODO(), HubFactory(func() HubInterface { return hub }),
 				testLoggerOption(),
@@ -425,15 +408,13 @@ var _ = Describe("Client", func() {
 			// Start it
 			client.Start()
 			Expect(<-client.WaitForState(context.Background(), ClientConnected)).NotTo(HaveOccurred())
-			close(done)
-		}, 5.0)
-		AfterEach(func(done Done) {
+		})
+		AfterEach(func() {
 			cancelClient()
 			server.cancel()
-			close(done)
-		}, 5.0)
+		})
 
-		It("should push a stream to the server", func(done Done) {
+		It("should push a stream to the server", func() {
 			ch := make(chan int, 1)
 			r := client.PushStreams("ReceiveStream", "test", ch)
 			go func(ch chan int) {
@@ -448,17 +429,15 @@ var _ = Describe("Client", func() {
 			Expect(ir.Value).To(Equal(float64(100)))
 			Expect(hub.receiveStreamArg).To(Equal("test"))
 			cancelClient()
-			close(done)
-		}, 5.0)
+		})
 
-		It("should return an error when the connection fails", func(done Done) {
+		It("should return an error when the connection fails", func() {
 			cliConn.fail.Store(errors.New("fail"))
 			ch := make(chan int, 1)
 			ir := <-client.PushStreams("ReceiveStream", "test", ch)
 			Expect(ir.Error).To(HaveOccurred())
 			cancelClient()
-			close(done)
-		}, 5.0)
+		})
 	})
 
 	Context("Reconnect", func() {
@@ -468,7 +447,7 @@ var _ = Describe("Client", func() {
 		var cancelClient context.CancelFunc
 		var server Server
 		hub := &simpleHub{}
-		BeforeEach(func(done Done) {
+		BeforeEach(func() {
 			hub.receiveStreamDone = make(chan struct{}, 1)
 			server, _ = NewServer(context.TODO(), HubFactory(func() HubInterface { return hub }),
 				testLoggerOption(),
@@ -486,13 +465,11 @@ var _ = Describe("Client", func() {
 			// Start it
 			client.Start()
 			Expect(<-client.WaitForState(context.Background(), ClientConnected)).NotTo(HaveOccurred())
-			close(done)
-		}, 5.0)
-		AfterEach(func(done Done) {
+		})
+		AfterEach(func() {
 			cancelClient()
 			server.cancel()
-			close(done)
-		}, 5.0)
+		})
 	})
 })
 

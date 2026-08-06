@@ -5,14 +5,14 @@ import (
 	"fmt"
 	"time"
 
-	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
 
 var _ = Describe("Server.HubClients", func() {
 	Context("All().Send()", func() {
 		j := 1
-		It(fmt.Sprintf("should send clients %v", j), func(done Done) {
+		It(fmt.Sprintf("should send clients %v", j), func() {
 			// Create a simple server
 			server, err := NewServer(context.TODO(), SimpleHubFactory(&simpleHub{}),
 				testLoggerOption(),
@@ -46,8 +46,7 @@ var _ = Describe("Server.HubClients", func() {
 			Expect(<-receiver.ch).To(Equal(fmt.Sprintf("All%v", j)))
 			cancelClient()
 			server.cancel()
-			close(done)
-		}, 1.0)
+		})
 	})
 
 	Context("Caller()", func() {
