@@ -13,7 +13,8 @@ import (
 
 // jsonHubProtocol is the JSON based SignalR protocol
 type jsonHubProtocol struct {
-	dbg log.Logger
+	dbg                       log.Logger
+	maximumReceiveMessageSize uint
 }
 
 // Protocol specific messages for correct unmarshaling of arguments or results.
@@ -65,7 +66,7 @@ func (j *jsonHubProtocol) UnmarshalArgument(src interface{}, dst interface{}) er
 
 // ParseMessages reads all messages from the reader and puts the remaining bytes into remainBuf
 func (j *jsonHubProtocol) ParseMessages(reader io.Reader, remainBuf *bytes.Buffer) (messages []interface{}, err error) {
-	frames, err := readJSONFrames(reader, remainBuf)
+	frames, err := readJSONFrames(reader, remainBuf, int(j.maximumReceiveMessageSize))
 	if err != nil {
 		return nil, err
 	}
@@ -152,8 +153,9 @@ func (j *jsonHubProtocol) parseMessage(messageType int, text []byte) (message in
 	}
 }
 
-// readJSONFrames reads all complete frames (delimited by 0x1e) from the reader and puts the remaining bytes into remainBuf
-func readJSONFrames(reader io.Reader, remainBuf *bytes.Buffer) ([][]byte, error) {
+// readJSONFrames reads all complete frames (delimited by 0x1e) from the reader and puts the remaining bytes into remainBuf.
+// maxSize is the maximum number of bytes that may accumulate before a delimiter; 0 means unlimited.
+func readJSONFrames(reader io.Reader, remainBuf *bytes.Buffer, maxSize int) ([][]byte, error) {
 	p := make([]byte, 1<<15)
 	buf := &bytes.Buffer{}
 	_, _ = buf.ReadFrom(remainBuf)
@@ -166,6 +168,9 @@ func readJSONFrames(reader io.Reader, remainBuf *bytes.Buffer) ([][]byte, error)
 		}
 		if n > 0 {
 			_, _ = buf.Write(p[:n])
+			if maxSize > 0 && buf.Len() > maxSize {
+				return nil, fmt.Errorf("JSON frame buffer exceeded maximum receive message size %d", maxSize)
+			}
 			frames, err := parseJSONFrames(buf)
 			if err != nil {
 				return nil, err
@@ -219,4 +224,8 @@ func (j *jsonHubProtocol) transferMode() TransferMode {
 
 func (j *jsonHubProtocol) setDebugLogger(dbg StructuredLogger) {
 	j.dbg = log.WithPrefix(dbg, "ts", log.DefaultTimestampUTC, "protocol", "JSON")
+}
+
+func (j *jsonHubProtocol) setMaxReceiveMessageSize(size uint) {
+	j.maximumReceiveMessageSize = size
 }

@@ -3,6 +3,7 @@ package signalr
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"strings"
 	"time"
 
@@ -174,26 +175,24 @@ var _ = Describe("ClientStreaming", func() {
 				}()
 				u1 := 0
 				u2 := 5
-			loop:
-				for {
-					select {
-					case r := <-receiver.ch:
-						switch {
-						case strings.HasPrefix(r, "u1"):
-							Expect(r).To(Equal(fmt.Sprintf("u1: %v", u1)))
-							u1++
-							if u1 == 10 {
-								close(ch1)
-							}
-						case strings.HasPrefix(r, "u2"):
-							Expect(r).To(Equal(fmt.Sprintf("u2: %v", float64(u2)*7.1)))
-							u2++
-							if u2 == 10 {
-								close(ch2)
-							}
-						case r == "Finished":
-							break loop
+				for r := range receiver.ch {
+					switch {
+					case strings.HasPrefix(r, "u1"):
+						Expect(r).To(Equal(fmt.Sprintf("u1: %v", u1)))
+						u1++
+						if u1 == 10 {
+							close(ch1)
 						}
+					case strings.HasPrefix(r, "u2"):
+						Expect(r).To(Equal(fmt.Sprintf("u2: %v", float64(u2)*7.1)))
+						u2++
+						if u2 == 10 {
+							close(ch2)
+						}
+					case r == "Finished":
+						cancel()
+						close(done)
+						return
 					}
 				}
 				cancel()
@@ -608,6 +607,28 @@ var _ = Describe("ClientStreaming", func() {
 				server.cancel()
 				close(done)
 			})
+		})
+	})
+})
+
+var _ = Describe("MaxConcurrentStreams", func() {
+	Context("When more stream registrations than maxConcurrentStreams are attempted", func() {
+		It("should reject the excess registration with an error", func() {
+			sc := newStreamClient(&jsonHubProtocol{}, time.Second, 10, 2)
+			argType := reflect.TypeOf(make(chan int))
+			inv := invocationMessage{Target: "method", StreamIds: []string{"s1", "s2", "s3"}}
+
+			_, ok, err := sc.buildChannelArgument(inv, argType, 0)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(ok).To(BeTrue())
+
+			_, ok, err = sc.buildChannelArgument(inv, argType, 1)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(ok).To(BeTrue())
+
+			_, _, err = sc.buildChannelArgument(inv, argType, 2)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("concurrent streams"))
 		})
 	})
 })

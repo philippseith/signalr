@@ -87,6 +87,9 @@ func makeTCPServerAndClients(ctx context.Context, clientCount int) (Server, []Cl
 	}
 	for i := 0; i < clientCount; i++ {
 		listener, err := net.ListenTCP("tcp", addr)
+		if err != nil {
+			return nil, nil, nil, nil, nil, err
+		}
 		go func(i int) {
 			for {
 				tcpConn, _ := listener.Accept()
@@ -228,17 +231,19 @@ func TestGroupShouldInvokeOnlyTheClientsInTheGroup(t *testing.T) {
 	case <-time.After(100 * time.Millisecond):
 		assert.Fail(t, "timeout in invoke")
 	}
-	gotCalled := 0
-	select {
-	case <-receiver[0].ch:
-		assert.Fail(t, "client 1 received message for client 2, 3")
-	case <-receiver[1].ch:
-		gotCalled++
-	case <-receiver[2].ch:
-		gotCalled++
-	case <-time.After(100 * time.Millisecond):
-		if gotCalled < 2 {
+	received := 0
+	for received < 2 {
+		select {
+		case <-receiver[0].ch:
+			assert.Fail(t, "client 1 received message for client 2, 3")
+			return
+		case <-receiver[1].ch:
+			received++
+		case <-receiver[2].ch:
+			received++
+		case <-time.After(100 * time.Millisecond):
 			assert.Fail(t, "timeout without client 2 and 3 got called")
+			return
 		}
 	}
 }
@@ -266,18 +271,15 @@ func TestRemoveClientsShouldRemoveClientsFromTheGroup(t *testing.T) {
 	case <-time.After(100 * time.Millisecond):
 		assert.Fail(t, "timeout in invoke")
 	}
-	gotCalled := false
 	select {
 	case <-receiver[0].ch:
 		assert.Fail(t, "client 1 received message for client 2")
 	case <-receiver[1].ch:
-		gotCalled = true
+		// expected: client 2 receives the group invocation
 	case <-receiver[2].ch:
 		assert.Fail(t, "client 3 received message for client 2")
 	case <-time.After(100 * time.Millisecond):
-		if !gotCalled {
-			assert.Fail(t, "timeout without client 3 got called")
-		}
+		assert.Fail(t, "timeout without client 2 got called")
 	}
 }
 
@@ -338,4 +340,102 @@ func TestAbortShouldAbortTheConnectionOfTheCurrentCaller(t *testing.T) {
 	case <-time.After(100 * time.Millisecond):
 		assert.Fail(t, "timeout in invoke")
 	}
+}
+
+// TestGroupMapConcurrentAccess verifies no data race when AddToGroup, RemoveFromGroup
+// and InvokeGroup run concurrently on the same group — detectable by go test -race.
+func TestGroupMapConcurrentAccess(t *testing.T) {
+	mgr := newLifeTimeManager(testLogger())
+
+	const n = 50
+	conns := make([]*mockHubConn, n)
+	for i := range conns {
+		conns[i] = &mockHubConn{id: fmt.Sprintf("conn-%d", i)}
+		mgr.OnConnected(conns[i])
+	}
+
+	var wg sync.WaitGroup
+	for i := range conns {
+		id := conns[i].ConnectionID()
+		wg.Add(3)
+		go func() {
+			defer wg.Done()
+			mgr.AddToGroup("g", id)
+		}()
+		go func() {
+			defer wg.Done()
+			mgr.RemoveFromGroup("g", id)
+		}()
+		go func() {
+			defer wg.Done()
+			mgr.InvokeGroup("g", "noop", nil)
+		}()
+	}
+	wg.Wait()
+}
+
+// mockHubConn is a no-op HubConnection used for concurrency tests.
+type mockHubConn struct{ id string }
+
+func (m *mockHubConn) ConnectionID() string                                     { return m.id }
+func (m *mockHubConn) Receive() <-chan receiveResult                            { return nil }
+func (m *mockHubConn) SendInvocation(string, string, []interface{}) error       { return nil }
+func (m *mockHubConn) SendStreamInvocation(string, string, []interface{}) error { return nil }
+func (m *mockHubConn) SendInvocationWithStreamIds(string, string, []interface{}, []string) error {
+	return nil
+}
+func (m *mockHubConn) StreamItem(string, interface{}) error         { return nil }
+func (m *mockHubConn) Completion(string, interface{}, string) error { return nil }
+func (m *mockHubConn) Close(string, bool) error                     { return nil }
+func (m *mockHubConn) Ping() error                                  { return nil }
+func (m *mockHubConn) LastWriteStamp() time.Time                    { return time.Time{} }
+func (m *mockHubConn) Items() *sync.Map                             { return &sync.Map{} }
+func (m *mockHubConn) Context() context.Context                     { return context.Background() }
+func (m *mockHubConn) Abort()                                       {}
+
+// TestDisconnectedConnectionRemovedFromGroup verifies that OnDisconnected removes
+// the connection from all groups so InvokeGroup no longer reaches it.
+func TestDisconnectedConnectionRemovedFromGroup(t *testing.T) {
+	mgr := newLifeTimeManager(testLogger())
+
+	called1 := make(chan struct{}, 1)
+	called2 := make(chan struct{}, 1)
+	conn1 := &invokingHubConn{mockHubConn: mockHubConn{id: "c1"}, called: called1}
+	conn2 := &invokingHubConn{mockHubConn: mockHubConn{id: "c2"}, called: called2}
+
+	mgr.OnConnected(conn1)
+	mgr.OnConnected(conn2)
+	mgr.AddToGroup("g", "c1")
+	mgr.AddToGroup("g", "c2")
+
+	mgr.OnDisconnected(conn2)
+
+	mgr.InvokeGroup("g", "m", nil)
+
+	select {
+	case <-called1:
+		// expected: conn1 still in group
+	case <-time.After(200 * time.Millisecond):
+		assert.Fail(t, "conn1 should have been invoked")
+	}
+	select {
+	case <-called2:
+		assert.Fail(t, "disconnected conn2 should not be invoked")
+	case <-time.After(50 * time.Millisecond):
+		// expected: conn2 was removed from group on disconnect
+	}
+}
+
+type invokingHubConn struct {
+	mockHubConn
+	called chan struct{}
+}
+
+func (m *invokingHubConn) ConnectionID() string { return m.id }
+func (m *invokingHubConn) SendInvocation(string, string, []interface{}) error {
+	select {
+	case m.called <- struct{}{}:
+	default:
+	}
+	return nil
 }

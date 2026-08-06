@@ -57,6 +57,16 @@ func StreamBufferCapacity(capacity uint) func(Party) error {
 	}
 }
 
+// MaxConcurrentStreams is the maximum number of concurrent client-upload streams per connection.
+// Default is 100. Use 0 to disable the limit, but be aware that this can lead to resource exhaustion
+// if the client opens too many streams.
+func MaxConcurrentStreams(max uint) func(Party) error {
+	return func(p Party) error {
+		p.setMaxConcurrentStreams(max)
+		return nil
+	}
+}
+
 // MaximumReceiveMessageSize is the maximum size in bytes of a single incoming hub message.
 // Default is 32768 bytes (32KB)
 func MaximumReceiveMessageSize(sizeInBytes uint) func(Party) error {

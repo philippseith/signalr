@@ -81,7 +81,7 @@ const (
 //
 //	Invoke(method string, arguments ...interface{}) <-chan InvokeResult
 //
-// Invoke invokes a method on the server and returns a channel wich will return the InvokeResult.
+// Invoke invokes a method on the server and returns a channel which will return the InvokeResult.
 // When failing, InvokeResult.Error contains the client side error.
 //
 //	Send(method string, arguments ...interface{}) <-chan error
@@ -602,7 +602,7 @@ func (c *client) receiveHandshakeResponse() (hubProtocol, error) {
 	readJSONFramesChan := make(chan []interface{}, 1)
 	go func() {
 		var remainBuf bytes.Buffer
-		rawHandshake, err := readJSONFrames(c.conn, &remainBuf)
+		rawHandshake, err := readJSONFrames(c.conn, &remainBuf, 0)
 		readJSONFramesChan <- []interface{}{rawHandshake, err}
 	}()
 	select {

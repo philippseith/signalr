@@ -3,11 +3,14 @@ package signalr
 import (
 	"reflect"
 	"sync"
+	"sync/atomic"
 )
 
 type streamer struct {
-	cancels sync.Map
-	conn    HubConnection
+	cancels     sync.Map
+	cancelCount int64 // atomic; tracks entries in cancels for the cap check
+	maxCancels  uint
+	conn        HubConnection
 }
 
 func (s *streamer) Start(invocationID string, reflectedChannel reflect.Value) {
@@ -36,5 +39,10 @@ func (s *streamer) Start(invocationID string, reflectedChannel reflect.Value) {
 }
 
 func (s *streamer) Stop(invocationID string) {
-	s.cancels.Store(invocationID, struct{}{})
+	if s.maxCancels > 0 && atomic.LoadInt64(&s.cancelCount) >= int64(s.maxCancels) {
+		return
+	}
+	if _, loaded := s.cancels.LoadOrStore(invocationID, struct{}{}); !loaded {
+		atomic.AddInt64(&s.cancelCount, 1)
+	}
 }

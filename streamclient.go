@@ -7,13 +7,14 @@ import (
 	"time"
 )
 
-func newStreamClient(protocol hubProtocol, chanReceiveTimeout time.Duration, streamBufferCapacity uint) *streamClient {
+func newStreamClient(protocol hubProtocol, chanReceiveTimeout time.Duration, streamBufferCapacity uint, maxConcurrentStreams uint) *streamClient {
 	return &streamClient{
 		mx:                   sync.Mutex{},
 		upstreamChannels:     make(map[string]reflect.Value),
 		runningStreams:       make(map[string]bool),
 		chanReceiveTimeout:   chanReceiveTimeout,
 		streamBufferCapacity: streamBufferCapacity,
+		maxConcurrentStreams: maxConcurrentStreams,
 		protocol:             protocol,
 	}
 }
@@ -24,6 +25,7 @@ type streamClient struct {
 	runningStreams       map[string]bool
 	chanReceiveTimeout   time.Duration
 	streamBufferCapacity uint
+	maxConcurrentStreams uint
 	protocol             hubProtocol
 }
 
@@ -33,6 +35,9 @@ func (c *streamClient) buildChannelArgument(invocation invocationMessage, argTyp
 	if argType.Kind() != reflect.Chan || argType.ChanDir() == reflect.SendDir {
 		return reflect.Value{}, false, nil
 	} else if len(invocation.StreamIds) > chanCount {
+		if c.maxConcurrentStreams > 0 && uint(len(c.upstreamChannels)) >= c.maxConcurrentStreams {
+			return reflect.Value{}, true, fmt.Errorf("maximum concurrent streams (%d) reached", c.maxConcurrentStreams)
+		}
 		// MakeChan does only accept bidirectional channels, and we need to Send to this channel anyway
 		arg = reflect.MakeChan(reflect.ChanOf(reflect.BothDir, argType.Elem()), int(c.streamBufferCapacity))
 		c.upstreamChannels[invocation.StreamIds[chanCount]] = arg

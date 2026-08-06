@@ -28,6 +28,7 @@ func newLoop(p Party, conn Connection, protocol hubProtocol) *loop {
 	protocol = reflect.New(reflect.ValueOf(protocol).Elem().Type()).Interface().(hubProtocol)
 	_, dbg := p.loggers()
 	protocol.setDebugLogger(dbg)
+	protocol.setMaxReceiveMessageSize(p.maximumReceiveMessageSize())
 	pInfo, pDbg := p.prefixLoggers(conn.ConnectionID())
 	hubConn := newHubConnection(conn, protocol, p.maximumReceiveMessageSize(), pInfo)
 	return &loop{
@@ -35,8 +36,8 @@ func newLoop(p Party, conn Connection, protocol hubProtocol) *loop {
 		protocol:     protocol,
 		hubConn:      hubConn,
 		invokeClient: newInvokeClient(protocol, p.chanReceiveTimeout()),
-		streamer:     &streamer{conn: hubConn},
-		streamClient: newStreamClient(protocol, p.chanReceiveTimeout(), p.streamBufferCapacity()),
+		streamer:     &streamer{conn: hubConn, maxCancels: p.maxConcurrentStreams()},
+		streamClient: newStreamClient(protocol, p.chanReceiveTimeout(), p.streamBufferCapacity(), p.maxConcurrentStreams()),
 		info:         pInfo,
 		dbg:          pDbg,
 	}

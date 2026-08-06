@@ -38,12 +38,45 @@ type defaultHubLifetimeManager struct {
 	info    StructuredLogger
 }
 
+// groupMap is a mutex-protected map of HubConnections for one group.
+type groupMap struct {
+	mu      sync.RWMutex
+	members map[string]HubConnection
+}
+
+func (g *groupMap) add(id string, conn HubConnection) {
+	g.mu.Lock()
+	g.members[id] = conn
+	g.mu.Unlock()
+}
+
+func (g *groupMap) remove(id string) {
+	g.mu.Lock()
+	delete(g.members, id)
+	g.mu.Unlock()
+}
+
+// snapshot returns a stable copy of the current members for safe iteration.
+func (g *groupMap) snapshot() []HubConnection {
+	g.mu.RLock()
+	conns := make([]HubConnection, 0, len(g.members))
+	for _, c := range g.members {
+		conns = append(conns, c)
+	}
+	g.mu.RUnlock()
+	return conns
+}
+
 func (d *defaultHubLifetimeManager) OnConnected(conn HubConnection) {
 	d.clients.Store(conn.ConnectionID(), conn)
 }
 
 func (d *defaultHubLifetimeManager) OnDisconnected(conn HubConnection) {
 	d.clients.Delete(conn.ConnectionID())
+	d.groups.Range(func(_, value any) bool {
+		value.(*groupMap).remove(conn.ConnectionID())
+		return true
+	})
 }
 
 func (d *defaultHubLifetimeManager) InvokeAll(target string, args []interface{}) {
@@ -64,11 +97,11 @@ func (d *defaultHubLifetimeManager) InvokeClient(connectionID string, target str
 }
 
 func (d *defaultHubLifetimeManager) InvokeGroup(groupName string, target string, args []interface{}) {
-	if groups, ok := d.groups.Load(groupName); ok {
-		for _, v := range groups.(map[string]HubConnection) {
-			conn := v
+	if gm, ok := d.groups.Load(groupName); ok {
+		for _, conn := range gm.(*groupMap).snapshot() {
+			c := conn
 			go func() {
-				_ = conn.SendInvocation("", target, args)
+				_ = c.SendInvocation("", target, args)
 			}()
 		}
 	}
@@ -76,13 +109,13 @@ func (d *defaultHubLifetimeManager) InvokeGroup(groupName string, target string,
 
 func (d *defaultHubLifetimeManager) AddToGroup(groupName string, connectionID string) {
 	if client, ok := d.clients.Load(connectionID); ok {
-		groups, _ := d.groups.LoadOrStore(groupName, make(map[string]HubConnection))
-		groups.(map[string]HubConnection)[connectionID] = client.(HubConnection)
+		gm, _ := d.groups.LoadOrStore(groupName, &groupMap{members: make(map[string]HubConnection)})
+		gm.(*groupMap).add(connectionID, client.(HubConnection))
 	}
 }
 
 func (d *defaultHubLifetimeManager) RemoveFromGroup(groupName string, connectionID string) {
-	if groups, ok := d.groups.Load(groupName); ok {
-		delete(groups.(map[string]HubConnection), connectionID)
+	if gm, ok := d.groups.Load(groupName); ok {
+		gm.(*groupMap).remove(connectionID)
 	}
 }

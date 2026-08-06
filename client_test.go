@@ -103,9 +103,8 @@ func (s *simpleHub) ReadStream(i int) chan string {
 
 func (s *simpleHub) ReceiveStream(arg string, ch <-chan int) int {
 	s.receiveStreamArg = arg
-	receiveStreamChanValues := make([]int, 0)
 	for v := range ch {
-		receiveStreamChanValues = append(receiveStreamChanValues, v)
+		_ = v
 	}
 	s.receiveStreamDone <- struct{}{}
 	return 100

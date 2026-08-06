@@ -1,9 +1,25 @@
 version: "2"
 
+run:
+  timeout: 5m
+  tests: true
+  modules-download-mode: readonly
+
 linters:
+  default: none
+  enable:
+    - errcheck
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+    - misspell
   exclusions:
     paths:
-    - chatsample
-    - signalr_test
-    - router/router_test
-    - ".+_test\\.go$"
+      - chatsample
+      - signalr_test
+      - router/router_test
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0

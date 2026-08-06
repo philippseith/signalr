@@ -11,13 +11,23 @@ jobs:
   golangci:
     name: golangci
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        working-directory:
+          - .
+          - router
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v5
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: ${{ matrix.working-directory }}/go.mod
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v8
         with:
-          # Required: the version of golangci-lint is required and must be specified without patch version: we always use the latest patch version.
-          version: v2.3
+          version: v2.12
+          working-directory: ${{ matrix.working-directory }}
+          args: --timeout=5m
 
   test:
     name: Test and Coverage
@@ -26,7 +36,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: 1.24
+          go-version: 1.25
 
       - name: Check out code
         uses: actions/checkout@v5
