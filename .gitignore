@@ -110,3 +110,4 @@ dist
 /coverage.txt
 
 signalr_test/package-lock.json
+build/main
